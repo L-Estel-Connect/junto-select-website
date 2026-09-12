@@ -71,3 +71,14 @@ env:
     secret: ANTHROPIC_API_KEY
     availability:
       - RUNTIME
+
+  # Shared secret gating every /api/admin/matching/* route (the V1
+  # matching engine's manual trigger, duplicate-detection, decision, and
+  # account-merge endpoints). RUNTIME only, same Secret Manager pattern as
+  # ANTHROPIC_API_KEY above — see README "Monthly matching engine" for the
+  # exact setup commands. There is no admin-role system in this app yet;
+  # this secret is what stands in for one until there is.
+  - variable: MATCHING_ADMIN_SECRET
+    secret: MATCHING_ADMIN_SECRET
+    availability:
+      - RUNTIME

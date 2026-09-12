@@ -168,6 +168,35 @@ export interface AboutMePrivate {
 
 export type ProfileStatus = "draft" | "active_for_matching";
 
+/**
+ * Whether this person's own monthly matching cycle runs at all.
+ * `passive`: can still be selected as a CANDIDATE for someone else's
+ * cycle, but never receives their own proposals. `active_search`: can be
+ * selected AND receives up to 3 proposals per monthly cycle. Everyone
+ * defaults to `passive` — there is no Stripe integration yet, so this must
+ * never be inferred from profile completeness or set true automatically.
+ * It is flipped to `active_search` only by an explicit allowlist entry
+ * today, and by a future billing webhook once Stripe exists.
+ */
+export type SearchStatus = "passive" | "active_search";
+
+/**
+ * See README "Duplicate accounts / profile integrity" for the full
+ * architecture. `clear`: normal eligibility. `suspected`: excluded BOTH as
+ * a proposal recipient AND as a candidate for others, until a human
+ * resolves it — the priority is never letting the same probable real
+ * person occupy two slots in the matching pool. `confirmed_duplicate`:
+ * fully excluded, permanently, until (if ever) resolved. `resolved`:
+ * back to normal eligibility. Never set to `confirmed_duplicate`
+ * automatically from a heuristic alone — that transition is a human
+ * decision informed by `duplicateCandidates`.
+ */
+export type DuplicateStatus =
+  | "clear"
+  | "suspected"
+  | "confirmed_duplicate"
+  | "resolved";
+
 export interface ProfileDocument {
   visible: AboutMeVisible;
   private: AboutMePrivate;
@@ -188,6 +217,19 @@ export interface ProfileDocument {
     // section having data. This is what distinguishes "eligible" from
     // "actually reviewed and confirmed" in Profile Home's messaging.
     onboardingFinalized: boolean;
+    // The unique-person identity this profile resolves to. Defaults to
+    // this profile's own uid (the common case — one person, one account).
+    // Only differs from uid once an admin merge links a second/duplicate
+    // account to a primary one (see src/lib/matching/identity.ts) — the
+    // matching engine always groups by personId, never by raw uid, so
+    // that a person who accidentally created two accounts can never
+    // occupy two slots in the pool.
+    personId: string;
+    searchStatus: SearchStatus;
+    duplicateStatus: DuplicateStatus;
+    // Set only when duplicateStatus is confirmed_duplicate (or was, before
+    // being resolved) — the uid of the account this one was merged into.
+    duplicateOf: string | null;
     createdAt: unknown;
     updatedAt: unknown;
   };

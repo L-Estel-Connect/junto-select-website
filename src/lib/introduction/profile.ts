@@ -29,7 +29,7 @@ function profileRef(uid: string) {
  * Firestore itself is never rewritten here — the next real save persists
  * whichever of these fields it touches, same as any other field.
  */
-function withDefaults(data: Partial<ProfileDocument>): ProfileDocument {
+function withDefaults(uid: string, data: Partial<ProfileDocument>): ProfileDocument {
   return {
     visible: { ...emptyAboutMeVisible, ...data.visible },
     private: { ...emptyAboutMePrivate, ...data.private },
@@ -50,6 +50,11 @@ function withDefaults(data: Partial<ProfileDocument>): ProfileDocument {
       presentationComplete: false,
       profileStatus: "draft",
       onboardingFinalized: false,
+      // Defaults to this account's own uid — see ProfileDocument.meta.personId.
+      personId: uid,
+      searchStatus: "passive",
+      duplicateStatus: "clear",
+      duplicateOf: null,
       createdAt: null,
       updatedAt: null,
       ...data.meta,
@@ -64,10 +69,10 @@ export async function getOrCreateProfile(
   const snap = await getDoc(ref);
 
   if (snap.exists()) {
-    return withDefaults(snap.data() as Partial<ProfileDocument>);
+    return withDefaults(uid, snap.data() as Partial<ProfileDocument>);
   }
 
-  const initial: ProfileDocument = withDefaults({
+  const initial: ProfileDocument = withDefaults(uid, {
     meta: {
       onboardingStepIndex: 0,
       aboutMeComplete: false,
@@ -76,6 +81,10 @@ export async function getOrCreateProfile(
       presentationComplete: false,
       profileStatus: "draft",
       onboardingFinalized: false,
+      personId: uid,
+      searchStatus: "passive",
+      duplicateStatus: "clear",
+      duplicateOf: null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     },

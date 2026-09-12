@@ -35,6 +35,42 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // A member-facing proposal from the V1 matching engine. Recipient-only
+    // read (matched against the uid the proposal was actually generated
+    // for, snapshotted at creation time — see src/lib/matching/engine.ts).
+    // Never client-writable: every proposal, and every decision recorded
+    // on one, is written by the Admin SDK only (server-side, service
+    // account credentials, which bypass these rules entirely) — this rule
+    // only ever governs a browser/client SDK request.
+    match /proposals/{proposalId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.recipientUid;
+      allow write: if false;
+    }
+
+    // Stage 2 of a proposal: the free invitation sent to the originally
+    // selected candidate once the active/paid member says Interested.
+    // Readable only by the invited person (never the inviter — they only
+    // learn the outcome once/if it becomes a mutual introduction below).
+    match /invitations/{invitationId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.recipientUid;
+      allow write: if false;
+    }
+
+    // A confirmed mutual introduction — both original parties may read it.
+    // No contact info lives here yet; contactRevealedAt is reserved for a
+    // future flow that doesn't exist.
+    match /introductions/{introductionId} {
+      allow read: if request.auth != null &&
+        (request.auth.uid == resource.data.uidA || request.auth.uid == resource.data.uidB);
+      allow write: if false;
+    }
+
+    // matchingCycles, memberRuns (subcollection), pairHistory, people,
+    // duplicateCandidates: all Admin-SDK-only, server-side matching
+    // infrastructure with no legitimate client read or write path — these
+    // are intentionally left uncovered by an explicit rule above and fall
+    // through to the default-deny below.
+
     // Default-deny everything else.
     match /{document=**} {
       allow read, write: if false;

@@ -331,15 +331,185 @@ Profile Home's hub rather than the guided flow) — Profile Home's copy
 reflects `onboardingFinalized`, not `profileStatus`, since "finalized" is
 the stronger, more deliberate signal.
 
-**Known limitation, deliberately deferred:** `meta.profileStatus` is
-currently computed and written by the client, not enforced by a
-Firestore rule or a server function. Today that's inert — nothing reads
-it yet, since no matching engine or admin tool exists — but the moment
-one does, a client-writable eligibility flag becomes a real trust
-boundary and should move behind either a Firestore rule (validating it
-against the other `meta.*complete` flags) or a server-side write. Flagged
-here so it isn't forgotten, not fixed now, since fixing it now has no
-present security benefit and would add complexity ahead of need.
+**Known limitation, now actually live, not just theoretical:**
+`meta.profileStatus` is still computed and written by the client, not
+enforced by a Firestore rule or a server function — and the V1 matching
+engine below now genuinely reads it to decide who's in the candidate
+pool. A malicious client could in principle set `meta.profileStatus:
+"active_for_matching"` on their own profile without truly completing any
+section, and get considered by the engine. This is a real trust boundary
+that should move behind either a Firestore rule (validating it against
+the other `meta.*complete` flags) or a server-side write before a wider
+rollout past dry-run/allowlist testing. Not fixed in this pass — flagging
+it now that it has a real consumer, rather than leaving it only as a
+"someday" note.
+
+## Monthly matching engine (V1)
+
+`src/lib/matching/` — the deterministic, reciprocal matching engine and
+its supporting duplicate-account and account-linking infrastructure.
+Everything here is server-only (Admin SDK), triggered manually via
+`/api/admin/matching/*` routes (see below) — there is no automatic
+scheduler wired up yet, and no UI consumes any of this yet beyond the
+still-placeholder "Mis propuestas" page.
+
+**Algorithm** (`hardFilters.ts`, `scoring.ts`, `engine.ts`), strictly in
+this order, never reordered or overridden by anything downstream:
+
+1. **Hard requirements**, reciprocal — a pair is only considered if
+   *both* people's `dealbreakers` accept the other (gender, age range,
+   relationship intention, smoking, children). Two of the product's
+   existing dealbreaker questions (`partnerHasYoungChildrenOk`,
+   `partnerWantsFutureChildren`) ask about information the *other*
+   person's profile doesn't actually collect (there's no "are your
+   children under 15" or "do you want children in the future" field on
+   `AboutMeVisible`) — they are **not enforced**, since enforcing them
+   would mean guessing at data nobody provided. Closing this needs a
+   schema addition, not a matching-engine change. Distance is
+   best-effort too: `"misma_ciudad"` is an exact normalized-city string
+   match (no geocoding exists); `"hasta_50km"`/`"sin_limite"` both pass
+   regardless of city today.
+2. **Structured, versioned scoring** (`scoring.ts`) — a deterministic
+   0–100 weighted sum over height/drinking/activity fit, same-city bonus,
+   language overlap, and education alignment. No opaque AI
+   decision-maker. `SCORING_VERSION` is stamped on every proposal so
+   weights can be recalibrated later from real Interested/Pass/mutual
+   outcomes without losing track of which version produced a historical
+   proposal.
+3. **Minimum-quality threshold** (`CycleConfig.qualityThreshold`,
+   default 55/100) — a candidate must clear this to be proposed at all.
+4. **Maximum 3 final proposals** (`MAX_PROPOSALS_PER_MEMBER` in
+   `config.ts`, a plain constant, not part of the mutable config, so
+   nothing can accidentally raise it) — quality over quota; 0, 1, 2, or 3
+   are all valid outcomes and the threshold is never relaxed to reach 3.
+
+**Proposal ≠ introduction — the three-stage lifecycle**
+(`pairHistory.ts`, `analytics.ts`): the algorithm only ever selects a
+candidate *for* an active/paid (`searchStatus: "active_search"`) member.
+That's stage 1, a `proposals/{cycleId}_{recipientPersonId}_{candidatePersonId}`
+document (`stage`: `proposed → viewed → member_interested |
+member_passed → mutual_interested`). Only once the member says
+**Interested** does stage 2 begin: a free `invitations/{sameId}` document
+invites the *original candidate* — who may be a passive/free member — to
+review the member's profile and answer for themselves, at no cost
+(`invited → viewed → candidate_interested | candidate_passed →
+mutual_interested`). Only when **both** sides have said Interested does
+stage 3 exist: an `introductions/{sameId}` document (`contactRevealedAt`
+is a field on it already, reserved for a contact-reveal flow that isn't
+built). A member's Pass and a candidate's Pass are treated identically —
+either one moves the pair into `pairHistory`'s 6-month cooldown.
+Funnel counts (`analytics.ts`: selections, viewed, member
+Interested/Pass, invitations sent, candidate viewed/Interested/Pass,
+mutual introductions) are kept as separate queryable numbers on purpose —
+"3 selections" is never the same claim as "3 introductions delivered",
+and a future Admin Dashboard needs these separated to diagnose why a
+paying member has zero introductions (0 selections → pool/criteria
+issue; selections with 0 member-Interested → the selections didn't
+appeal; member-Interested with 0 candidate-Interested → candidates
+declined). No dashboard UI exists yet — only the numbers to build one on.
+
+**Member/candidate actions** (`Me interesa` / `Pasar`) are implemented as
+server-side, transactional, idempotent functions
+(`recordMemberDecision`, `recordCandidateDecision`) — deciding the same
+way twice is a no-op, deciding a conflicting way after an existing
+decision is rejected, not silently overwritten. They're currently
+callable only via the admin-secret-protected `/api/admin/matching/
+proposal-decision` and `/invitation-decision` routes, **not** from a
+member-facing, ID-token-authenticated endpoint — that's the one piece of
+this request deliberately left for the next pass (see "What's NOT built"
+below), since building the actual reciprocal-invitation UI would have
+substantially expanded this change.
+
+**Passive vs. active_search** (`meta.searchStatus`): `passive` (the
+default for everyone) can still be selected as a candidate for someone
+else's cycle, but never receives their own proposals. `active_search`
+receives up to 3 proposals per monthly cycle. There is no Stripe
+integration, so nothing is ever inferred into `active_search` from
+profile completeness or payment — it's flipped only by an explicit
+allowlist/admin action today, and by a future billing webhook once
+Stripe exists.
+
+**Duplicate-person / account-integrity infrastructure**
+(`identity.ts`, `duplicates.ts`): the engine groups the eligible pool by
+`meta.personId` (defaults to a profile's own uid) rather than raw uid, so
+a merged/duplicate pair of accounts can never occupy two pool slots.
+`detectDuplicateCandidates()` scans all profiles, normalizes
+phone/email/Instagram/LinkedIn (Gmail dot/plus normalization included),
+and hashes each *processed* photo (SHA-256 of the already-re-encoded
+bytes, so a re-upload under a different filename is still caught) —
+matches are written as scored `duplicateCandidates/{uidLow}_{uidHigh}`
+entries for human review, never auto-promoted to a confirmed duplicate.
+**No facial recognition or perceptual image hashing** — exact-hash only
+for V1, per explicit product decision; perceptual (near-duplicate, e.g.
+re-cropped) hashing is postponed, and biometric/facial matching is not
+planned without a dedicated legal/ethics discussion first.
+`meta.duplicateStatus` (`clear | suspected | confirmed_duplicate |
+resolved`): `suspected` excludes a profile **both** as a recipient and as
+a candidate for others (never just one side) until a human resolves it —
+the priority is never letting the same probable real person occupy two
+matching-pool slots. `confirmed_duplicate` is the same, permanently,
+until (if ever) resolved; it's set only by `mergePeople()` (via
+`/api/admin/matching/merge-people`), never automatically. `mergePeople`
+also writes `people/{personId}` and repoints the secondary profile's
+`meta.personId` — the actual mechanism behind Firebase Auth
+provider-linking-based account recovery described in the duplicate-
+accounts design discussion; there's still no self-service UI for any of
+this.
+
+**Safety, idempotency, and rollout staging** (`engine.ts`,
+`config.ts`): every cycle is a `matchingCycles/{cycleId}` document with a
+per-member `memberRuns/{personId}` subcollection used as a claim/resume
+mechanism — a `claimed` run older than 30 minutes is treated as crashed
+and reclaimed. Every proposal write happens inside one Firestore
+transaction, keyed by a deterministic id
+(`{cycleId}_{recipientPersonId}_{candidatePersonId}`) and gated by the
+memberRun's `proposalCount` counter, so a retry, a duplicate trigger, or
+two concurrent invocations of the same cycle can never produce a 4th
+proposal or a duplicate one — they become no-ops. `pairHistory` (a
+canonical sorted-pair document) blocks re-proposing a pair that's
+`pending`/`invited` (mid-flow), `mutual` (already introduced), in an
+active Pass cooldown, or permanently `blocked` (a human/safety action via
+`blockPair()` — not yet wired to an API route). Rollout modes
+(`CycleMode`): `dry_run` (computes and records bookkeeping, writes
+**nothing** to `proposals`/`pairHistory`/`invitations`), `allowlist`
+(real writes, only for `config.allowlistPersonIds`), `limited_live` (real
+writes, capped by `maxMembersPerRun`, no allowlist), `production` (the
+full `active_search` pool). **Nothing schedules `production`
+automatically** — there is no Cloud Scheduler job, cron, or App Hosting
+equivalent wired up. Activating real monthly automation later means
+creating a Cloud Scheduler job that calls `/api/admin/matching/run-cycle`
+with `mode: "production"` on a monthly cadence — a Console/`gcloud`
+action outside this codebase, deliberately not done.
+
+**What's NOT built** (by explicit scope, not oversight): the
+member-facing "Mis propuestas" UI for actually seeing a proposal/
+invitation and clicking Interested/Pasar (the actions exist server-side
+and are tested directly — see below); mutual-introduction contact reveal;
+an admin dashboard for the funnel analytics or duplicate-candidate
+review queue; a Firestore-rule-enforced `meta.profileStatus` (see the
+limitation noted above); a member-facing (Firebase-ID-token-
+authenticated) version of the decision routes — today's routes are
+admin-secret-protected only, mirroring `MATCHING_ADMIN_SECRET` below.
+
+**Manual setup required before this can run anywhere but the emulator:**
+add a `MATCHING_ADMIN_SECRET` secret in Secret Manager and grant the App
+Hosting backend's service account access to it, exactly like
+`ANTHROPIC_API_KEY` above:
+
+```bash
+echo -n "a-long-random-value" | gcloud secrets create MATCHING_ADMIN_SECRET --data-file=- --project=select-dev-508407
+gcloud secrets add-iam-policy-binding MATCHING_ADMIN_SECRET \
+  --member="serviceAccount:firebase-app-hosting-compute@select-dev-508407.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor" \
+  --project=select-dev-508407
+```
+
+And deploy the updated `firestore.rules` (new `proposals`/`invitations`/
+`introductions` read rules — see "Deploying Firestore and Storage rules"
+below); everything else under `matchingCycles`, `memberRuns`,
+`pairHistory`, `people`, `duplicateCandidates` is covered by the existing
+default-deny wildcard rule, since it's Admin-SDK-only with no legitimate
+client path.
 
 ### AI presentation generation
 
