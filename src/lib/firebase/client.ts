@@ -38,6 +38,11 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth: Auth = getAuth(app);
 export const db: Firestore = getFirestore(app);
 
+// All Junto Select Introduction user-facing content is Spanish for V1 —
+// this makes Firebase Auth request the Spanish version of its own emails
+// (sign-in link, etc.) instead of whatever the project default is.
+auth.languageCode = "es";
+
 // Connect to local emulators when explicitly requested. Guarded so this
 // never runs against the real project by accident, and only runs once
 // even with React's dev-mode double render.

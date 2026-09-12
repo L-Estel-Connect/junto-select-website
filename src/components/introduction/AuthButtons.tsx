@@ -25,8 +25,17 @@ export default function AuthButtons() {
     setPending(true);
     try {
       await signInWithGoogle();
-    } catch {
+    } catch (error) {
       setPending(false);
+      // Closing the popup or opening a second one isn't a real failure —
+      // don't scare the person with an error for a deliberate action.
+      const code = (error as { code?: string })?.code;
+      if (
+        code === "auth/popup-closed-by-user" ||
+        code === "auth/cancelled-popup-request"
+      ) {
+        return;
+      }
       setError(
         "No hemos podido iniciar sesión. Inténtalo de nuevo en unos minutos.",
       );

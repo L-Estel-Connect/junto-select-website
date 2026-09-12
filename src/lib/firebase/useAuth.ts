@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import {
   completeMagicLinkSignIn,
-  completeRedirectSignIn,
   getStoredEmailForSignIn,
   isMagicLinkUrl,
   watchAuthState,
@@ -19,12 +18,21 @@ export function useAuth() {
 
   useEffect(() => {
     let unsubscribed = false;
+    // `loading` must stay true until BOTH of these are true, so the
+    // unauthenticated sign-in screen never flashes while a magic link is
+    // still being verified in the background (onAuthStateChanged tends to
+    // fire with `null` almost immediately, well before the async
+    // completeMagicLinkSignIn call below has resolved).
+    let authStateKnown = false;
+    let magicLinkSettled = true;
+
+    function maybeStopLoading() {
+      if (!unsubscribed && authStateKnown && magicLinkSettled) {
+        setLoading(false);
+      }
+    }
 
     async function init() {
-      await completeRedirectSignIn().catch((error) => {
-        console.error("Sign-in redirect failed", error);
-      });
-
       if (
         typeof window !== "undefined" &&
         !auth.currentUser &&
@@ -32,6 +40,7 @@ export function useAuth() {
       ) {
         const storedEmail = getStoredEmailForSignIn();
         if (storedEmail) {
+          magicLinkSettled = false;
           try {
             await completeMagicLinkSignIn(storedEmail, window.location.href);
             window.history.replaceState({}, "", window.location.pathname);
@@ -42,6 +51,9 @@ export function useAuth() {
                 "Este enlace ya no es válido. Solicita uno nuevo.",
               );
             }
+          } finally {
+            magicLinkSettled = true;
+            maybeStopLoading();
           }
         } else if (!unsubscribed) {
           setNeedsEmailForLink(true);
@@ -54,7 +66,8 @@ export function useAuth() {
     const unsubscribe = watchAuthState((nextUser) => {
       if (unsubscribed) return;
       setUser(nextUser);
-      setLoading(false);
+      authStateKnown = true;
+      maybeStopLoading();
     });
 
     return () => {

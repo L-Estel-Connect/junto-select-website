@@ -2,12 +2,11 @@
 
 import {
   GoogleAuthProvider,
-  getRedirectResult,
   isSignInWithEmailLink,
   onAuthStateChanged,
   sendSignInLinkToEmail,
   signInWithEmailLink,
-  signInWithRedirect,
+  signInWithPopup,
   signOut,
   type User,
 } from "firebase/auth";
@@ -18,8 +17,19 @@ const googleProvider = new GoogleAuthProvider();
 
 const EMAIL_STORAGE_KEY = "junto_email_for_signin";
 
-export function signInWithGoogle() {
-  return signInWithRedirect(auth, googleProvider);
+/**
+ * Uses a popup rather than a redirect: signInWithRedirect relies on a
+ * cross-site storage relay between the app's origin and `authDomain` to
+ * hand back the result, which browsers increasingly partition/block
+ * (Safari ITP, Chrome's third-party storage restrictions) — on this
+ * project's hosted.app origin (different from the firebaseapp.com
+ * authDomain) that relay was failing silently, so the redirect completed
+ * on Google's side but never resolved back into the app.
+ */
+export async function signInWithGoogle() {
+  const result = await signInWithPopup(auth, googleProvider);
+  await ensureUserDocument(result.user);
+  return result;
 }
 
 export function signOutUser() {
@@ -45,18 +55,6 @@ async function ensureUserDocument(user: User) {
     createdAt: serverTimestamp(),
     role: "member",
   });
-}
-
-/**
- * Call once on app load to finish a signInWithRedirect flow, if one is in
- * progress. Safe to call even when there's no pending redirect.
- */
-export async function completeRedirectSignIn() {
-  const result = await getRedirectResult(auth);
-  if (result?.user) {
-    await ensureUserDocument(result.user);
-  }
-  return result;
 }
 
 export function watchAuthState(callback: (user: User | null) => void) {
