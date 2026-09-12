@@ -1,0 +1,43 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Junto Select Introduction is reserved for people 35 and over.
+    // `bd` may be null (not answered yet) or a Timestamp (birth date).
+    // Someone born on or before "today minus 35 years" is eligible.
+    // This is real server-side enforcement: even a request built by hand
+    // in devtools against the Firestore SDK, bypassing our UI entirely,
+    // is rejected here.
+    function birthDateIsEligible(bd) {
+      return bd == null ||
+        bd <= timestamp.date(
+          request.time.year() - 35,
+          request.time.month(),
+          request.time.day()
+        );
+    }
+
+    // Identity doc created on first sign-in. Owner-only.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Step 1 profile ("About me"). Owner-only for now — nobody else can
+    // read a profile yet, since matching doesn't exist. Later stages will
+    // add narrow, explicit read access for a legitimate match, never a
+    // blanket "any signed-in user" rule.
+    match /profiles/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && birthDateIsEligible(request.resource.data.private.birthDate);
+      allow delete: if false;
+    }
+
+    // Default-deny everything else.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

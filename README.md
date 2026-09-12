@@ -26,15 +26,25 @@ src/
     opengraph-image.tsx     generated typographic OG/share image
     icon.tsx                generated placeholder favicon (see ASSETS.md)
     api/invitation/route.ts server-side route that calls Brevo
+    introduction/
+      page.tsx               public sign-in landing (Google/Apple)
+      onboarding/page.tsx    protected "About me" onboarding wizard
   components/               one component per section, plus shared bits
     Hero.tsx, WhoYouMeet.tsx, PrivateSection.tsx, InvitationSection.tsx,
     Footer.tsx, Wordmark.tsx, Section.tsx
     InvitationForm.tsx      the native application form (client component)
+    introduction/            Step 1 UI: AuthButtons, OnboardingWizard,
+                             StepQuestion, IneligibleAge, OnboardingComplete
   lib/
     brevo.ts                server-only Brevo API call
     types.ts, validation.ts shared between the form and the API route
     styles.ts               a couple of shared Tailwind class strings
+    firebase/                client.ts (SDK init), auth.ts, useAuth.ts
+    introduction/            aboutMeFields.ts (field config), types.ts,
+                             profile.ts (Firestore access), age.ts
 ASSETS.md                   what photography/logo is still needed, and where
+firestore.rules             Firestore Security Rules (owner-only + age gate)
+firebase.json, .firebaserc  Firebase project/emulator config
 ```
 
 ## Assets
@@ -76,9 +86,61 @@ browser.
 4. The route uses `updateEnabled: true`, so a repeat submission from the
    same email updates the existing Brevo contact rather than erroring.
 
+## Junto Select Introduction (`/introduction`) — Step 1
+
+Step 1 is account creation (Google/Apple sign-in) + the "About me" section
+of the profile, entirely client-side: the Firebase client SDK talks
+directly to Firestore, secured by `firestore.rules`. No server route, no
+Admin SDK, and no session cookie exist yet for this feature — that's
+deliberate for this stage, not an oversight; see the implementation report
+for why.
+
+### Environment variables
+
+Add these (see `.env.example`) — all public/non-secret Firebase web config:
+
+```
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+NEXT_PUBLIC_FIREBASE_APP_ID=
+```
+
+Get these values from Firebase Console → Project settings → General → Your
+apps → Web app (create one if it doesn't exist yet).
+
+### Running against the Firebase Emulator Suite locally
+
+```bash
+npx firebase-tools emulators:start --only auth,firestore
+```
+
+In a separate terminal, with a `.env.local` containing
+`NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true` (plus any placeholder values for
+the other `NEXT_PUBLIC_FIREBASE_*` vars — the emulator doesn't need real
+ones):
+
+```bash
+npm run dev
+```
+
+### Deploying Firestore rules
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+or paste the contents of `firestore.rules` directly into Firebase Console
+→ Firestore Database → Rules.
+
 ## Privacy notes
 
 - Submitted form data is only ever sent to Brevo; nothing is logged,
   stored in this repo, or sent to analytics.
 - Server logs on failure record only an HTTP status/error class, never the
   submitted name/email/etc.
+- `/introduction` profile data is private by default: Firestore rules
+  allow a signed-in user to read/write only their own `users/{uid}` and
+  `profiles/{uid}` documents — everything else is default-denied.
