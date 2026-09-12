@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Timestamp } from "firebase/firestore";
 import { aboutMeSteps } from "@/lib/introduction/aboutMeFields";
 import { isEligibleAge } from "@/lib/introduction/age";
@@ -11,7 +12,7 @@ import {
 } from "@/lib/introduction/profile";
 import type { ProfileDocument } from "@/lib/introduction/types";
 import IneligibleAge from "./IneligibleAge";
-import OnboardingComplete from "./OnboardingComplete";
+import { IntroductionLoading } from "./RequireIntroductionAuth";
 import StepQuestion from "./StepQuestion";
 
 function getByPath(obj: unknown, path: string): unknown {
@@ -27,6 +28,7 @@ function getByPath(obj: unknown, path: string): unknown {
 }
 
 export default function OnboardingWizard({ uid }: { uid: string }) {
+  const router = useRouter();
   const [profile, setProfile] = useState<ProfileDocument | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -49,6 +51,15 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
 
   const totalSteps = aboutMeSteps.length;
   const currentStep = aboutMeSteps[stepIndex];
+  const isComplete = Boolean(
+    profile && (profile.meta.aboutMeComplete || stepIndex >= totalSteps),
+  );
+
+  useEffect(() => {
+    if (isComplete) {
+      router.replace("/introduction/home");
+    }
+  }, [isComplete, router]);
 
   const currentValue = useMemo(() => {
     if (!profile || !currentStep) return undefined;
@@ -65,20 +76,12 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
     return getByPath(profile, currentStep.path);
   }, [profile, currentStep]);
 
-  if (!profile) {
-    return (
-      <div className="flex min-h-[60svh] items-center justify-center">
-        <p className="text-sm text-ink-soft">Cargando…</p>
-      </div>
-    );
+  if (!profile || isComplete) {
+    return <IntroductionLoading />;
   }
 
   if (ineligible) {
     return <IneligibleAge />;
-  }
-
-  if (profile.meta.aboutMeComplete || stepIndex >= totalSteps) {
-    return <OnboardingComplete />;
   }
 
   async function handleAnswer(value: unknown) {

@@ -28,6 +28,84 @@ export type ActivityLevel =
   | "ocasional"
   | "poco_activo";
 
+export type DistancePreference = "misma_ciudad" | "hasta_50km" | "sin_limite";
+
+export type FutureChildrenPreference = "si" | "no" | "indiferente";
+
+/**
+ * "Lo que buscas" — matching criteria, split the same way the product
+ * distinguishes them: `dealbreakers` are hard filters (a mismatch means
+ * the matching engine should never suggest the pair), `preferences` are
+ * soft signals for compatibility scoring only, never a hard exclusion.
+ */
+export interface Dealbreakers {
+  gendersSought: Gender[];
+  ageMin: number | null;
+  ageMax: number | null;
+  maxDistance: DistancePreference | null;
+  relationshipIntentionsAccepted: RelationshipIntention[];
+  smokingAccepted: FrequencyLevel[];
+  partnerHasChildrenOk: boolean | null;
+  partnerHasYoungChildrenOk: boolean | null;
+  partnerWantsFutureChildren: FutureChildrenPreference | null;
+}
+
+export interface Preferences {
+  heightMinCm: number | null;
+  heightMaxCm: number | null;
+  drinkingAccepted: FrequencyLevel[];
+  activityLevelsPreferred: ActivityLevel[];
+}
+
+export const emptyDealbreakers: Dealbreakers = {
+  gendersSought: [],
+  ageMin: null,
+  ageMax: null,
+  maxDistance: null,
+  relationshipIntentionsAccepted: [],
+  smokingAccepted: [],
+  partnerHasChildrenOk: null,
+  partnerHasYoungChildrenOk: null,
+  partnerWantsFutureChildren: null,
+};
+
+export const emptyPreferences: Preferences = {
+  heightMinCm: null,
+  heightMaxCm: null,
+  drinkingAccepted: [],
+  activityLevelsPreferred: [],
+};
+
+/**
+ * "Tu presentación" — a handful of short prompts, used only as factual
+ * grounding for an AI-generated introduction the person then reviews,
+ * edits, and explicitly approves. `generatedText` is written server-side
+ * (by the generation endpoint, from Firestore data only); `approvedText`
+ * is what the person actually approved, and may differ from
+ * `generatedText` if they edited it before approving.
+ */
+export interface PresentationPrompts {
+  freeTime: string;
+  values: string;
+  aboutYou: string;
+}
+
+export type PresentationStatus = "not_started" | "draft" | "approved";
+
+export interface PresentationDocument {
+  prompts: PresentationPrompts;
+  generatedText: string | null;
+  approvedText: string | null;
+  status: PresentationStatus;
+}
+
+export const emptyPresentation: PresentationDocument = {
+  prompts: { freeTime: "", values: "", aboutYou: "" },
+  generatedText: null,
+  approvedText: null,
+  status: "not_started",
+};
+
 /**
  * "About me" — Step 1 of the Junto Select Introduction profile.
  *
@@ -57,12 +135,22 @@ export interface AboutMePrivate {
   incomeRange: IncomeRange | null;
 }
 
+export type ProfileStatus = "draft" | "active_for_matching";
+
 export interface ProfileDocument {
   visible: AboutMeVisible;
   private: AboutMePrivate;
+  photos: string[];
+  dealbreakers: Dealbreakers;
+  preferences: Preferences;
+  presentation: PresentationDocument;
   meta: {
     onboardingStepIndex: number;
     aboutMeComplete: boolean;
+    photosComplete: boolean;
+    preferencesComplete: boolean;
+    presentationComplete: boolean;
+    profileStatus: ProfileStatus;
     createdAt: unknown;
     updatedAt: unknown;
   };

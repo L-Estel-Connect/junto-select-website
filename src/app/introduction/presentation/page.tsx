@@ -1,15 +1,15 @@
 "use client";
 
 import Section from "@/components/Section";
-import OnboardingWizard from "@/components/introduction/OnboardingWizard";
+import PresentationSection from "@/components/introduction/PresentationSection";
 import RequireIntroductionAuth from "@/components/introduction/RequireIntroductionAuth";
 
-export default function OnboardingPage() {
+export default function PresentationPage() {
   return (
     <RequireIntroductionAuth>
       {(uid) => (
         <Section as="main" size="sm">
-          <OnboardingWizard uid={uid} />
+          <PresentationSection uid={uid} />
         </Section>
       )}
     </RequireIntroductionAuth>

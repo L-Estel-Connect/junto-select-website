@@ -60,3 +60,14 @@ env:
     availability:
       - BUILD
       - RUNTIME
+
+  # Server-only secret used by /api/introduction/generate-presentation to
+  # call the Anthropic API. RUNTIME only — never needed at build time,
+  # and (unlike the public Firebase config above) never a "value": this
+  # must be a Secret Manager reference, not plaintext, so it isn't ever
+  # exposed in this file or in a browser bundle. Requires manual setup —
+  # see README "AI presentation generation" for the exact commands.
+  - variable: ANTHROPIC_API_KEY
+    secret: ANTHROPIC_API_KEY
+    availability:
+      - RUNTIME

@@ -1,0 +1,28 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Profile photos: owner-only read and write. Note that the app never
+    // calls getDownloadURL() for these — a Storage download URL carries a
+    // bearer token that bypasses these rules for anyone who ever obtains
+    // it, which is wrong for something meant to stay private. Instead the
+    // app reads bytes through the authenticated SDK (getBytes), which does
+    // go through this rule. Deliberately no cap here on how many photos a
+    // uid may have — that limit (MAX_PHOTOS) lives entirely in app code so
+    // it can be raised without a rules change.
+    match /profiles/{uid}/photos/{photoId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Default-deny everything else.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

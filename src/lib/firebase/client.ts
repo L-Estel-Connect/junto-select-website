@@ -11,6 +11,11 @@ import {
   getFirestore,
   type Firestore,
 } from "firebase/firestore";
+import {
+  connectStorageEmulator,
+  getStorage,
+  type FirebaseStorage,
+} from "firebase/storage";
 
 // Fall back to inert placeholder values when env vars aren't set. This is
 // what lets `next build`'s static prerendering pass (it evaluates this
@@ -37,6 +42,7 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 export const auth: Auth = getAuth(app);
 export const db: Firestore = getFirestore(app);
+export const storage: FirebaseStorage = getStorage(app);
 
 // All Junto Select Introduction user-facing content is Spanish for V1 —
 // this makes Firebase Auth request the Spanish version of its own emails
@@ -59,5 +65,6 @@ if (
     disableWarnings: true,
   });
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  connectStorageEmulator(storage, "127.0.0.1", 9199);
   globalThis.__junto_emulators_connected__ = true;
 }
