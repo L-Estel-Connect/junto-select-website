@@ -11,6 +11,7 @@ import { db } from "@/lib/firebase/client";
 import {
   emptyAboutMePrivate,
   emptyAboutMeVisible,
+  emptyContactPreferences,
   emptyDealbreakers,
   emptyPreferences,
   emptyPresentation,
@@ -40,6 +41,7 @@ function withDefaults(data: Partial<ProfileDocument>): ProfileDocument {
       ...data.presentation,
       prompts: { ...emptyPresentation.prompts, ...data.presentation?.prompts },
     },
+    contactPreferences: { ...emptyContactPreferences, ...data.contactPreferences },
     meta: {
       onboardingStepIndex: 0,
       aboutMeComplete: false,

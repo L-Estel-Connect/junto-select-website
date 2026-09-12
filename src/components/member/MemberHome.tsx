@@ -1,0 +1,87 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { getOrCreateProfile } from "@/lib/introduction/profile";
+import { requireFinalized } from "@/lib/introduction/completion";
+import type { ProfileDocument } from "@/lib/introduction/types";
+import { primaryButtonClasses } from "@/lib/styles";
+import { IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
+
+const linkClasses =
+  "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
+
+function StatusRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between border-b border-hairline py-4">
+      <span className="text-[15px] text-ink">{label}</span>
+      <span className="text-[13px] text-ink-soft">{value}</span>
+    </div>
+  );
+}
+
+export default function MemberHome({ uid }: { uid: string }) {
+  const router = useRouter();
+  const [profile, setProfile] = useState<ProfileDocument | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getOrCreateProfile(uid).then((doc) => {
+      if (!cancelled) setProfile(doc);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
+
+  useEffect(() => {
+    if (!profile) return;
+    const redirect = requireFinalized(profile);
+    if (redirect) router.replace(redirect);
+  }, [profile, router]);
+
+  if (!profile || requireFinalized(profile)) {
+    return <IntroductionLoading />;
+  }
+
+  return (
+    <div className="mx-auto flex w-full max-w-[560px] flex-col px-6 py-14 sm:px-0">
+      <p className="font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">
+        Hola, {profile.visible.firstName || "de nuevo"}
+      </p>
+      <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+        Tu perfil está listo. Ya formas parte de Junto Select. Cuando
+        encontremos a alguien que encaje contigo, te avisaremos.
+      </p>
+
+      <div className="mt-10 border-t border-hairline">
+        <StatusRow label="Perfil" value="Completo" />
+        <StatusRow label="Búsqueda" value="Próximamente" />
+        <StatusRow label="Plan" value="Perfil pasivo" />
+      </div>
+
+      <div className="mt-8 flex flex-wrap items-center gap-6">
+        <Link href="/member/profile" className={primaryButtonClasses}>
+          Ver mi perfil
+        </Link>
+        <Link href="/member/profile#editar-perfil" className={`text-sm ${linkClasses}`}>
+          Editar mi perfil
+        </Link>
+      </div>
+
+      <div className="mt-14 border-t border-hairline pt-8">
+        <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">
+          Tus propuestas
+        </p>
+        <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+          Tus propuestas aparecerán aquí cuando encontremos perfiles que
+          encajen contigo.
+        </p>
+        <Link href="/member/proposals" className={`mt-3 inline-block text-sm ${linkClasses}`}>
+          Ver mis propuestas
+        </Link>
+      </div>
+    </div>
+  );
+}

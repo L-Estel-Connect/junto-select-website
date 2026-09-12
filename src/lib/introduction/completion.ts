@@ -78,11 +78,11 @@ export function computeProfileStatus(profile: {
 
 export const ONBOARDING_STAGE_ORDER = [
   "/introduction/onboarding",
-  "/introduction/preferences",
-  "/introduction/photos",
-  "/introduction/presentation",
-  "/introduction/review",
-  "/introduction/home",
+  "/member/profile/preferences",
+  "/member/profile/photos",
+  "/member/profile/presentation",
+  "/member/profile",
+  "/member",
 ] as const;
 
 export type OnboardingRoute = (typeof ONBOARDING_STAGE_ORDER)[number];
@@ -103,11 +103,20 @@ export function getNextOnboardingRoute(
   profile: OnboardingFlowProfile,
 ): OnboardingRoute {
   if (!profile.meta.aboutMeComplete) return "/introduction/onboarding";
-  if (!isPreferencesComplete(profile.dealbreakers)) return "/introduction/preferences";
-  if (!isPhotosComplete(profile.photos)) return "/introduction/photos";
-  if (!isPresentationComplete(profile.presentation.status)) return "/introduction/presentation";
-  if (!profile.meta.onboardingFinalized) return "/introduction/review";
-  return "/introduction/home";
+  if (!isPreferencesComplete(profile.dealbreakers)) return "/member/profile/preferences";
+  if (!isPhotosComplete(profile.photos)) return "/member/profile/photos";
+  if (!isPresentationComplete(profile.presentation.status)) return "/member/profile/presentation";
+  if (!profile.meta.onboardingFinalized) return "/member/profile";
+  return "/member";
+}
+
+/**
+ * Guard for every /member/** page other than /member/profile itself
+ * (which has its own finer-grained prerequisite check): send anyone not
+ * yet finalized back into the flow, wherever they actually need to be.
+ */
+export function requireFinalized(profile: OnboardingFlowProfile): OnboardingRoute | null {
+  return profile.meta.onboardingFinalized ? null : getNextOnboardingRoute(profile);
 }
 
 /**

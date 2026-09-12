@@ -46,7 +46,7 @@ export default function PhotosSection({ uid }: { uid: string }) {
 
   useEffect(() => {
     if (!profile) return;
-    const redirect = getPrerequisiteRedirect(profile, "/introduction/photos");
+    const redirect = getPrerequisiteRedirect(profile, "/member/profile/photos");
     if (redirect) router.replace(redirect);
   }, [profile, router]);
 
@@ -62,7 +62,7 @@ export default function PhotosSection({ uid }: { uid: string }) {
     return <IntroductionLoading />;
   }
 
-  if (getPrerequisiteRedirect(profile, "/introduction/photos")) {
+  if (getPrerequisiteRedirect(profile, "/member/profile/photos")) {
     return <IntroductionLoading />;
   }
 
@@ -145,7 +145,7 @@ export default function PhotosSection({ uid }: { uid: string }) {
 
   return (
     <div className="mx-auto flex w-full max-w-[560px] flex-col px-6 py-14 sm:px-0">
-      <Link href="/introduction/home" className={`text-sm ${linkClasses}`}>
+      <Link href="/member" className={`text-sm ${linkClasses}`}>
         ← Volver a mi perfil
       </Link>
 

@@ -106,6 +106,37 @@ export const emptyPresentation: PresentationDocument = {
   status: "not_started",
 };
 
+export type ContactMethod = "whatsapp" | "telefono" | "email" | "instagram" | "linkedin";
+
+/**
+ * How this person prefers to be reached — strictly private account data,
+ * never shown on ProfileCard or to another member. Intended only for a
+ * future contact-reveal step after a mutual introduction is accepted;
+ * that reveal logic doesn't exist yet, this is just the data.
+ *
+ * No separate contact email field on purpose: the account's
+ * authenticated email (already on the Firebase Auth user, mirrored to
+ * `users/{uid}`) is what "Email" as a method means — adding a second
+ * email here would just be data to keep in sync for no benefit.
+ */
+export interface ContactPreferences {
+  preferredMethod: ContactMethod | null;
+  additionalMethods: ContactMethod[];
+  // Shared by "whatsapp" and "telefono" — one real-world phone number,
+  // not two fields that could disagree with each other.
+  phone: string | null;
+  instagram: string | null;
+  linkedin: string | null;
+}
+
+export const emptyContactPreferences: ContactPreferences = {
+  preferredMethod: null,
+  additionalMethods: [],
+  phone: null,
+  instagram: null,
+  linkedin: null,
+};
+
 /**
  * "About me" — Step 1 of the Junto Select Introduction profile.
  *
@@ -144,6 +175,7 @@ export interface ProfileDocument {
   dealbreakers: Dealbreakers;
   preferences: Preferences;
   presentation: PresentationDocument;
+  contactPreferences: ContactPreferences;
   meta: {
     onboardingStepIndex: number;
     aboutMeComplete: boolean;

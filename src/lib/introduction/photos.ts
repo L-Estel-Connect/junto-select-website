@@ -55,12 +55,20 @@ export async function deletePhoto(
   path: string,
   profile: ProfileDocument,
 ): Promise<void> {
-  await deleteObject(ref(storage, path)).catch(() => {
-    // Already gone from Storage (e.g. a retried delete) — the Firestore
-    // list is the real source of truth for what the UI shows, so proceed.
-  });
+  // Firestore first, then Storage — deliberately in this order. If this
+  // were reversed and the Storage delete succeeded but the Firestore
+  // write then failed, `profile.photos` would keep pointing at an object
+  // that no longer exists, and every future page load would try to load
+  // it and fail. An orphaned Storage object (Firestore write succeeds,
+  // Storage delete fails below) is harmless by comparison — nothing ever
+  // references it again — so that's the safe order to fail in.
   const nextPhotos = profile.photos.filter((p) => p !== path);
   await persistPhotos(uid, nextPhotos, profile);
+  await deleteObject(ref(storage, path)).catch(() => {
+    // Already gone, or this cleanup step failed — either way the
+    // Firestore list (already updated above) is the source of truth for
+    // what the UI shows.
+  });
 }
 
 /** Moves `path` to index 0 (the primary photo shown first). */

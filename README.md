@@ -28,13 +28,14 @@ src/
     api/invitation/route.ts server-side route that calls Brevo
     introduction/
       page.tsx               public sign-in landing (Google / email link)
-      onboarding/page.tsx    protected "About me" onboarding wizard
-      home/page.tsx          Profile Home — status of every section, next step
-      preferences/page.tsx   protected "Lo que buscas" section
-      photos/page.tsx        protected "Fotos" section
-      presentation/page.tsx  protected "Tu presentación" section
-      review/page.tsx        "Así se verá tu perfil" — review + finalize,
-                             and later "Ver mi perfil"
+      onboarding/page.tsx    protected "About me" onboarding wizard — the
+                             only page still under /introduction once an
+                             account exists; see "Information architecture"
+    member/                  the authenticated product, once About Me is
+                             done — see "Member area" below for the full
+                             route list
+    privacidad/, terminos/  minimal placeholder legal pages (no real legal
+                             text yet — see Privacy notes)
     api/introduction/
       generate-presentation/route.ts  server route, calls the Anthropic API
   components/               one component per section, plus shared bits
@@ -42,12 +43,20 @@ src/
     Footer.tsx, Wordmark.tsx, Section.tsx
     InvitationForm.tsx      the native application form (client component)
     introduction/            AuthButtons, ConfirmEmailForLink, IneligibleAge,
-                             RequireIntroductionAuth (shared auth guard),
+                             RequireIntroductionAuth (shared auth guard, used
+                             only by /introduction/onboarding now),
                              OnboardingWizard, StepQuestion (Step 1),
-                             ProfileHome, PreferencesSection, PreferenceFields,
+                             PreferencesSection, PreferenceFields,
                              PhotosSection, PrivatePhotoThumbnail,
-                             PresentationSection, ReviewSection, ProfileCard
-                             (shared by Review and "Ver mi perfil")
+                             PresentationSection, ContactSection,
+                             MemberProfileSection (view + finalize + edit
+                             hub), ProfileCard (the actual rendered profile,
+                             reused by MemberProfileSection in both modes)
+    member/                  MemberShell (auth guard + nav for /member/**),
+                             MemberNav, MemberContext (uid via context),
+                             useMemberProfile (fetch + finalized guard),
+                             MemberHome, ProposalsSection, ConnectionsSection,
+                             PlanSection, SettingsSection
   lib/
     brevo.ts                server-only Brevo API call
     types.ts, validation.ts shared between the form and the API route
@@ -57,14 +66,56 @@ src/
     ai/generatePresentation.ts  server-only Anthropic API call + prompt
     introduction/            aboutMeFields.ts (Step 1 field config), types.ts,
                              profile.ts (Firestore access), age.ts,
-                             completion.ts (section/eligibility logic),
-                             photos.ts, imageProcessing.ts, preferences.ts,
-                             presentation.ts
+                             completion.ts (section/eligibility logic +
+                             the onboarding route resolver), photos.ts,
+                             imageProcessing.ts, preferences.ts,
+                             presentation.ts, contact.ts (contact
+                             preferences + validation)
 ASSETS.md                   what photography/logo is still needed, and where
 firestore.rules             Firestore Security Rules (owner-only + age gate)
 storage.rules                Storage Security Rules (owner-only photo access)
 firebase.json, .firebaserc  Firebase project/emulator config
 ```
+
+## Information architecture
+
+Two namespaces, split by a single event — has this profile been
+finalized:
+
+- **`/introduction/*`** — pre-account and first-time setup only: the
+  public sign-in landing (`/introduction`) and the "About me" wizard
+  (`/introduction/onboarding`). Nothing else lives here anymore.
+- **`/member/*`** — the authenticated product, for anyone who has an
+  account, whether or not they've finished onboarding yet. Editing a
+  section (Lo que buscas, Fotos, Tu presentación, Contacto) and viewing
+  the assembled profile happen at the *same* URLs before and after
+  finalization — there's deliberately no separate "setup" copy of these
+  pages and a different "editing" copy later.
+
+Full `/member` route list:
+
+| Route | Purpose |
+|---|---|
+| `/member` | Member Home — status + "Ver mi perfil" / "Editar mi perfil" |
+| `/member/profile` | The assembled profile (`ProfileCard`) — pre-finalize this is "Así se verá tu perfil" with "Guardar y finalizar"; after, it's "Ver mi perfil" plus the "Editar mi perfil" section-list lower on the same page (`#editar-perfil`) |
+| `/member/profile/preferences` | "Lo que buscas" — edit dealbreakers/preferences |
+| `/member/profile/photos` | "Fotos" |
+| `/member/profile/presentation` | "Tu presentación" |
+| `/member/profile/contact` | "¿Cómo prefieres que te contacten?" — private contact preferences |
+| `/member/proposals` | "Mis propuestas" — empty-state shell for future introductions |
+| `/member/connections` | "Conexiones" — empty-state shell for future mutual connections |
+| `/member/plan` | "Mi plan" — placeholder membership/billing status |
+| `/member/settings` | "Ajustes" — account, privacy/legal links, sign out, delete-profile placeholder |
+
+Why not keep everything at the old `/introduction/*` URLs (which is what
+this repo did before this pass)? Because "onboarding" and "the product
+you use afterward" are different things, and a permanent product living
+under URLs named for a one-time setup flow reads as exactly the kind of
+"confusing collection of onboarding URLs" this restructuring was asked to
+avoid. The one-time, not-yet-an-account parts (sign-in, About Me) stay at
+`/introduction/*`; everything that exists for the life of the account
+moved to `/member/*`, with one page per concern and no duplicate
+view/edit copies of anything.
 
 ## Assets
 
@@ -105,7 +156,7 @@ browser.
 4. The route uses `updateEnabled: true`, so a repeat submission from the
    same email updates the existing Brevo contact rather than erroring.
 
-## Junto Select Introduction (`/introduction`)
+## Junto Select Introduction (`/introduction` → `/member`)
 
 First-time onboarding is linear, with a "Continuar" CTA at the bottom of
 every step once that step's minimum requirement is met:
@@ -119,32 +170,32 @@ single source of truth for this order — every page redirects a returning
 user to whatever's next via that one function, so "resume where you left
 off" and "the guided sequence" can never drift apart. Each page also
 calls `getPrerequisiteRedirect()` to bounce someone forward if they try to
-skip ahead (e.g. opening `/introduction/photos` directly before Lo que
+skip ahead (e.g. opening `/member/profile/photos` directly before Lo que
 buscas is done) — but it only ever redirects *forward* when something
 earlier is missing, never away from a page whose prerequisites are
-already met. That's what lets **Profile Home** (`/introduction/home`)
-stay a hub afterward: reopening an already-completed section from there
-to edit it is always allowed, onboarding or not.
+already met. That's what lets `/member/profile`'s section list stay a
+hub afterward: reopening an already-completed section to edit it is
+always allowed, onboarding or not.
 
 Once a profile has everything the guided flow requires, it lands on
-**Review** (`/introduction/review`, "Así se verá tu perfil") — a
-read-only preview of the profile roughly as another selected member would
-eventually see it, built from `ProfileCard.tsx`. Pressing "Guardar y
-finalizar" there is the *only* place `meta.onboardingFinalized` is ever
-set — it's never inferred just because every section happens to have
-data. `ProfileCard` deliberately reads only `profile.visible`,
-`profile.photos`, and `profile.presentation.approvedText`; it never reads
-`profile.private` (except internally, to derive an age from the birth
-date — the date itself is never rendered) and never reads
-`profile.dealbreakers` / `profile.preferences` at all, since those are
-matching-only. The same component is reused for "Ver mi perfil" on a
-finalized Profile Home, so there's only one profile-rendering
-implementation to keep in sync with the data model.
+`/member/profile`, "Así se verá tu perfil" — a read-only preview of the
+profile roughly as another selected member would eventually see it,
+built from `ProfileCard.tsx`. Pressing "Guardar y finalizar" there is the
+*only* place `meta.onboardingFinalized` is ever set — it's never inferred
+just because every section happens to have data. `ProfileCard`
+deliberately reads only `profile.visible`, `profile.photos`, and
+`profile.presentation.approvedText`; it never reads `profile.private`
+(except internally, to derive an age from the birth date — the date
+itself is never rendered), never reads `profile.contactPreferences`, and
+never reads `profile.dealbreakers` / `profile.preferences` at all, since
+those are matching-only. The same component renders both "Así se verá tu
+perfil" (pre-finalize) and "Ver mi perfil" (after) — same URL, same
+component, the only difference is which actions show beneath it.
 
 A finalized profile stays fully editable — reopening any section from
-Profile Home's hub and changing something never clears
-`onboardingFinalized`; the person can always come back to "Ver mi perfil"
-and see the updated version.
+`/member/profile`'s section list and changing something never clears
+`onboardingFinalized`; the person can always come back and see the
+updated version.
 
 Sign-in (Google or a passwordless email link) and Step 1 ("About me") are
 entirely client-side: the Firebase client SDK talks directly to
@@ -166,6 +217,87 @@ error dismissal, and on unmount) to avoid leaking memory. None of this
 touches the underlying privacy architecture — photos are still processed
 client-side, uploaded to Firebase Storage, and referenced by path (never
 a public download URL); see `src/lib/introduction/photos.ts`.
+
+### Fixed: photo stuck on "Cargando…" forever
+
+`PrivatePhotoThumbnail` (the component that loads a saved photo's bytes
+via the authenticated Storage SDK and renders them as an object URL) had
+no `.catch()` on that fetch. Any failure — a stale Firestore path
+pointing at an already-deleted Storage object, an auth/token hiccup, a
+transient network error, anything — left the component's `url` state
+unset forever, with only a silent unhandled promise rejection and no way
+for the UI to ever leave its "Cargando…" state. It now tracks an explicit
+`loading | loaded | error` state and always reaches a terminal one,
+showing "No se pudo cargar la foto." on failure instead of hanging. Also
+hardened `deletePhoto()` (`photos.ts`) to write Firestore *before*
+deleting from Storage rather than after — reversed, a Storage-delete
+that succeeds followed by a Firestore write that fails leaves exactly the
+stale-path situation above; the new order's only failure mode is a
+harmless orphaned Storage object nothing ever references again. Neither
+change touches the privacy architecture (still no public download URLs).
+
+## Member area
+
+`/member/*` (see "Information architecture") is the authenticated
+product shell: `MemberShell` (in `src/components/member/`) checks
+sign-in, provides the uid via `MemberContext`, and renders `MemberNav` —
+a slim top bar on desktop (a short row of text links, not a persistent
+sidebar — a sidebar reads as a SaaS dashboard, which is exactly the tone
+this product avoids) collapsing to a hamburger + slide-over drawer on
+mobile. Every `/member/**` page other than `/member/profile` itself uses
+`useMemberProfile()` to fetch the profile and redirect back into the
+flow (via `requireFinalized()` in `completion.ts`) if onboarding isn't
+finished yet; `/member/profile` has its own finer-grained prerequisite
+check since it's also the finalize step.
+
+**Proposals, Connections, and Plan are intentionally empty-state shells**
+— no matching engine, no mutual-interest logic, and no billing exist yet.
+Each page's own file comment says what it's structurally ready for later
+(e.g. Proposals' eventual Nuevas/Pendientes/Pasadas sections) without
+building UI for data that doesn't exist. Settings' "Cancelar suscripción"
+(Plan) and "Eliminar perfil" (Settings) are both disabled placeholders —
+neither does anything yet, on purpose; see "What a real Plan/deletion
+flow would need" below for what's actually missing before either could
+be real.
+
+### What a real "Mi plan" would need
+
+Nothing about membership tier or billing exists in the data model today
+— Plan's "Perfil pasivo" is a hardcoded placeholder, not a read of real
+state. Before this page can show anything real, the profile (or a
+sibling document) needs at least: a membership tier field (e.g. `"free"
+| "active_select"`), a renewal/expiry date, and whatever Stripe (or
+equivalent) sends via webhook to keep that field in sync — none of which
+this pass builds.
+
+### Contact preferences
+
+`/member/profile/contact`, "¿Cómo prefieres que te contacten?" — how a
+person wants to be reached once a mutual introduction is eventually
+built. Stored as `profile.contactPreferences` (`preferredMethod`, an
+optional `additionalMethods[]`, and the detail fields the chosen methods
+actually need — `phone` shared by WhatsApp and Teléfono, `instagram`,
+`linkedin`). No separate contact-email field: choosing "Email" always
+means the account's authenticated email (already on the Firebase Auth
+user), never a second field that could drift out of sync with it.
+
+This is **strictly private account data** — `ProfileCard` never imports
+`contact.ts` or reads this field, so it structurally cannot appear on
+"Ver mi perfil," the Review screen, or (once they exist) proposal cards
+or another member's profile. It's intended only for a future
+contact-reveal step after both people accept an introduction; that reveal
+logic doesn't exist yet — this pass only collects, validates, stores, and
+lets the person edit it.
+
+Not required anywhere yet — reachable from `/member/profile`'s section
+list and linked from Ajustes, but nothing blocks onboarding or
+finalization on it being filled in. **Where to require it later:** once a
+real introduction flow exists, the natural gate is alongside the other
+matching-eligibility checks in `completion.ts` (`isContactPreferencesComplete()`
+in `contact.ts` already exists, ready to be wired in there) — not
+retrofitted into the existing finalize step now, which would silently
+turn an already-shipped, already-tested flow into a longer one without
+you asking for that.
 
 ### Profile completion & matching eligibility
 
@@ -344,3 +476,12 @@ into Firebase Console → Firestore Database → Rules / Storage → Rules.
 - Uploaded photos are re-encoded through a canvas before upload (see
   `imageProcessing.ts`), which strips all EXIF metadata, including GPS
   location, since canvas pixel data carries none of it.
+- Contact preferences (`profile.contactPreferences`) are private for the
+  same structural reason as everything else here: they're a field on the
+  same owner-only `profiles/{uid}` document, and `ProfileCard` — the only
+  component that renders a profile to "another member" — never reads
+  them.
+- `/privacidad` and `/terminos` are placeholder pages only (no real legal
+  text yet, on purpose — writing actual privacy/terms copy isn't
+  something to fabricate) — replace their content with real legal review
+  before relying on them for anything.
