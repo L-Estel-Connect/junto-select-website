@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import Section from "@/components/Section";
 import Wordmark from "@/components/Wordmark";
 import AuthButtons from "@/components/introduction/AuthButtons";
+import ConfirmEmailForLink from "@/components/introduction/ConfirmEmailForLink";
 import { useAuth } from "@/lib/firebase/useAuth";
 import { eyebrowClasses } from "@/lib/styles";
 
 export default function IntroductionLandingPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, needsEmailForLink, linkError, confirmEmailForLink } =
+    useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -48,7 +50,18 @@ export default function IntroductionLandingPage() {
       </p>
 
       <div className="w-full max-w-[360px]">
-        <AuthButtons />
+        {needsEmailForLink ? (
+          <ConfirmEmailForLink error={linkError} onConfirm={confirmEmailForLink} />
+        ) : (
+          <>
+            {linkError && (
+              <p role="alert" className="mb-4 text-sm text-[#8a3b3b]">
+                {linkError}
+              </p>
+            )}
+            <AuthButtons />
+          </>
+        )}
       </div>
 
       <p className="max-w-[38ch] text-xs leading-relaxed text-ink-soft">

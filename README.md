@@ -27,14 +27,15 @@ src/
     icon.tsx                generated placeholder favicon (see ASSETS.md)
     api/invitation/route.ts server-side route that calls Brevo
     introduction/
-      page.tsx               public sign-in landing (Google/Apple)
+      page.tsx               public sign-in landing (Google / email link)
       onboarding/page.tsx    protected "About me" onboarding wizard
   components/               one component per section, plus shared bits
     Hero.tsx, WhoYouMeet.tsx, PrivateSection.tsx, InvitationSection.tsx,
     Footer.tsx, Wordmark.tsx, Section.tsx
     InvitationForm.tsx      the native application form (client component)
-    introduction/            Step 1 UI: AuthButtons, OnboardingWizard,
-                             StepQuestion, IneligibleAge, OnboardingComplete
+    introduction/            Step 1 UI: AuthButtons, ConfirmEmailForLink,
+                             OnboardingWizard, StepQuestion, IneligibleAge,
+                             OnboardingComplete
   lib/
     brevo.ts                server-only Brevo API call
     types.ts, validation.ts shared between the form and the API route
@@ -88,12 +89,19 @@ browser.
 
 ## Junto Select Introduction (`/introduction`) — Step 1
 
-Step 1 is account creation (Google/Apple sign-in) + the "About me" section
-of the profile, entirely client-side: the Firebase client SDK talks
-directly to Firestore, secured by `firestore.rules`. No server route, no
-Admin SDK, and no session cookie exist yet for this feature — that's
-deliberate for this stage, not an oversight; see the implementation report
-for why.
+Step 1 is account creation (Google sign-in or a passwordless email link) +
+the "About me" section of the profile, entirely client-side: the Firebase
+client SDK talks directly to Firestore, secured by `firestore.rules`. No
+server route, no Admin SDK, and no session cookie exist yet for this
+feature — that's deliberate for this stage, not an oversight; see the
+implementation report for why.
+
+The email-link flow ("Continuar con email") sends a sign-in link via
+Firebase Auth to whatever address the person enters, always pointing back
+at `/introduction` on the current origin. Opening it on the same
+device/browser completes sign-in automatically; opening it elsewhere (a
+different device, or an email app with its own in-app browser) asks the
+person to confirm their email once before completing.
 
 ### Environment variables
 

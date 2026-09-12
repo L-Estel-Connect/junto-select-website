@@ -1,49 +1,133 @@
 "use client";
 
 import { useState } from "react";
-import { signInWithApple, signInWithGoogle } from "@/lib/firebase/auth";
+import { sendMagicLink, signInWithGoogle } from "@/lib/firebase/auth";
+import { primaryButtonClasses } from "@/lib/styles";
 
 const buttonBaseClasses =
   "flex w-full items-center justify-center gap-3 rounded-full border border-hairline bg-white px-6 py-4 text-[15px] font-medium text-ink transition-colors hover:border-rose disabled:cursor-not-allowed disabled:opacity-60";
 
+const inputClasses =
+  "w-full rounded-md border border-hairline bg-paper px-4 py-4 text-[15px] text-ink placeholder:text-ink-soft/80 transition-colors focus:border-rose-dark focus:outline-none";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type View = "options" | "email-form" | "email-sent";
+
 export default function AuthButtons() {
-  const [pending, setPending] = useState<"google" | "apple" | null>(null);
+  const [view, setView] = useState<View>("options");
+  const [email, setEmail] = useState("");
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handle(provider: "google" | "apple") {
+  async function handleGoogle() {
     setError(null);
-    setPending(provider);
+    setPending(true);
     try {
-      await (provider === "google" ? signInWithGoogle() : signInWithApple());
-      // signInWithRedirect navigates away; nothing else to do here.
+      await signInWithGoogle();
     } catch {
-      setPending(null);
+      setPending(false);
       setError(
         "No hemos podido iniciar sesión. Inténtalo de nuevo en unos minutos.",
       );
     }
   }
 
+  async function handleSendLink() {
+    const trimmed = email.trim();
+    if (!EMAIL_RE.test(trimmed)) {
+      setError("Introduce un email válido.");
+      return;
+    }
+    setError(null);
+    setPending(true);
+    try {
+      await sendMagicLink(trimmed);
+      setView("email-sent");
+    } catch {
+      setError(
+        "No hemos podido enviar el enlace. Inténtalo de nuevo en unos minutos.",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (view === "email-sent") {
+    return (
+      <div className="w-full text-center">
+        <p className="text-[15px] text-ink">
+          Te hemos enviado un enlace a <strong>{email}</strong>.
+        </p>
+        <p className="mt-2 text-[15px] text-ink-soft">
+          Ábrelo desde este mismo dispositivo para continuar.
+        </p>
+      </div>
+    );
+  }
+
+  if (view === "email-form") {
+    return (
+      <div className="w-full space-y-3">
+        <input
+          type="email"
+          autoFocus
+          value={email}
+          placeholder="Tu email"
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSendLink();
+          }}
+          className={inputClasses}
+        />
+        <button
+          type="button"
+          disabled={pending}
+          onClick={handleSendLink}
+          className={`${primaryButtonClasses} w-full`}
+        >
+          {pending ? "Enviando…" : "Enviar enlace"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setView("options");
+            setError(null);
+          }}
+          className="w-full text-center text-sm text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink"
+        >
+          Atrás
+        </button>
+        {error && (
+          <p role="alert" className="text-center text-sm text-[#8a3b3b]">
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="w-full space-y-3">
       <button
         type="button"
-        disabled={pending !== null}
-        onClick={() => handle("google")}
+        disabled={pending}
+        onClick={handleGoogle}
         className={buttonBaseClasses}
       >
         <GoogleMark />
-        {pending === "google" ? "Conectando…" : "Continuar con Google"}
+        {pending ? "Conectando…" : "Continuar con Google"}
       </button>
 
       <button
         type="button"
-        disabled={pending !== null}
-        onClick={() => handle("apple")}
+        onClick={() => {
+          setError(null);
+          setView("email-form");
+        }}
         className={buttonBaseClasses}
       >
-        <AppleMark />
-        {pending === "apple" ? "Conectando…" : "Continuar con Apple"}
+        Continuar con email
       </button>
 
       {error && (
@@ -74,21 +158,6 @@ function GoogleMark() {
         fill="#EA4335"
         d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97L3.95 7.3C4.66 5.17 6.65 3.58 9 3.58z"
       />
-    </svg>
-  );
-}
-
-function AppleMark() {
-  return (
-    <svg
-      width="16"
-      height="18"
-      viewBox="0 0 16 18"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <path d="M13.1 9.5c0-2 1.6-2.9 1.7-3-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.3 2-1.4 2.4-.4 6 1 8 .7 1 1.5 2.1 2.6 2 1-.1 1.4-.6 2.7-.6 1.2 0 1.6.6 2.7.6 1.1 0 1.9-1 2.6-2 .8-1.2 1.1-2.3 1.2-2.4-.1 0-2.6-1-2.7-3z" />
-      <path d="M10.9 3.3c.6-.7 1-1.7.9-2.7-.9 0-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.6 1 .1 1.9-.5 2.5-1.2z" />
     </svg>
   );
 }
