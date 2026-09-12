@@ -1,4 +1,5 @@
 import type { DuplicateStatus } from "@/lib/introduction/types";
+import type { ScoreDimensionBreakdown } from "./scoring";
 
 /**
  * V1 monthly matching engine — schema for the collections that live
@@ -125,6 +126,15 @@ export interface ProposalDocument {
   candidateUid: string;
   score: number;
   scoringVersion: number;
+  // Internal-only observability (§10 of the matching audit) — never shown
+  // to a member. Lets a later calibration pass see not just the final
+  // score but why: how much of the total possible weight was actually
+  // evaluable for this pair (`scoreCoverage`), how far that was scaled
+  // down for low coverage (`scoreConfidence`), and the exact per-dimension
+  // fit/contribution (`scoreBreakdown`) — see scoring.ts's ScoreResult.
+  scoreCoverage: number;
+  scoreConfidence: number;
+  scoreBreakdown: ScoreDimensionBreakdown[];
   stage: ProposalStage;
   passType: PassType | null;
   createdAt: unknown;

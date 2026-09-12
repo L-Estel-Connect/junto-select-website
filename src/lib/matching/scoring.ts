@@ -2,30 +2,105 @@ import type { ProfileDocument } from "@/lib/introduction/types";
 
 /**
  * Deterministic, versioned, fully explainable weighted scoring — no opaque
- * AI decision-maker. Each dimension is a reciprocal soft signal derived
- * only from fields both people actually filled in; an unset preference on
- * either side is treated as neutral (full credit) rather than a penalty,
- * since `preferences` (unlike `dealbreakers`) is optional by design.
+ * AI decision-maker. V2 replaces V1's "unstated preference = full neutral
+ * credit" design (see README "Scoring V2" for the audit that found it):
+ * a dimension that has no real, evaluable signal for a given pair is
+ * excluded entirely from that pair's score — never treated as a match,
+ * never treated as a mismatch. See `scorePair` for how that's combined
+ * with a coverage/confidence safeguard so a pair with very little
+ * evaluable signal still can't be manufactured into a high score just by
+ * having one lucky dimension.
  *
- * `scoringVersion` is recorded on every proposal so weights can be
- * recalibrated later from real Interested/Pass/mutual outcomes without
- * losing the ability to see what version produced a historical proposal.
+ * `scoringVersion` is recorded on every proposal so weights (and, as
+ * happened here, the formula itself) can be recalibrated later from real
+ * Interested/Pass/mutual outcomes without losing the ability to see what
+ * version produced a historical proposal.
  */
 
-export const SCORING_VERSION = 1;
+export const SCORING_VERSION = 2;
 
-const WEIGHTS_V1 = {
-  heightFit: 15,
-  drinkingFit: 15,
+type DimensionName =
+  | "activityFit"
+  | "relationshipIntentionAlignment"
+  | "drinkingFit"
+  | "heightFit"
+  | "languageOverlap"
+  | "educationAlignment";
+
+/**
+ * Weights are relative-importance judgments, not empirically validated —
+ * see README/audit notes. City is deliberately not a dimension here at
+ * all anymore: Madrid-only eligibility is already an engine.ts pool gate
+ * (loadEligiblePool), and with a single-market, mostly free-text "Madrid"
+ * city field, a same-city bonus rewarded nearly everyone equally without
+ * helping ranking.
+ */
+const WEIGHTS_V2: Record<DimensionName, number> = {
   activityFit: 20,
-  cityBonus: 20,
+  relationshipIntentionAlignment: 20,
+  drinkingFit: 15,
+  heightFit: 15,
   languageOverlap: 15,
-  educationAlignment: 15,
+  // Deliberately a minor signal, not a major ranking driver (see README):
+  // exact-category alignment only, no adjacency logic, and explicitly
+  // must never rank people by educational "status" — this is the
+  // smallest change that stops it dominating the score the way its
+  // former weight of 15 (equal to language) did.
+  educationAlignment: 5,
 };
 
-const TOTAL_WEIGHT_V1 = Object.values(WEIGHTS_V1).reduce((a, b) => a + b, 0);
+const TOTAL_WEIGHT_V2 = Object.values(WEIGHTS_V2).reduce((a, b) => a + b, 0);
 
-function heightFit(a: ProfileDocument, b: ProfileDocument): number {
+/**
+ * A pair needs at least this fraction of the total possible weight to be
+ * genuinely evaluable before the score is reported at full confidence.
+ * Below it, the score is scaled down proportionally — the mechanism that
+ * stops a single lucky evaluable dimension from producing a manufactured
+ * high score out of an otherwise-blank pair. A tunable constant, not a
+ * validated one; see README.
+ */
+const MIN_COVERAGE_FOR_FULL_CONFIDENCE = 0.5;
+
+interface DimensionResult {
+  evaluable: boolean;
+  /** 0-1. Only meaningful when evaluable is true. */
+  fit: number;
+}
+
+export interface ScoreDimensionBreakdown {
+  dimension: DimensionName;
+  weight: number;
+  evaluable: boolean;
+  /** 0-1, or null when not evaluable for this pair. */
+  fit: number | null;
+  /** weight * fit when evaluable, else 0. */
+  contribution: number;
+}
+
+export interface ScoreResult {
+  /** 0-100, the number everything else (threshold, ranking) uses. */
+  score: number;
+  scoringVersion: number;
+  /** Fraction (0-1) of total possible weight that was actually evaluable for this pair. */
+  coverage: number;
+  /** Fraction (0-1) coverage was scaled down by, per MIN_COVERAGE_FOR_FULL_CONFIDENCE. */
+  confidence: number;
+  /** 0-1, the raw quality of fit over only the evaluable dimensions, before the confidence scale-down. */
+  fitQuality: number;
+  breakdown: ScoreDimensionBreakdown[];
+}
+
+const NOT_EVALUABLE: DimensionResult = { evaluable: false, fit: 0 };
+
+/**
+ * Reciprocal, per-direction evaluability: A's stated preference is only
+ * evaluable against B's self-report (and vice versa) — a preference with
+ * no corresponding self-report on the other side contributes nothing, in
+ * either direction, rather than being silently dropped as if it were
+ * never asked. The two directions are independent; either, both, or
+ * neither may be evaluable for a given pair.
+ */
+function heightFit(a: ProfileDocument, b: ProfileDocument): DimensionResult {
   const checks: boolean[] = [];
   const { heightMinCm: aMin, heightMaxCm: aMax } = a.preferences;
   if ((aMin !== null || aMax !== null) && b.visible.heightCm !== null) {
@@ -41,55 +116,116 @@ function heightFit(a: ProfileDocument, b: ProfileDocument): number {
         (bMax === null || a.visible.heightCm <= bMax),
     );
   }
-  if (checks.length === 0) return 1;
-  return checks.filter(Boolean).length / checks.length;
+  if (checks.length === 0) return NOT_EVALUABLE;
+  return { evaluable: true, fit: checks.filter(Boolean).length / checks.length };
 }
 
-function membershipFit<T>(aPref: T[], bValue: T | null, bPref: T[], aValue: T | null): number {
+/** Same per-direction evaluability contract as heightFit, generic over drinking/activity. */
+function membershipFit<T>(aPref: T[], bValue: T | null, bPref: T[], aValue: T | null): DimensionResult {
   const checks: boolean[] = [];
   if (aPref.length > 0 && bValue !== null) checks.push(aPref.includes(bValue));
   if (bPref.length > 0 && aValue !== null) checks.push(bPref.includes(aValue));
-  if (checks.length === 0) return 1;
-  return checks.filter(Boolean).length / checks.length;
+  if (checks.length === 0) return NOT_EVALUABLE;
+  return { evaluable: true, fit: checks.filter(Boolean).length / checks.length };
 }
 
-function cityBonus(a: ProfileDocument, b: ProfileDocument): number {
-  const cityA = a.visible.city.trim().toLowerCase();
-  const cityB = b.visible.city.trim().toLowerCase();
-  if (!cityA || !cityB) return 0;
-  return cityA === cityB ? 1 : 0;
-}
-
-function languageOverlap(a: ProfileDocument, b: ProfileDocument): number {
+/** Both languages are required fields, so this is effectively always evaluable in practice. */
+function languageOverlap(a: ProfileDocument, b: ProfileDocument): DimensionResult {
   const langsA = new Set(a.visible.languages);
   const langsB = new Set(b.visible.languages);
-  if (langsA.size === 0 || langsB.size === 0) return 0;
+  if (langsA.size === 0 || langsB.size === 0) return NOT_EVALUABLE;
   const intersection = [...langsA].filter((l) => langsB.has(l)).length;
   const union = new Set([...langsA, ...langsB]).size;
-  return union === 0 ? 0 : intersection / union;
+  return { evaluable: true, fit: union === 0 ? 0 : intersection / union };
 }
 
-function educationAlignment(a: ProfileDocument, b: ProfileDocument): number {
-  if (!a.visible.educationLevel || !b.visible.educationLevel) return 0;
-  return a.visible.educationLevel === b.visible.educationLevel ? 1 : 0;
+const REAL_EDUCATION_LEVELS = new Set(["formacion_profesional", "universidad", "master_doctorado"]);
+
+/**
+ * "prefiero_no_decirlo" is a decline-to-answer, not an education level —
+ * it must never be compared as if it were one. Previously
+ * `!a.visible.educationLevel` only excluded an actual `null`, so two
+ * people who both declined scored a full match; now both sides must have
+ * a REAL level for this to be evaluable at all.
+ */
+function educationAlignment(a: ProfileDocument, b: ProfileDocument): DimensionResult {
+  const levelA = a.visible.educationLevel;
+  const levelB = b.visible.educationLevel;
+  if (!levelA || !levelB || !REAL_EDUCATION_LEVELS.has(levelA) || !REAL_EDUCATION_LEVELS.has(levelB)) {
+    return NOT_EVALUABLE;
+  }
+  return { evaluable: true, fit: levelA === levelB ? 1 : 0 };
 }
 
-/** Returns a 0-100 compatibility score. Version 1 weighting — see WEIGHTS_V1. */
-export function scorePair(a: ProfileDocument, b: ProfileDocument): number {
-  const raw =
-    WEIGHTS_V1.heightFit * heightFit(a, b) +
-    WEIGHTS_V1.drinkingFit *
-      membershipFit(a.preferences.drinkingAccepted, b.visible.drinking, b.preferences.drinkingAccepted, a.visible.drinking) +
-    WEIGHTS_V1.activityFit *
-      membershipFit(
-        a.preferences.activityLevelsPreferred,
-        b.visible.activityLevel,
-        b.preferences.activityLevelsPreferred,
-        a.visible.activityLevel,
-      ) +
-    WEIGHTS_V1.cityBonus * cityBonus(a, b) +
-    WEIGHTS_V1.languageOverlap * languageOverlap(a, b) +
-    WEIGHTS_V1.educationAlignment * educationAlignment(a, b);
+/**
+ * Soft ranking signal ONLY among pairs that already passed the reciprocal
+ * relationshipIntentionsAccepted hard filter (hardFilters.ts) — this
+ * function is never called before that, and nothing here can override or
+ * substitute for it. Both sides' intention is a required field and is
+ * guaranteed non-null for any pair reaching scoring, so this is always
+ * evaluable in practice; the null check is defensive.
+ *
+ * Deliberately a flat two-tier table, not the 3-tier distance table
+ * considered during design — an exact match is a stronger signal than
+ * any other accepted-but-different combination, and that's the only
+ * distinction asserted here. Both values (1.0 / 0.5) are initial product
+ * assumptions, not validated from outcomes — easy to find and revise
+ * here, and covered by SCORING_VERSION so a future recalibration is
+ * traceable against which proposals used which values.
+ */
+function relationshipIntentionAlignment(a: ProfileDocument, b: ProfileDocument): DimensionResult {
+  const intentionA = a.visible.relationshipIntention;
+  const intentionB = b.visible.relationshipIntention;
+  if (intentionA === null || intentionB === null) return NOT_EVALUABLE;
+  return { evaluable: true, fit: intentionA === intentionB ? 1.0 : 0.5 };
+}
 
-  return Math.round((raw / TOTAL_WEIGHT_V1) * 100);
+/**
+ * Returns a 0-100 compatibility score plus the full per-dimension
+ * breakdown (for internal persistence/analysis — see README "Scoring V2"
+ * and analytics.ts). Dimensions with no evaluable signal for this pair
+ * are excluded from both the numerator and the weight denominator
+ * (`fitQuality`) — never scored as a match, never as a mismatch. A
+ * separate `confidence` factor then scales down the final score when too
+ * little of the total possible weight was evaluable at all, which is
+ * what stops a single evaluable dimension (e.g. only language overlap)
+ * from producing a manufactured high score for an otherwise-blank pair —
+ * see the worked examples in README.
+ */
+export function scorePair(a: ProfileDocument, b: ProfileDocument): ScoreResult {
+  const results: Record<DimensionName, DimensionResult> = {
+    activityFit: membershipFit(
+      a.preferences.activityLevelsPreferred,
+      b.visible.activityLevel,
+      b.preferences.activityLevelsPreferred,
+      a.visible.activityLevel,
+    ),
+    relationshipIntentionAlignment: relationshipIntentionAlignment(a, b),
+    drinkingFit: membershipFit(a.preferences.drinkingAccepted, b.visible.drinking, b.preferences.drinkingAccepted, a.visible.drinking),
+    heightFit: heightFit(a, b),
+    languageOverlap: languageOverlap(a, b),
+    educationAlignment: educationAlignment(a, b),
+  };
+
+  const breakdown: ScoreDimensionBreakdown[] = (Object.keys(WEIGHTS_V2) as DimensionName[]).map((dimension) => {
+    const weight = WEIGHTS_V2[dimension];
+    const result = results[dimension];
+    return {
+      dimension,
+      weight,
+      evaluable: result.evaluable,
+      fit: result.evaluable ? result.fit : null,
+      contribution: result.evaluable ? weight * result.fit : 0,
+    };
+  });
+
+  const evaluableWeight = breakdown.reduce((sum, d) => sum + (d.evaluable ? d.weight : 0), 0);
+  const raw = breakdown.reduce((sum, d) => sum + d.contribution, 0);
+
+  const fitQuality = evaluableWeight === 0 ? 0 : raw / evaluableWeight;
+  const coverage = evaluableWeight / TOTAL_WEIGHT_V2;
+  const confidence = Math.min(1, coverage / MIN_COVERAGE_FOR_FULL_CONFIDENCE);
+  const score = evaluableWeight === 0 ? 0 : Math.round(fitQuality * confidence * 100);
+
+  return { score, scoringVersion: SCORING_VERSION, coverage, confidence, fitQuality, breakdown };
 }

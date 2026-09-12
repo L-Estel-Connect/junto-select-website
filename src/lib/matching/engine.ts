@@ -5,6 +5,7 @@ import type { ProfileDocument } from "@/lib/introduction/types";
 import { resolvePersonId } from "./identity";
 import { passesHardFilters } from "./hardFilters";
 import { scorePair, SCORING_VERSION } from "./scoring";
+import type { ScoreResult } from "./scoring";
 import { isPairEligible, markPairPendingInTransaction } from "./pairHistory";
 import {
   DEFAULT_CYCLE_CONFIG,
@@ -147,7 +148,7 @@ async function writeProposalIfRoom(
   cycleId: string,
   recipient: EligibleProfile,
   candidate: EligibleProfile,
-  score: number,
+  result: ScoreResult,
 ): Promise<boolean> {
   const id = proposalId(cycleId, recipient.personId, candidate.personId);
   const proposalRef = adminDb.doc(`proposals/${id}`);
@@ -178,8 +179,11 @@ async function writeProposalIfRoom(
       candidatePersonId: candidate.personId,
       recipientUid: recipient.uid,
       candidateUid: candidate.uid,
-      score,
+      score: result.score,
       scoringVersion: SCORING_VERSION,
+      scoreCoverage: result.coverage,
+      scoreConfidence: result.confidence,
+      scoreBreakdown: result.breakdown,
       stage: "proposed",
       passType: null,
       createdAt: now,
@@ -213,9 +217,9 @@ async function processRecipient(
 
   // 2 & 3. Structured scoring, then the minimum-quality threshold.
   const qualified = passingHard
-    .map((candidate) => ({ candidate, score: scorePair(recipient.profile, candidate.profile) }))
-    .filter(({ score }) => score >= config.qualityThreshold)
-    .sort((a, b) => b.score - a.score)
+    .map((candidate) => ({ candidate, result: scorePair(recipient.profile, candidate.profile) }))
+    .filter(({ result }) => result.score >= config.qualityThreshold)
+    .sort((a, b) => b.result.score - a.result.score)
     // 4. Maximum 3 — quality over quota: fewer than 3 (even 0) is valid,
     // and this cap is never relaxed to "reach" 3.
     .slice(0, MAX_PROPOSALS_PER_MEMBER);
@@ -235,8 +239,8 @@ async function processRecipient(
   }
 
   let written = 0;
-  for (const { candidate, score } of qualified) {
-    if (await writeProposalIfRoom(cycleId, recipient, candidate, score)) written += 1;
+  for (const { candidate, result } of qualified) {
+    if (await writeProposalIfRoom(cycleId, recipient, candidate, result)) written += 1;
   }
 
   await memberRunRef.update({

@@ -453,30 +453,127 @@ this order, never reordered or overridden by anything downstream:
 
 1. **Hard requirements**, reciprocal — a pair is only considered if
    *both* people's `dealbreakers` accept the other (gender, age range,
-   relationship intention, smoking, children). Two of the product's
-   existing dealbreaker questions (`partnerHasYoungChildrenOk`,
-   `partnerWantsFutureChildren`) ask about information the *other*
-   person's profile doesn't actually collect (there's no "are your
-   children under 15" or "do you want children in the future" field on
-   `AboutMeVisible`) — they are **not enforced**, since enforcing them
-   would mean guessing at data nobody provided. Closing this needs a
-   schema addition, not a matching-engine change. Distance is
-   best-effort too: `"misma_ciudad"` is an exact normalized-city string
-   match (no geocoding exists); `"hasta_50km"`/`"sin_limite"` both pass
-   regardless of city today.
-2. **Structured, versioned scoring** (`scoring.ts`) — a deterministic
-   0–100 weighted sum over height/drinking/activity fit, same-city bonus,
-   language overlap, and education alignment. No opaque AI
-   decision-maker. `SCORING_VERSION` is stamped on every proposal so
-   weights can be recalibrated later from real Interested/Pass/mutual
-   outcomes without losing track of which version produced a historical
-   proposal.
+   relationship intention, smoking, children — including young-children
+   and future-children intent, both fully enforced since the schema
+   correction that added `childrenBirthYears`/`wantsFutureChildren`).
+   Every `accepts*` check in `hardFilters.ts` is explicitly written so
+   `null`/unknown data can never satisfy the requirement — see "Hard-filter
+   audit fixes" below for the two places this was found to be violated in
+   practice and fixed. Distance is best-effort: `"misma_ciudad"` is an
+   exact normalized-city string match (no geocoding exists); the UI no
+   longer offers `"hasta_50km"` as an option for exactly that reason (see
+   below) — `"sin_limite"` is the only other choice, and behaves as before.
+2. **Structured, versioned scoring** (`scoring.ts`) — see "Scoring V2"
+   below for the current formula. No opaque AI decision-maker.
+   `SCORING_VERSION` is stamped on every proposal so weights (and, as
+   happened once already, the formula itself) can be recalibrated later
+   from real Interested/Pass/mutual outcomes without losing track of which
+   version produced a historical proposal.
 3. **Minimum-quality threshold** (`CycleConfig.qualityThreshold`,
    default 55/100) — a candidate must clear this to be proposed at all.
 4. **Maximum 3 final proposals** (`MAX_PROPOSALS_PER_MEMBER` in
    `config.ts`, a plain constant, not part of the mutable config, so
    nothing can accidentally raise it) — quality over quota; 0, 1, 2, or 3
    are all valid outcomes and the threshold is never relaxed to reach 3.
+
+### Hard-filter audit fixes
+
+A senior-level audit of the schema against the engine (see project notes)
+found two real fail-open bugs, both in the same shape: `acceptsChildren`
+and `acceptsYoungChildren` each used to check `if (other.hasChildren !==
+true) return true` — which treats `null` (genuinely unknown) exactly like
+`false` (confirmed no children), silently letting unknown data satisfy a
+hard requirement. In practice this was unreachable for any real profile
+(`isAboutMeComplete` already requires `hasChildren` to be answered before
+anyone reaches the pool), but the functions themselves didn't enforce the
+"unknown ≠ compatible" principle on their own — they only produced correct
+behavior because something else prevented the bad input. Both now
+explicitly branch on `null` vs `false` vs `true`. `acceptsDistance` picked
+up the same defensive treatment for an empty/unknown city string. No
+other `accepts*` function needed a behavior change — the rest were already
+correctly fail-closed on `null`, just re-documented for consistency.
+
+### Scoring V2
+
+`scoring.ts`'s `SCORING_VERSION` is `2`. V1's design gave a full 15/20-point
+neutral credit to any dimension neither person had stated a preference
+for — since none of `preferences.heightMinCm/heightMaxCm/drinkingAccepted/
+activityLevelsPreferred` are required fields, a real user who never
+touches the optional "Preferencias" screen could reach a score just 5
+points under the 55 threshold from three neutral dimensions alone, and (a
+separate bug) `educationAlignment` treated `"prefiero_no_decirlo"` as a
+real, matchable education level, so two people who both declined to
+answer scored a full 15-point match. V2:
+
+- **Excludes non-evaluable dimensions from both the numerator and the
+  weight denominator**, per-direction where relevant (height/drinking/
+  activity: A's stated preference is only evaluable against B's
+  self-report, and vice versa — independently in each direction, never
+  assumed just because a preference exists on one side). An unstated
+  preference contributes neither positive nor negative credit; it's
+  simply excluded, not neutral-filled.
+- Adds a **coverage/confidence** safeguard on top of that "fit quality"
+  average, specifically so a pair with very little evaluable signal can't
+  be manufactured into a high score by one lucky dimension: `coverage` is
+  the fraction of total possible weight that was evaluable at all;
+  `confidence = min(1, coverage / 0.5)` scales the score down below 50%
+  coverage and leaves it untouched at or above it. `languages` and
+  `relationshipIntention` are the only two dimensions guaranteed evaluable
+  for every pair (both required fields, no optional preference layer
+  needed) — together they're under the 50% floor, so a profile that never
+  states any real soft preference is confidence-capped, not just averaged
+  down.
+- **Removes the same-city bonus entirely.** Madrid-only eligibility is
+  already an `engine.ts` pool gate; with a single free-text "Madrid" city
+  field, a same-city bonus mostly rewarded everyone equally without aiding
+  ranking.
+- **Cuts education's weight from 15 to 5** and excludes
+  `"prefiero_no_decirlo"` from being evaluable at all (the bug fix) —
+  kept deliberately simple (exact-category match only, no adjacency
+  logic) rather than built into a bigger signal, per explicit product
+  direction: it must never rank people by educational "status."
+- **Adds relationship-intention alignment** (weight 20) as a *soft*
+  ranking signal — only ever evaluated for pairs that already passed the
+  reciprocal `relationshipIntentionsAccepted` hard filter, and never able
+  to override it. A flat two-tier table: exact match (both `relacion_seria`,
+  or both `matrimonio_familia`, etc.) = 1.0, any other accepted-but-different
+  combination = 0.5. Both values are explicitly documented as initial
+  product assumptions, not validated from outcomes — easy to find and
+  change in `relationshipIntentionAlignment()`, and traceable via
+  `SCORING_VERSION` if they are.
+
+Weights when everything is evaluable (sum = 90, used as the coverage
+denominator): activity 20, relationship-intention 20, drinking 15,
+height 15, language overlap 15, education 5.
+
+**Internal observability** (never shown to a member): every proposal now
+also stores `scoreCoverage`, `scoreConfidence`, and `scoreBreakdown` (the
+full per-dimension `{weight, evaluable, fit, contribution}` list) —
+`ProposalDocument` in `types.ts`. This is what lets a future calibration
+pass see not just the final score but *why*, cross-referenced against the
+Interested/Pass/mutual outcome funnel `analytics.ts` already tracks. No
+Admin Dashboard reads any of this yet.
+
+### Distance option change
+
+The onboarding "Distancia máxima" question (`PreferencesSection.tsx`) no
+longer offers "Hasta 50 km" — it never had real distance data to enforce
+(no geocoding), so it silently behaved exactly like "Sin límite" while
+looking like a real, distinct constraint. The `"hasta_50km"` value stays
+in `DistancePreference` (types.ts) for when real distance data exists;
+it's just not presented as a functioning choice today. No district-level
+or geocoded distance logic was built — deliberately out of scope for V1.
+
+### Block pair, wired
+
+`blockPair()` (`pairHistory.ts`) — the permanent safety/do-not-match
+exclusion — existed since the engine was first built but had no callable
+path outside a manual Firestore write. `/api/admin/matching/block-pair`
+(admin-secret-protected, same pattern as the other matching routes) wires
+it up: `{ personIdA, personIdB, reason }`. There's still no "unblock"
+route — resolving a block is intentionally left as a manual/console
+action for now, consistent with how conservative this exclusion is meant
+to be.
 
 **Proposal ≠ introduction — the three-stage lifecycle**
 (`pairHistory.ts`, `analytics.ts`): the algorithm only ever selects a

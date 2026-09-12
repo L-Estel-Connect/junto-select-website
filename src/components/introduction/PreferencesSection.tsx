@@ -30,9 +30,13 @@ const GENDER_OPTIONS = [
   { value: "hombre", label: "Hombres" },
 ];
 
+// "hasta_50km" is deliberately not offered here — there's no distance
+// data (no geocoding) to actually enforce it, and it would behave exactly
+// like "sin_limite" while looking like a real, distinct constraint to the
+// person choosing it. The value still exists in DistancePreference for
+// when real distance data exists later.
 const DISTANCE_OPTIONS = [
   { value: "misma_ciudad", label: "En mi misma ciudad" },
-  { value: "hasta_50km", label: "Hasta 50 km" },
   { value: "sin_limite", label: "Sin límite" },
 ];
 
@@ -97,6 +101,11 @@ export default function PreferencesSection({ uid }: { uid: string }) {
     return <IntroductionLoading />;
   }
 
+  const ageRangeInvalid =
+    dealbreakers.ageMin !== null &&
+    dealbreakers.ageMax !== null &&
+    dealbreakers.ageMin > dealbreakers.ageMax;
+
   function updateDealbreakers(patch: Partial<Dealbreakers>) {
     if (!profile || !dealbreakers) return;
     const next = { ...dealbreakers, ...patch };
@@ -155,6 +164,11 @@ export default function PreferencesSection({ uid }: { uid: string }) {
               onChangeMax={(v) => updateDealbreakers({ ageMax: v })}
               unit="años"
             />
+            {ageRangeInvalid && (
+              <p className="mt-2 text-[13px] text-rose-dark">
+                El mínimo debe ser menor o igual que el máximo.
+              </p>
+            )}
           </FieldRow>
 
           <FieldRow question="Distancia máxima">

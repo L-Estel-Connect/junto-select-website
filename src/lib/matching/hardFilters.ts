@@ -31,10 +31,14 @@ function normalizedCity(city: string): string {
   return city.trim().toLowerCase();
 }
 
+// otherGender === null (unknown) -> false: an unstated gender can never
+// satisfy a gendersSought requirement.
 function acceptsGender(profile: ProfileDocument, otherGender: ProfileDocument["visible"]["gender"]): boolean {
   return otherGender !== null && profile.dealbreakers.gendersSought.includes(otherGender);
 }
 
+// otherAge === null (unknown, e.g. no birth date on record) -> false: an
+// unknown age can never satisfy an age-range requirement.
 function acceptsAge(profile: ProfileDocument, otherAge: number | null): boolean {
   if (otherAge === null) return false;
   const { ageMin, ageMax } = profile.dealbreakers;
@@ -48,10 +52,18 @@ function acceptsDistance(profile: ProfileDocument, other: ProfileDocument): bool
   // ciudad" is enforced as an exact normalized-city match; "hasta_50km"
   // and "sin_limite" both pass regardless of city until real distance
   // data exists. Documented limitation, not a silent approximation.
+  // "hasta_50km" is no longer offered as a UI option for exactly this
+  // reason (see PreferencesSection.tsx) — kept in the type for future use.
   if (profile.dealbreakers.maxDistance !== "misma_ciudad") return true;
+  // Two empty/unknown city strings would normalize-equal each other
+  // (both ""), which would wrongly pass a "misma ciudad" requirement —
+  // guard against that explicitly rather than relying on string equality.
+  if (!profile.visible.city.trim() || !other.visible.city.trim()) return false;
   return normalizedCity(profile.visible.city) === normalizedCity(other.visible.city);
 }
 
+// other's relationshipIntention === null (unknown) -> false: never
+// treated as an accepted intention.
 function acceptsIntention(profile: ProfileDocument, other: ProfileDocument): boolean {
   const intention = other.visible.relationshipIntention;
   return (
@@ -60,18 +72,34 @@ function acceptsIntention(profile: ProfileDocument, other: ProfileDocument): boo
   );
 }
 
+// other's smoking === null (unknown) -> false: never treated as an
+// accepted smoking level.
 function acceptsSmoking(profile: ProfileDocument, other: ProfileDocument): boolean {
   const smoking = other.visible.smoking;
   return smoking !== null && profile.dealbreakers.smokingAccepted.includes(smoking);
 }
 
+// Explicit three-way handling — this is the one fail-open the audit
+// found: the previous `if (other.hasChildren !== true) return true`
+// treated `null` (unknown) the same as `false` (confirmed no children),
+// silently letting unknown data satisfy a hard requirement. Now:
+// `null` (unknown) always fails closed; `false` (confirmed no children)
+// passes since the dealbreaker doesn't apply; `true` requires explicit
+// partnerHasChildrenOk === true, as before.
 function acceptsChildren(profile: ProfileDocument, other: ProfileDocument): boolean {
-  if (other.visible.hasChildren !== true) return true;
+  if (other.visible.hasChildren === null) return false;
+  if (other.visible.hasChildren === false) return true;
   return profile.dealbreakers.partnerHasChildrenOk === true;
 }
 
+// Same explicit three-way handling as acceptsChildren above — the
+// original `if (other.hasChildren !== true) return true` had the
+// identical fail-open bug (null silently treated as "no children, skip
+// this check") caught here during the hardening pass, not just in
+// acceptsChildren.
 function acceptsYoungChildren(profile: ProfileDocument, other: ProfileDocument): boolean {
-  if (other.visible.hasChildren !== true) return true; // dealbreaker doesn't apply
+  if (other.visible.hasChildren === null) return false;
+  if (other.visible.hasChildren === false) return true;
   const birthYears = other.visible.childrenBirthYears;
   if (!birthYears || birthYears.length === 0) return false; // unknown -> never treated as compatible
   const hasYoungChild = hasChildUnderAge(birthYears, YOUNG_CHILD_AGE_THRESHOLD);

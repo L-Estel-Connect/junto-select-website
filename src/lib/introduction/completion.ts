@@ -92,6 +92,11 @@ export function isPreferencesComplete(dealbreakers: Dealbreakers): boolean {
     dealbreakers.gendersSought.length > 0 &&
     dealbreakers.ageMin !== null &&
     dealbreakers.ageMax !== null &&
+    // Defense in depth behind the UI's own validation (PreferencesSection.tsx)
+    // — an impossible range (min > max) must never count as complete, since
+    // it would silently reject every candidate via acceptsAge rather than
+    // ever surfacing as the input error it actually is.
+    dealbreakers.ageMin <= dealbreakers.ageMax &&
     dealbreakers.maxDistance !== null &&
     dealbreakers.relationshipIntentionsAccepted.length > 0 &&
     dealbreakers.smokingAccepted.length > 0 &&
