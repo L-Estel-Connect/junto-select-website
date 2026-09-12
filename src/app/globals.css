@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+:root {
+  --color-paper: #fdfbfa;
+  --color-ink: #262220;
+  --color-ink-soft: #6b6360;
+  --color-hairline: #e7e1de;
+  --color-rose: #ad918e;
+  --color-rose-dark: #9b7f7a;
+  --color-rose-tint: #f3ecea;
+}
+
+@theme inline {
+  --color-paper: var(--color-paper);
+  --color-ink: var(--color-ink);
+  --color-ink-soft: var(--color-ink-soft);
+  --color-hairline: var(--color-hairline);
+  --color-rose: var(--color-rose);
+  --color-rose-dark: var(--color-rose-dark);
+  --color-rose-tint: var(--color-rose-tint);
+  --font-sans: var(--font-inter);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-hairline);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+  }
+
+  ::selection {
+    background: var(--color-rose-tint);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-rose-dark);
+    outline-offset: 3px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
