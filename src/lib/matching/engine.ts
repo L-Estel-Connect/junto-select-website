@@ -62,6 +62,18 @@ async function loadEligiblePool(): Promise<EligibleProfile[]> {
     ) {
       continue;
     }
+    // V1 product scope: Madrid only. `market` is a constant today (see
+    // AboutMeVisible.market) — checked explicitly anyway so this is the
+    // one line that needs to change once a second market exists, rather
+    // than a schema migration. Unknown availability is excluded, same as
+    // any other unknown self-report data — never assumed compatible.
+    if (
+      profile.visible.market !== "madrid" ||
+      profile.visible.marketAvailability == null ||
+      profile.visible.marketAvailability === "not_regular_in_market"
+    ) {
+      continue;
+    }
     const personId = resolvePersonId(uid, profile);
     if (!byPersonId.has(personId)) {
       byPersonId.set(personId, { uid, personId, profile });

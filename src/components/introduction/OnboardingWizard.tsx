@@ -70,12 +70,30 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
         childrenCount: profile.visible.childrenCount,
       };
     }
+    if (currentStep.type === "childrenAges") {
+      return {
+        childrenCount: profile.visible.childrenCount,
+        childrenBirthYears: profile.visible.childrenBirthYears,
+      };
+    }
     if (currentStep.id === "birthDate") {
       const raw = profile.private.birthDate;
       return raw ? raw.toDate().toISOString().slice(0, 10) : undefined;
     }
     return getByPath(profile, currentStep.path);
   }, [profile, currentStep]);
+
+  // The childrenAges step has no per-step branching in the wizard itself
+  // (it's a strictly linear array walk) — instead, when it's reached but
+  // doesn't apply (no children), this auto-advances past it with a null
+  // answer rather than asking a meaningless question.
+  useEffect(() => {
+    if (!profile || !currentStep || saving) return;
+    if (currentStep.type === "childrenAges" && profile.visible.hasChildren !== true) {
+      void handleAnswer(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, currentStep, saving]);
 
   if (!profile || isComplete) {
     return <IntroductionLoading />;
@@ -115,13 +133,25 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
               "visible.childrenCount": childrenValue.childrenCount,
             };
           })()
-        : currentStep.id === "birthDate"
-          ? {
-              [currentStep.path]: Timestamp.fromDate(
-                new Date(`${value as string}T00:00:00`),
-              ),
-            }
-          : { [currentStep.path]: value };
+        : currentStep.type === "childrenAges"
+          ? (() => {
+              // Ages are what the person entered (simplest for them); what
+              // gets stored is birth year, so this can never go stale — see
+              // ProfileDocument.visible.childrenBirthYears.
+              const ages = value as number[] | null;
+              if (!ages) return { "visible.childrenBirthYears": null };
+              const currentYear = new Date().getFullYear();
+              return {
+                "visible.childrenBirthYears": ages.map((age) => currentYear - age),
+              };
+            })()
+          : currentStep.id === "birthDate"
+            ? {
+                [currentStep.path]: Timestamp.fromDate(
+                  new Date(`${value as string}T00:00:00`),
+                ),
+              }
+            : { [currentStep.path]: value };
 
     try {
       await saveStepAnswer(uid, fields, nextIndex);

@@ -52,6 +52,8 @@ function StepInput({ step, value, saving, onAnswer }: Props) {
       return <ChipsInput step={step} value={value} saving={saving} onAnswer={onAnswer} />;
     case "children":
       return <ChildrenInput value={value} saving={saving} onAnswer={onAnswer} />;
+    case "childrenAges":
+      return <ChildrenAgesInput value={value} saving={saving} onAnswer={onAnswer} />;
     default:
       return null;
   }
@@ -307,6 +309,78 @@ function ChildrenInput({
         onClick={() =>
           onAnswer({ hasChildren, childrenCount: hasChildren ? count : null })
         }
+      />
+    </div>
+  );
+}
+
+/**
+ * Asks for each child's current age (simplest for the person to answer),
+ * but the value handed to `onAnswer` — and what actually gets persisted,
+ * via OnboardingWizard's field-mapping for this step — is birth YEAR, not
+ * the age itself, so it never goes stale. This component only ever
+ * renders when OnboardingWizard has already determined hasChildren is
+ * true (see its auto-skip effect); `value.childrenCount` drives how many
+ * age inputs to show.
+ */
+function ChildrenAgesInput({
+  value,
+  saving,
+  onAnswer,
+}: {
+  value: unknown;
+  saving: boolean;
+  onAnswer: (value: unknown) => void;
+}) {
+  const initial = value as
+    | { childrenCount: number | null; childrenBirthYears: number[] | null }
+    | undefined;
+  const count = initial?.childrenCount ?? 0;
+  const currentYear = new Date().getFullYear();
+  const initialAges = (initial?.childrenBirthYears ?? []).map(
+    (year) => currentYear - year,
+  );
+  const [ages, setAges] = useState<Array<number | null>>(
+    Array.from({ length: count }, (_, i) => initialAges[i] ?? null),
+  );
+
+  const allFilled =
+    ages.length === count &&
+    ages.every((a) => a !== null && a >= 0 && a <= 90);
+
+  function setAge(index: number, raw: string) {
+    if (raw.trim() === "") {
+      setAges((prev) => prev.map((a, i) => (i === index ? null : a)));
+      return;
+    }
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return;
+    setAges((prev) => prev.map((a, i) => (i === index ? parsed : a)));
+  }
+
+  return (
+    <div>
+      <div className="space-y-4">
+        {Array.from({ length: count }).map((_, i) => (
+          <div key={i}>
+            <p className="mb-2 text-[14px] text-ink-soft">Hijo/a {i + 1}</p>
+            <input
+              type="number"
+              inputMode="numeric"
+              autoFocus={i === 0}
+              min={0}
+              max={90}
+              value={ages[i] ?? ""}
+              onChange={(e) => setAge(i, e.target.value)}
+              className={inputClasses}
+            />
+          </div>
+        ))}
+      </div>
+      <ContinueButton
+        disabled={!allFilled}
+        saving={saving}
+        onClick={() => onAnswer(ages as number[])}
       />
     </div>
   );

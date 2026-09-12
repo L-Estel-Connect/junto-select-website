@@ -33,6 +33,29 @@ export type DistancePreference = "misma_ciudad" | "hasta_50km" | "sin_limite";
 export type FutureChildrenPreference = "si" | "no" | "indiferente";
 
 /**
+ * Self-reported intent, distinct from FutureChildrenPreference above (a
+ * dealbreaker about a *partner's* answer) — "indiferente" doesn't make
+ * sense as a description of one's own desire, so this is a separate type
+ * with "no_lo_se" instead.
+ */
+export type FutureChildrenIntention = "si" | "no" | "no_lo_se";
+
+/**
+ * V1 scope is Madrid-only, but this is deliberately not a Madrid-specific
+ * field name: `market` names WHICH market a profile is evaluated against
+ * ("madrid" is the only value that exists today), and `MarketAvailability`
+ * is generic across any market. Adding a second market later means a new
+ * value for `market`, not a new field or a schema migration.
+ */
+export type Market = "madrid";
+
+export type MarketAvailability =
+  | "lives_in_market"
+  | "lives_near_market"
+  | "frequent_visitor"
+  | "not_regular_in_market";
+
+/**
  * "Lo que buscas" — matching criteria, split the same way the product
  * distinguishes them: `dealbreakers` are hard filters (a mismatch means
  * the matching engine should never suggest the pair), `preferences` are
@@ -155,10 +178,23 @@ export interface AboutMeVisible {
   languages: string[];
   hasChildren: boolean | null;
   childrenCount: number | null;
+  // One entry per child, birth YEAR only — never a full birth date, and
+  // never a static "age" that would go stale. Whether any child is under
+  // a given age threshold (e.g. 15, for the partnerHasYoungChildrenOk
+  // dealbreaker) is always DERIVED from this at the moment it's needed
+  // (see src/lib/introduction/age.ts) — there is no separate stored
+  // "under 15" flag to ever fall out of sync with this data. Only
+  // meaningful when hasChildren === true; null means not yet answered.
+  childrenBirthYears: number[] | null;
+  wantsFutureChildren: FutureChildrenIntention | null;
   relationshipIntention: RelationshipIntention | null;
   smoking: FrequencyLevel | null;
   drinking: FrequencyLevel | null;
   activityLevel: ActivityLevel | null;
+  // Always "madrid" for V1 — a constant, not something anyone answers.
+  // See Market's doc comment for why this exists as a field at all.
+  market: Market;
+  marketAvailability: MarketAvailability | null;
 }
 
 export interface AboutMePrivate {
@@ -245,10 +281,14 @@ export const emptyAboutMeVisible: AboutMeVisible = {
   languages: [],
   hasChildren: null,
   childrenCount: null,
+  childrenBirthYears: null,
+  wantsFutureChildren: null,
   relationshipIntention: null,
   smoking: null,
   drinking: null,
   activityLevel: null,
+  market: "madrid",
+  marketAvailability: null,
 };
 
 export const emptyAboutMePrivate: AboutMePrivate = {

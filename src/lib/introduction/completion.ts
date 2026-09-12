@@ -1,7 +1,84 @@
-import type { Dealbreakers, ProfileDocument, ProfileStatus } from "./types";
+import type {
+  AboutMePrivate,
+  AboutMeVisible,
+  Dealbreakers,
+  ProfileDocument,
+  ProfileStatus,
+} from "./types";
 
 export function isPhotosComplete(photos: string[]): boolean {
   return photos.length >= 1;
+}
+
+type AboutMeCompletionInput = {
+  visible: Pick<
+    AboutMeVisible,
+    | "firstName"
+    | "gender"
+    | "city"
+    | "profession"
+    | "educationLevel"
+    | "languages"
+    | "hasChildren"
+    | "childrenCount"
+    | "childrenBirthYears"
+    | "wantsFutureChildren"
+    | "relationshipIntention"
+    | "smoking"
+    | "drinking"
+    | "activityLevel"
+    | "marketAvailability"
+  >;
+  private: Pick<AboutMePrivate, "birthDate" | "incomeRange">;
+};
+
+/**
+ * Whether "About me" is genuinely complete, checked against the actual
+ * field values — never the historical `meta.aboutMeComplete` flag. That
+ * flag is set once, the first time someone finishes the onboarding
+ * wizard, and is never revisited; if new required fields are added later
+ * (as happened with childrenBirthYears/wantsFutureChildren/
+ * marketAvailability), a profile that finished onboarding *before* they
+ * existed would otherwise keep counting as complete forever, with the
+ * matching engine only ever seeing `null` for data it needs. This is the
+ * single source of truth `computeProfileStatus` and the onboarding-flow
+ * routing below both use instead.
+ *
+ * `heightCm` is intentionally not checked — optional by design (skippable
+ * in onboarding). `market` is not checked — it's a V1 constant, not
+ * something anyone answers (see AboutMeVisible.market).
+ */
+export function isAboutMeComplete(profile: AboutMeCompletionInput): boolean {
+  const { visible, private: priv } = profile;
+
+  if (!visible.firstName.trim()) return false;
+  if (visible.gender === null) return false;
+  if (priv.birthDate === null) return false;
+  if (!visible.city.trim()) return false;
+  if (!visible.profession.trim()) return false;
+  if (visible.educationLevel === null) return false;
+  if (priv.incomeRange === null) return false;
+  if (visible.languages.length === 0) return false;
+
+  if (visible.hasChildren === null) return false;
+  if (visible.hasChildren === true) {
+    if (visible.childrenCount === null) return false;
+    if (
+      !visible.childrenBirthYears ||
+      visible.childrenBirthYears.length !== visible.childrenCount
+    ) {
+      return false;
+    }
+  }
+  if (visible.wantsFutureChildren === null) return false;
+
+  if (visible.relationshipIntention === null) return false;
+  if (visible.smoking === null) return false;
+  if (visible.drinking === null) return false;
+  if (visible.activityLevel === null) return false;
+  if (visible.marketAvailability === null) return false;
+
+  return true;
 }
 
 /**
@@ -44,17 +121,18 @@ const SECTIONS_REQUIRED_FOR_MATCHING = [
   "preferences",
 ] as const;
 
-export function computeProfileStatus(profile: {
-  meta: Pick<ProfileDocument["meta"], "aboutMeComplete">;
-  photos: string[];
-  dealbreakers: Dealbreakers;
-  presentation: Pick<ProfileDocument["presentation"], "status">;
-}): ProfileStatus {
+export function computeProfileStatus(
+  profile: AboutMeCompletionInput & {
+    photos: string[];
+    dealbreakers: Dealbreakers;
+    presentation: Pick<ProfileDocument["presentation"], "status">;
+  },
+): ProfileStatus {
   const sectionComplete: Record<
     "aboutMe" | "photos" | "preferences" | "presentation",
     boolean
   > = {
-    aboutMe: profile.meta.aboutMeComplete,
+    aboutMe: isAboutMeComplete(profile),
     photos: isPhotosComplete(profile.photos),
     preferences: isPreferencesComplete(profile.dealbreakers),
     presentation: isPresentationComplete(profile.presentation.status),
@@ -87,8 +165,8 @@ export const ONBOARDING_STAGE_ORDER = [
 
 export type OnboardingRoute = (typeof ONBOARDING_STAGE_ORDER)[number];
 
-type OnboardingFlowProfile = {
-  meta: Pick<ProfileDocument["meta"], "aboutMeComplete" | "onboardingFinalized">;
+type OnboardingFlowProfile = AboutMeCompletionInput & {
+  meta: Pick<ProfileDocument["meta"], "onboardingFinalized">;
   dealbreakers: Dealbreakers;
   photos: string[];
   presentation: Pick<ProfileDocument["presentation"], "status">;
@@ -102,7 +180,7 @@ type OnboardingFlowProfile = {
 export function getNextOnboardingRoute(
   profile: OnboardingFlowProfile,
 ): OnboardingRoute {
-  if (!profile.meta.aboutMeComplete) return "/introduction/onboarding";
+  if (!isAboutMeComplete(profile)) return "/introduction/onboarding";
   if (!isPreferencesComplete(profile.dealbreakers)) return "/member/profile/preferences";
   if (!isPhotosComplete(profile.photos)) return "/member/profile/photos";
   if (!isPresentationComplete(profile.presentation.status)) return "/member/profile/presentation";

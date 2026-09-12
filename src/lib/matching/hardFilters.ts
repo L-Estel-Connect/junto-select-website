@@ -1,5 +1,8 @@
-import { getAge } from "@/lib/introduction/age";
+import { getAge, hasChildUnderAge } from "@/lib/introduction/age";
 import type { ProfileDocument } from "@/lib/introduction/types";
+
+/** A partner's children counting as "young" for the partnerHasYoungChildrenOk dealbreaker. */
+const YOUNG_CHILD_AGE_THRESHOLD = 15;
 
 /**
  * Reciprocal hard filters — a pair is only ever eligible if BOTH people's
@@ -7,14 +10,15 @@ import type { ProfileDocument } from "@/lib/introduction/types";
  * rejection" means: A wanting to meet B is not enough if B's own
  * dealbreakers would reject A.
  *
- * Two of the product's existing dealbreaker questions
- * (`partnerHasYoungChildrenOk`, `partnerWantsFutureChildren`) ask about
- * information the *other* person's profile does not actually collect
- * (there is no "are your children under 15" or "do you want children in
- * the future" field on AboutMeVisible) — enforcing them would mean
- * guessing at data that was never provided. They are intentionally NOT
- * enforced here; see README for this known gap and what schema addition
- * would close it.
+ * When a dealbreaker is engaged (the recipient actually stated a
+ * requirement) but the OTHER person's relevant self-report is unknown
+ * (null — including "no lo sé" for future-children intent, a genuine but
+ * inconclusive answer), the filter FAILS rather than passing. Unknown is
+ * never treated as compatible — see README "Unknown handling". New
+ * profiles are required to answer the fields this depends on
+ * (`childrenBirthYears` when they have children, `wantsFutureChildren`),
+ * so in practice this null case should only arise for a profile that
+ * completed onboarding before these fields existed.
  */
 
 function ageOf(profile: ProfileDocument): number | null {
@@ -66,6 +70,26 @@ function acceptsChildren(profile: ProfileDocument, other: ProfileDocument): bool
   return profile.dealbreakers.partnerHasChildrenOk === true;
 }
 
+function acceptsYoungChildren(profile: ProfileDocument, other: ProfileDocument): boolean {
+  if (other.visible.hasChildren !== true) return true; // dealbreaker doesn't apply
+  const birthYears = other.visible.childrenBirthYears;
+  if (!birthYears || birthYears.length === 0) return false; // unknown -> never treated as compatible
+  const hasYoungChild = hasChildUnderAge(birthYears, YOUNG_CHILD_AGE_THRESHOLD);
+  if (!hasYoungChild) return true; // no young children, so this dealbreaker doesn't bind
+  return profile.dealbreakers.partnerHasYoungChildrenOk === true;
+}
+
+function acceptsFutureChildrenIntention(profile: ProfileDocument, other: ProfileDocument): boolean {
+  const pref = profile.dealbreakers.partnerWantsFutureChildren;
+  // "indiferente", or the recipient never stated a preference at all —
+  // either way there's nothing to check against the other person's data.
+  if (pref == null || pref === "indiferente") return true;
+  const intention = other.visible.wantsFutureChildren;
+  if (intention == null) return false; // unknown -> never treated as compatible
+  if (intention === "no_lo_se") return false; // an explicit "I don't know" never satisfies a specific si/no requirement
+  return intention === pref;
+}
+
 /** True only if BOTH profiles' dealbreakers would accept the other. */
 export function passesHardFilters(a: ProfileDocument, b: ProfileDocument): boolean {
   const ageA = ageOf(a);
@@ -77,7 +101,9 @@ export function passesHardFilters(a: ProfileDocument, b: ProfileDocument): boole
     acceptsDistance(a, b) &&
     acceptsIntention(a, b) &&
     acceptsSmoking(a, b) &&
-    acceptsChildren(a, b);
+    acceptsChildren(a, b) &&
+    acceptsYoungChildren(a, b) &&
+    acceptsFutureChildrenIntention(a, b);
 
   const bAcceptsA =
     acceptsGender(b, a.visible.gender) &&
@@ -85,7 +111,9 @@ export function passesHardFilters(a: ProfileDocument, b: ProfileDocument): boole
     acceptsDistance(b, a) &&
     acceptsIntention(b, a) &&
     acceptsSmoking(b, a) &&
-    acceptsChildren(b, a);
+    acceptsChildren(b, a) &&
+    acceptsYoungChildren(b, a) &&
+    acceptsFutureChildrenIntention(b, a);
 
   return aAcceptsB && bAcceptsA;
 }

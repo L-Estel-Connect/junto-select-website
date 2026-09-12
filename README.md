@@ -344,6 +344,101 @@ rollout past dry-run/allowlist testing. Not fixed in this pass — flagging
 it now that it has a real consumer, rather than leaving it only as a
 "someday" note.
 
+**"About me complete" is computed from actual field values, never a
+stored flag.** `meta.aboutMeComplete` is still written once, by
+`markAboutMeComplete()`, the first time someone finishes the onboarding
+wizard — but nothing downstream trusts it anymore. `computeProfileStatus`
+and the onboarding-flow routing (`getNextOnboardingRoute`,
+`getPrerequisiteRedirect`, `requireFinalized`) all call
+`isAboutMeComplete()` instead, which checks every required field on
+`visible`/`private` directly. This matters because required fields get
+added to About Me over time (see "Children / future children" below) —
+without this, a profile that finished onboarding *before* a new required
+field existed would keep counting as complete forever, with the matching
+engine only ever seeing `null` for data it actually needs. A profile
+missing a newer required field is routed back into
+`/introduction/onboarding`, which (being a strict linear wizard with no
+step-jumping) resumes at its stored `onboardingStepIndex` — for anyone
+who already finished the old, shorter list of steps, this lands exactly
+on the first newly-added one, so no explicit migration or "edit About Me"
+page was needed to make this correction land. `meta.aboutMeComplete`
+itself is kept only as a historical/informational flag now.
+
+### Children / future children
+
+Reciprocal hard filters for `partnerHasYoungChildrenOk` and
+`partnerWantsFutureChildren` (the dealbreaker fields already existed,
+already required, already rendered in `PreferencesSection.tsx`) were
+previously **not enforced** — there was no self-report field on the
+*other* person's profile to check them against. That gap is closed:
+
+- `AboutMeVisible.childrenBirthYears: number[] | null` — one entry per
+  child, birth **year only**, never a full birth date and never a stored
+  static "age" that would go stale. The onboarding step
+  (`aboutMeFields.ts`'s `childrenAges` step, rendered by
+  `ChildrenAgesInput` in `StepQuestion.tsx`) still *asks* for each
+  child's current age — simplest for the person answering — and converts
+  it to a birth year at save time.
+- Whether any child counts as "young" (under 15, for
+  `partnerHasYoungChildrenOk`) is never persisted — it's derived on
+  demand from `childrenBirthYears`, in `src/lib/introduction/age.ts`
+  (`hasChildUnderAge`), every time the matching engine needs it. There is
+  no stored `hasChildUnder15` field to ever drift out of sync with the
+  birth years it should be derived from.
+- **Birth-year boundary ambiguity**: subtracting a birth *year* alone
+  from the current year is ambiguous by exactly ±1 year, depending on
+  whether the birthday has happened yet. `isPossiblyUnderAge()` always
+  resolves that ambiguity toward "could still be under the threshold" —
+  e.g. birth year 2011 in 2026 (`2026-2011=15`) is treated as possibly
+  still 14, never confidently "definitely 15+". This is the same "never
+  treat ambiguous data as satisfying a hard requirement" rule applied to
+  date math instead of missing data.
+- `AboutMeVisible.wantsFutureChildren: "si" | "no" | "no_lo_se" | null` —
+  a new, separate type from the existing partner-preference
+  `FutureChildrenPreference` (which has `"indiferente"` instead — that
+  doesn't make sense as a description of one's own desire).
+- **Unknown data is never treated as compatible.** If a dealbreaker is
+  actually engaged (the recipient stated a real requirement, not
+  "indiferente"/unset) and the other person's relevant self-report field
+  is `null` — or, for future-children, is the honest-but-inconclusive
+  `"no_lo_se"` — the hard filter **fails** (the pair is excluded), never
+  passes. Both new self-report fields are required for `isAboutMeComplete()`
+  (conditionally for `childrenBirthYears`, only when `hasChildren` is
+  true), so in practice this null case should only affect profiles that
+  completed onboarding before these fields existed.
+
+### Madrid-only scope (V1)
+
+Junto Select Introduction is Madrid-only for V1 — this is a blanket
+matching-**pool** restriction, not a per-person reciprocal preference, so
+it applies identically to everyone regardless of anyone's own
+dealbreakers/preferences:
+
+- `AboutMeVisible.market: "madrid"` — a single-value union type today,
+  deliberately not a Madrid-specific field name. `market` names *which*
+  market a profile is evaluated against; adding a second market later is
+  a new value for this type plus a real onboarding question for it, not
+  a new field or a schema migration. For V1 it's a hardcoded default in
+  `emptyAboutMeVisible` — nobody is actually asked to "select a market",
+  since there's only one.
+- `AboutMeVisible.marketAvailability: "lives_in_market" |
+  "lives_near_market" | "frequent_visitor" | "not_regular_in_market" |
+  null` — asked directly, worded as "¿Cuál es tu relación con Madrid?" in
+  the onboarding wizard (`aboutMeFields.ts`'s `marketAvailability` step).
+  No Spain-wide city selector, no geocoding, no distance logic — this is
+  a separate mechanism entirely from the existing `visible.city` free
+  text field and the `dealbreakers.maxDistance`/`acceptsDistance`
+  same-city preference check, both of which are untouched.
+- `src/lib/matching/engine.ts`'s `loadEligiblePool()` excludes anyone
+  with `market !== "madrid"`, `marketAvailability === null`, or
+  `marketAvailability === "not_regular_in_market"` from the pool
+  entirely — as both a candidate and a recipient. Unknown availability is
+  excluded, not assumed compatible, same principle as above.
+- Event/membership-perks benefits are Madrid-only as a business fact —
+  there's no events/perks feature in the codebase yet to attach that
+  constraint to (Mi plan is still a placeholder); noting it here for
+  whenever that gets built.
+
 ## Monthly matching engine (V1)
 
 `src/lib/matching/` — the deterministic, reciprocal matching engine and
