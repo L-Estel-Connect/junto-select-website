@@ -56,7 +56,7 @@ export async function generatePresentationText(
 ): Promise<string> {
   const client = new Anthropic();
   const response = await client.messages.create({
-    model: "claude-opus-5",
+    model: "claude-sonnet-5",
     max_tokens: 600,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: buildUserMessage(facts) }],
