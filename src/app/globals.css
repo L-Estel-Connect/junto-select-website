@@ -19,6 +19,7 @@
   --color-rose-dark: var(--color-rose-dark);
   --color-rose-tint: var(--color-rose-tint);
   --font-sans: var(--font-inter);
+  --font-serif: var(--font-fraunces);
 }
 
 @layer base {

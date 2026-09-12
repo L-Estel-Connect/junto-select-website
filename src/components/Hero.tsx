@@ -1,7 +1,8 @@
+import Image from "next/image";
 import Section from "./Section";
-import Photo from "./Photo";
 import Wordmark from "./Wordmark";
 import { eyebrowClasses, primaryButtonClasses } from "@/lib/styles";
+import heroPhoto from "../../public/images/hero.png";
 
 export default function Hero() {
   return (
@@ -18,11 +19,11 @@ export default function Hero() {
 
         <Wordmark className="text-2xl text-ink sm:text-3xl" />
 
-        <h1 className="max-w-[24ch] text-[28px] font-light leading-snug text-ink sm:text-3xl lg:text-[34px]">
+        <h1 className="max-w-[24ch] font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-4xl lg:text-[40px]">
           <span className="block">
             Meet someone you wouldn&rsquo;t meet anywhere else.
           </span>
-          <span className="mt-3 block text-lg font-light italic text-ink-soft sm:text-xl">
+          <span className="mt-3 block text-xl italic font-light text-ink-soft sm:text-2xl">
             Conoce a alguien que quizá nunca conocerías de otra manera.
           </span>
         </h1>
@@ -52,11 +53,16 @@ export default function Hero() {
         </a>
       </div>
 
-      <Photo
-        ratio="aspect-[4/5]"
-        label="Reunión elegante en una azotea de Madrid al atardecer"
-        className="w-full lg:max-h-[640px]"
-      />
+      <div className="relative aspect-[4/5] w-full overflow-hidden lg:max-h-[640px]">
+        <Image
+          src={heroPhoto}
+          alt="Grupo elegante conversando en una azotea de Madrid al atardecer"
+          fill
+          priority
+          sizes="(min-width: 1024px) 45vw, 100vw"
+          className="object-cover"
+        />
+      </div>
     </Section>
   );
 }

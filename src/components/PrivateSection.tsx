@@ -1,5 +1,6 @@
+import Image from "next/image";
 import Section from "./Section";
-import Photo from "./Photo";
+import privateCuratedPhoto from "../../public/images/private-curated.png";
 
 export default function PrivateSection() {
   return (
@@ -8,10 +9,10 @@ export default function PrivateSection() {
       className="grid grid-cols-1 items-center gap-10 py-16 sm:py-20 lg:grid-cols-[5fr_5fr] lg:gap-16"
     >
       <div>
-        <h2 className="text-2xl font-light text-ink sm:text-3xl">
+        <h2 className="font-serif text-3xl font-normal text-ink sm:text-4xl">
           Private. Curated. Personal.
         </h2>
-        <p className="mt-1.5 text-lg font-light italic text-ink-soft">
+        <p className="mt-1.5 text-lg italic font-light text-ink-soft">
           Privado. Seleccionado. Personal.
         </p>
 
@@ -31,11 +32,15 @@ export default function PrivateSection() {
         </div>
       </div>
 
-      <Photo
-        ratio="aspect-[4/5] sm:aspect-[5/4] lg:aspect-[4/5]"
-        label="Cena privada e íntima en Madrid por la noche"
-        className="w-full lg:max-h-[520px]"
-      />
+      <div className="relative aspect-[4/5] w-full overflow-hidden lg:max-h-[520px]">
+        <Image
+          src={privateCuratedPhoto}
+          alt="Momento íntimo en una cena privada en Madrid por la noche"
+          fill
+          sizes="(min-width: 1024px) 40vw, 100vw"
+          className="object-cover"
+        />
+      </div>
     </Section>
   );
 }

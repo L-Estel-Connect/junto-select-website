@@ -1,6 +1,7 @@
+import Image from "next/image";
 import Section from "./Section";
-import Photo from "./Photo";
 import { eyebrowClasses } from "@/lib/styles";
+import whoYouMeetPhoto from "../../public/images/who-you-meet.png";
 
 const attributes = [
   {
@@ -35,15 +36,19 @@ export default function WhoYouMeet() {
       size="lg"
       className="grid grid-cols-1 items-center gap-10 py-16 sm:py-20 lg:grid-cols-[5fr_6fr] lg:gap-16"
     >
-      <Photo
-        ratio="aspect-[4/5]"
-        label="Cóctel íntimo y sofisticado en un salón de Madrid"
-        className="w-full lg:max-h-[600px]"
-      />
+      <div className="relative aspect-[4/5] w-full overflow-hidden lg:max-h-[600px]">
+        <Image
+          src={whoYouMeetPhoto}
+          alt="Cóctel íntimo y sofisticado en un salón de Madrid"
+          fill
+          sizes="(min-width: 1024px) 40vw, 100vw"
+          className="object-cover"
+        />
+      </div>
 
       <div>
         <p className={eyebrowClasses}>Who you&rsquo;ll meet</p>
-        <p className="mt-2 text-2xl font-light text-ink sm:text-3xl">
+        <p className="mt-2 font-serif text-3xl font-normal text-ink sm:text-4xl">
           Una lista de invitados diferente
         </p>
         <p className="mt-5 max-w-[52ch] text-[15px] leading-relaxed text-ink-soft">
@@ -52,7 +57,7 @@ export default function WhoYouMeet() {
           quien merezca la pena compartirla.
         </p>
 
-        <ul className="mt-8 space-y-4 border-t border-hairline pt-6">
+        <ul className="mt-9 space-y-6 border-t border-hairline pt-7">
           {attributes.map((item) => (
             <li key={item.word} className="text-[15px] leading-relaxed">
               <span className="font-medium text-ink">{item.word}</span>{" "}

@@ -28,7 +28,7 @@ src/
     api/invitation/route.ts server-side route that calls Brevo
   components/               one component per section, plus shared bits
     Hero.tsx, WhoYouMeet.tsx, PrivateSection.tsx, InvitationSection.tsx,
-    Footer.tsx, Photo.tsx, Wordmark.tsx, Section.tsx
+    Footer.tsx, Wordmark.tsx, Section.tsx
     InvitationForm.tsx      the native application form (client component)
   lib/
     brevo.ts                server-only Brevo API call
@@ -39,14 +39,9 @@ ASSETS.md                   what photography/logo is still needed, and where
 
 ## Assets
 
-**No photography or logo file is in this repository yet.** Neither the chat
-attachments nor AI-generated photography could be produced in this
-environment (no accessible attachment files, no image-generation tool) — see
-`ASSETS.md` for the three photography slots (hero, Who You'll Meet, Private/
-Curated/Personal), the creative brief for each, and the exact file paths to
-drop real files into. Every photography slot currently renders as an
-abstract warm-toned panel (`src/components/Photo.tsx`) rather than a fake or
-stock photo of people.
+Real photography is in place for all three slots (`public/images/hero.png`,
+`who-you-meet.png`, `private-curated.png`), rendered via `next/image`. See
+`ASSETS.md` — the logo mark itself is still a styled-text stand-in.
 
 ## Brevo configuration required
 
