@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase/client";
 import { getOrCreateProfile } from "@/lib/introduction/profile";
 import {
   approvePresentation,
   savePresentationPrompts,
 } from "@/lib/introduction/presentation";
+import { getNextOnboardingRoute, getPrerequisiteRedirect } from "@/lib/introduction/completion";
 import type { PresentationPrompts, ProfileDocument } from "@/lib/introduction/types";
 import { primaryButtonClasses } from "@/lib/styles";
 import { IntroductionLoading } from "./RequireIntroductionAuth";
@@ -36,6 +38,7 @@ const PROMPT_QUESTIONS: { id: keyof PresentationPrompts; question: string }[] = 
 const MAX_PROMPT_LENGTH = 300;
 
 export default function PresentationSection({ uid }: { uid: string }) {
+  const router = useRouter();
   const [profile, setProfile] = useState<ProfileDocument | null>(null);
   const [prompts, setPrompts] = useState<PresentationPrompts | null>(null);
   const [reviewText, setReviewText] = useState("");
@@ -56,7 +59,17 @@ export default function PresentationSection({ uid }: { uid: string }) {
     };
   }, [uid]);
 
+  useEffect(() => {
+    if (!profile) return;
+    const redirect = getPrerequisiteRedirect(profile, "/introduction/presentation");
+    if (redirect) router.replace(redirect);
+  }, [profile, router]);
+
   if (!profile || !prompts) {
+    return <IntroductionLoading />;
+  }
+
+  if (getPrerequisiteRedirect(profile, "/introduction/presentation")) {
     return <IntroductionLoading />;
   }
 
@@ -212,6 +225,16 @@ export default function PresentationSection({ uid }: { uid: string }) {
         <p role="alert" className="mt-4 text-sm text-[#8a3b3b]">
           {error}
         </p>
+      )}
+
+      {isApproved && (
+        <button
+          type="button"
+          onClick={() => router.push(getNextOnboardingRoute(profile))}
+          className={`${primaryButtonClasses} mt-10 w-full`}
+        >
+          Continuar
+        </button>
       )}
     </div>
   );

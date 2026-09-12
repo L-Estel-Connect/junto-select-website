@@ -47,6 +47,7 @@ function withDefaults(data: Partial<ProfileDocument>): ProfileDocument {
       preferencesComplete: false,
       presentationComplete: false,
       profileStatus: "draft",
+      onboardingFinalized: false,
       createdAt: null,
       updatedAt: null,
       ...data.meta,
@@ -72,6 +73,7 @@ export async function getOrCreateProfile(
       preferencesComplete: false,
       presentationComplete: false,
       profileStatus: "draft",
+      onboardingFinalized: false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     },
@@ -96,6 +98,18 @@ export async function saveStepAnswer(
 export async function markAboutMeComplete(uid: string) {
   await updateDoc(profileRef(uid), {
     "meta.aboutMeComplete": true,
+    "meta.updatedAt": serverTimestamp(),
+  });
+}
+
+/**
+ * The one and only place `meta.onboardingFinalized` is ever set to true —
+ * called exclusively from the Review screen's "Guardar y finalizar"
+ * action. Never inferred automatically from section completeness.
+ */
+export async function finalizeOnboarding(uid: string): Promise<void> {
+  await updateDoc(profileRef(uid), {
+    "meta.onboardingFinalized": true,
     "meta.updatedAt": serverTimestamp(),
   });
 }

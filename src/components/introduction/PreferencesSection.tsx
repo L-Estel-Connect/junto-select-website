@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   BooleanField,
   FieldRow,
@@ -11,11 +12,17 @@ import {
 } from "./PreferenceFields";
 import { getOrCreateProfile } from "@/lib/introduction/profile";
 import { saveDealbreakers, savePreferences } from "@/lib/introduction/preferences";
+import {
+  getNextOnboardingRoute,
+  getPrerequisiteRedirect,
+  isPreferencesComplete,
+} from "@/lib/introduction/completion";
 import type {
   Dealbreakers,
   Preferences,
   ProfileDocument,
 } from "@/lib/introduction/types";
+import { primaryButtonClasses } from "@/lib/styles";
 import { IntroductionLoading } from "./RequireIntroductionAuth";
 
 const GENDER_OPTIONS = [
@@ -58,6 +65,7 @@ const linkClasses =
   "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
 
 export default function PreferencesSection({ uid }: { uid: string }) {
+  const router = useRouter();
   const [profile, setProfile] = useState<ProfileDocument | null>(null);
   const [dealbreakers, setDealbreakers] = useState<Dealbreakers | null>(null);
   const [preferences, setPreferences] = useState<Preferences | null>(null);
@@ -75,7 +83,17 @@ export default function PreferencesSection({ uid }: { uid: string }) {
     };
   }, [uid]);
 
+  useEffect(() => {
+    if (!profile) return;
+    const redirect = getPrerequisiteRedirect(profile, "/introduction/preferences");
+    if (redirect) router.replace(redirect);
+  }, [profile, router]);
+
   if (!profile || !dealbreakers || !preferences) {
+    return <IntroductionLoading />;
+  }
+
+  if (getPrerequisiteRedirect(profile, "/introduction/preferences")) {
     return <IntroductionLoading />;
   }
 
@@ -262,6 +280,15 @@ export default function PreferencesSection({ uid }: { uid: string }) {
           </FieldRow>
         </div>
       </div>
+
+      <button
+        type="button"
+        disabled={!isPreferencesComplete(dealbreakers)}
+        onClick={() => router.push(getNextOnboardingRoute({ ...profile, dealbreakers }))}
+        className={`${primaryButtonClasses} mt-12 w-full`}
+      >
+        Continuar
+      </button>
     </div>
   );
 }

@@ -30,9 +30,11 @@ src/
       page.tsx               public sign-in landing (Google / email link)
       onboarding/page.tsx    protected "About me" onboarding wizard
       home/page.tsx          Profile Home — status of every section, next step
-      photos/page.tsx        protected "Fotos" section
       preferences/page.tsx   protected "Lo que buscas" section
+      photos/page.tsx        protected "Fotos" section
       presentation/page.tsx  protected "Tu presentación" section
+      review/page.tsx        "Así se verá tu perfil" — review + finalize,
+                             and later "Ver mi perfil"
     api/introduction/
       generate-presentation/route.ts  server route, calls the Anthropic API
   components/               one component per section, plus shared bits
@@ -42,9 +44,10 @@ src/
     introduction/            AuthButtons, ConfirmEmailForLink, IneligibleAge,
                              RequireIntroductionAuth (shared auth guard),
                              OnboardingWizard, StepQuestion (Step 1),
-                             ProfileHome, PhotosSection, PrivatePhotoThumbnail,
-                             PreferencesSection, PreferenceFields,
-                             PresentationSection
+                             ProfileHome, PreferencesSection, PreferenceFields,
+                             PhotosSection, PrivatePhotoThumbnail,
+                             PresentationSection, ReviewSection, ProfileCard
+                             (shared by Review and "Ver mi perfil")
   lib/
     brevo.ts                server-only Brevo API call
     types.ts, validation.ts shared between the form and the API route
@@ -104,18 +107,65 @@ browser.
 
 ## Junto Select Introduction (`/introduction`)
 
-The product flow is: sign in → "About me" (Step 1) → **Profile Home** →
-Fotos / Lo que buscas / Tu presentación, each independently completable
-and revisitable. Profile Home (`/introduction/home`) is the account's
-central place — it shows what's done, what's left, and the one obvious
-next action; it is deliberately not a dashboard (no percentages, no
-gamification, no navigation menu).
+First-time onboarding is linear, with a "Continuar" CTA at the bottom of
+every step once that step's minimum requirement is met:
+
+```
+Sign in → About Me → Lo que buscas → Fotos → Tu presentación → Review → done
+```
+
+`src/lib/introduction/completion.ts`'s `getNextOnboardingRoute()` is the
+single source of truth for this order — every page redirects a returning
+user to whatever's next via that one function, so "resume where you left
+off" and "the guided sequence" can never drift apart. Each page also
+calls `getPrerequisiteRedirect()` to bounce someone forward if they try to
+skip ahead (e.g. opening `/introduction/photos` directly before Lo que
+buscas is done) — but it only ever redirects *forward* when something
+earlier is missing, never away from a page whose prerequisites are
+already met. That's what lets **Profile Home** (`/introduction/home`)
+stay a hub afterward: reopening an already-completed section from there
+to edit it is always allowed, onboarding or not.
+
+Once a profile has everything the guided flow requires, it lands on
+**Review** (`/introduction/review`, "Así se verá tu perfil") — a
+read-only preview of the profile roughly as another selected member would
+eventually see it, built from `ProfileCard.tsx`. Pressing "Guardar y
+finalizar" there is the *only* place `meta.onboardingFinalized` is ever
+set — it's never inferred just because every section happens to have
+data. `ProfileCard` deliberately reads only `profile.visible`,
+`profile.photos`, and `profile.presentation.approvedText`; it never reads
+`profile.private` (except internally, to derive an age from the birth
+date — the date itself is never rendered) and never reads
+`profile.dealbreakers` / `profile.preferences` at all, since those are
+matching-only. The same component is reused for "Ver mi perfil" on a
+finalized Profile Home, so there's only one profile-rendering
+implementation to keep in sync with the data model.
+
+A finalized profile stays fully editable — reopening any section from
+Profile Home's hub and changing something never clears
+`onboardingFinalized`; the person can always come back to "Ver mi perfil"
+and see the updated version.
 
 Sign-in (Google or a passwordless email link) and Step 1 ("About me") are
 entirely client-side: the Firebase client SDK talks directly to
 Firestore, secured by `firestore.rules`. Photos additionally use Firebase
 Storage, secured by `storage.rules`. "Tu presentación" is the one part
 with a server component — see below.
+
+### Photo upload feedback
+
+Selecting a photo shows it immediately via a local `URL.createObjectURL`
+preview — before compression, before the Storage upload, before the
+Firestore write — with a "Guardando foto…" caption while those happen in
+the background, then a brief "Foto guardada" before it settles into the
+normal thumbnail. Only one upload is allowed in flight at a time (the
+empty-slot inputs disable while one is saving) to prevent an accidental
+duplicate selection. Every object URL created for a preview is revoked
+once it's no longer needed (on success after the brief confirmation, on
+error dismissal, and on unmount) to avoid leaking memory. None of this
+touches the underlying privacy architecture — photos are still processed
+client-side, uploaded to Firebase Storage, and referenced by path (never
+a public download URL); see `src/lib/introduction/photos.ts`.
 
 ### Profile completion & matching eligibility
 
@@ -137,6 +187,17 @@ Within "Lo que buscas", `dealbreakers` (hard filters the future matching
 engine will apply first) must be fully answered for the section to count
 as complete; `preferences` (soft compatibility signals) are optional by
 design.
+
+Note `meta.profileStatus` (matching eligibility) and
+`meta.onboardingFinalized` (has explicitly confirmed the Review screen)
+are deliberately separate flags answering different questions — the
+guided flow's `getNextOnboardingRoute()` requires an approved
+presentation before Review, even though `profileStatus` does not require
+one. A profile can therefore be `active_for_matching` without being
+`onboardingFinalized` (e.g. someone who reached these three sections via
+Profile Home's hub rather than the guided flow) — Profile Home's copy
+reflects `onboardingFinalized`, not `profileStatus`, since "finalized" is
+the stronger, more deliberate signal.
 
 **Known limitation, deliberately deferred:** `meta.profileStatus` is
 currently computed and written by the client, not enforced by a

@@ -151,6 +151,11 @@ export interface ProfileDocument {
     preferencesComplete: boolean;
     presentationComplete: boolean;
     profileStatus: ProfileStatus;
+    // True only once the person has explicitly pressed "Guardar y
+    // finalizar" on the Review screen — never inferred merely from every
+    // section having data. This is what distinguishes "eligible" from
+    // "actually reviewed and confirmed" in Profile Home's messaging.
+    onboardingFinalized: boolean;
     createdAt: unknown;
     updatedAt: unknown;
   };

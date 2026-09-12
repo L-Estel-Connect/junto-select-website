@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Timestamp } from "firebase/firestore";
 import { aboutMeSteps } from "@/lib/introduction/aboutMeFields";
 import { isEligibleAge } from "@/lib/introduction/age";
+import { getNextOnboardingRoute } from "@/lib/introduction/completion";
 import {
   getOrCreateProfile,
   markAboutMeComplete,
@@ -56,10 +57,10 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
   );
 
   useEffect(() => {
-    if (isComplete) {
-      router.replace("/introduction/home");
+    if (isComplete && profile) {
+      router.replace(getNextOnboardingRoute(profile));
     }
-  }, [isComplete, router]);
+  }, [isComplete, profile, router]);
 
   const currentValue = useMemo(() => {
     if (!profile || !currentStep) return undefined;

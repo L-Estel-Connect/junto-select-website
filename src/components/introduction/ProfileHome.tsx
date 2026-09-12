@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  computeProfileStatus,
+  getNextOnboardingRoute,
   isPhotosComplete,
   isPreferencesComplete,
   isPresentationComplete,
@@ -12,6 +12,7 @@ import {
 import { getOrCreateProfile } from "@/lib/introduction/profile";
 import type { ProfileDocument } from "@/lib/introduction/types";
 import { signOutUser } from "@/lib/firebase/auth";
+import { primaryButtonClasses } from "@/lib/styles";
 import { IntroductionLoading } from "./RequireIntroductionAuth";
 
 interface SectionInfo {
@@ -44,17 +45,22 @@ export default function ProfileHome({ uid }: { uid: string }) {
     return <IntroductionLoading />;
   }
 
+  const finalized = profile.meta.onboardingFinalized;
+
+  // The hub still lists every section, in the same order as the guided
+  // flow, so someone can reopen and edit any of them at any time —
+  // including after finalizing.
   const sections: SectionInfo[] = [
     { label: "Sobre ti", complete: true, href: null },
-    {
-      label: "Fotos",
-      complete: isPhotosComplete(profile.photos),
-      href: "/introduction/photos",
-    },
     {
       label: "Lo que buscas",
       complete: isPreferencesComplete(profile.dealbreakers),
       href: "/introduction/preferences",
+    },
+    {
+      label: "Fotos",
+      complete: isPhotosComplete(profile.photos),
+      href: "/introduction/photos",
     },
     {
       label: "Tu presentación",
@@ -63,17 +69,11 @@ export default function ProfileHome({ uid }: { uid: string }) {
     },
   ];
 
-  // Eligibility (About me + Fotos + Lo que buscas) is what the status
-  // message reflects — "Tu presentación" is intentionally not required,
-  // so a profile can be genuinely done without it. Recomputed here
-  // (rather than trusting the stored meta.profileStatus) so this always
-  // matches the true underlying booleans even if some future write path
-  // forgets to update the stored flag.
-  const eligible = computeProfileStatus(profile) === "active_for_matching";
-  const nextSection = sections.find((s) => !s.complete && s.href);
-  const nextRequiredSection = sections.find(
-    (s) => !s.complete && s.href && s.label !== "Tu presentación",
-  );
+  const nextRoute = getNextOnboardingRoute(profile);
+  const nextLabel =
+    nextRoute === "/introduction/review"
+      ? "Revisar y finalizar mi perfil"
+      : "Completar mi perfil";
 
   return (
     <div className="mx-auto flex min-h-[75svh] w-full max-w-[560px] flex-col justify-center px-6 py-14 sm:px-0">
@@ -81,32 +81,44 @@ export default function ProfileHome({ uid }: { uid: string }) {
         Hola, {profile.visible.firstName || "de nuevo"}
       </p>
 
-      <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-        {eligible
-          ? "Tu perfil está completo. Te avisaremos en cuanto tengamos una presentación seleccionada para ti."
-          : "Tu perfil está casi listo. Completa los últimos pasos para que podamos empezar a buscar personas compatibles para ti."}
-      </p>
+      {finalized ? (
+        <>
+          <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+            Tu perfil está listo. Ya formas parte de Junto Select. Cuando
+            encontremos a alguien que encaje contigo, te avisaremos.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-4">
+            <Link href="/introduction/review" className={primaryButtonClasses}>
+              Ver mi perfil
+            </Link>
+            <a
+              href="#secciones"
+              className="self-center text-sm text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink"
+            >
+              Editar mi perfil
+            </a>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+            Tu perfil está casi listo. Completa los últimos pasos para que
+            podamos empezar a buscar personas compatibles para ti.
+          </p>
+          <Link
+            href={nextRoute}
+            className={`mt-8 self-start ${primaryButtonClasses}`}
+          >
+            {nextLabel}
+          </Link>
+        </>
+      )}
 
-      <div className="mt-10 border-t border-hairline">
+      <div id="secciones" className="mt-10 border-t border-hairline">
         {sections.map((section) => (
           <SectionRow key={section.label} section={section} />
         ))}
       </div>
-
-      {!eligible && nextRequiredSection?.href && (
-        <Link
-          href={nextRequiredSection.href}
-          className="mt-10 inline-flex items-center justify-center rounded-full bg-rose px-9 py-4 text-center text-[13px] font-medium uppercase tracking-[0.18em] text-ink transition-colors duration-200 hover:bg-rose-dark"
-        >
-          Completar mi perfil
-        </Link>
-      )}
-
-      {eligible && nextSection?.href && (
-        <Link href={nextSection.href} className="mt-10 self-start text-sm text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink">
-          Añadir tu presentación
-        </Link>
-      )}
 
       <button
         type="button"
