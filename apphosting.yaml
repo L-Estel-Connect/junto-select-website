@@ -1,0 +1,63 @@
+# Firebase App Hosting build/runtime configuration.
+#
+# Without this file, App Hosting's Cloud Build step has no way to know
+# about the six NEXT_PUBLIC_FIREBASE_* values, and Next.js inlines
+# NEXT_PUBLIC_* vars into the client bundle at `next build` time (not read
+# at runtime) — so a missing var here isn't a runtime gap, it's a build-time
+# one, and no Console-only env var setting after the fact can fix an
+# already-built bundle. src/lib/firebase/client.ts falls back to inert
+# placeholder values ("demo-project", etc.) when these are unset, which is
+# needed so local `next build` doesn't crash with auth/invalid-api-key —
+# but the same fallback means a build missing these values ships silently
+# broken auth instead of failing loudly.
+#
+# Replace every "SET_ME" below with the real value from:
+# Firebase Console (select-dev-508407) > Project settings > General >
+# Your apps > Web app (create one there first if none exists yet).
+# These are public/non-secret client config values — safe to commit as
+# plain `value`, not `secret`.
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: "SET_ME"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: "SET_ME"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: "SET_ME"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: "SET_ME"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "SET_ME"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "SET_ME"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # Pinned to "false" on purpose: this must never be "true" outside local
+  # dev, or the client tries to reach the (nonexistent, in production)
+  # 127.0.0.1 emulator ports instead of real Firebase Auth/Firestore.
+  - variable: NEXT_PUBLIC_USE_FIREBASE_EMULATOR
+    value: "false"
+    availability:
+      - BUILD
+      - RUNTIME

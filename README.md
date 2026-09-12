@@ -119,6 +119,18 @@ NEXT_PUBLIC_FIREBASE_APP_ID=
 Get these values from Firebase Console → Project settings → General → Your
 apps → Web app (create one if it doesn't exist yet).
 
+**On Firebase App Hosting specifically**, setting these in the Console's
+"Environment variables" panel is not enough by itself: Next.js inlines
+`NEXT_PUBLIC_*` values into the client bundle at `next build` time, not at
+runtime, and App Hosting's Cloud Build step only sees values declared in
+the committed `apphosting.yaml` (or entered through a flow that writes to
+it). This repo's `apphosting.yaml` declares all six variables — replace
+its `"SET_ME"` placeholders with the real values before the next rollout,
+then trigger a new build (an existing build's bundle won't pick up a
+later-edited apphosting.yaml retroactively). It also pins
+`NEXT_PUBLIC_USE_FIREBASE_EMULATOR` to `"false"` so it can't accidentally
+end up `"true"` in production.
+
 ### Running against the Firebase Emulator Suite locally
 
 ```bash
