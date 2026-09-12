@@ -1,5 +1,4 @@
 import Hero from "@/components/Hero";
-import PhotoBreak from "@/components/PhotoBreak";
 import WhoYouMeet from "@/components/WhoYouMeet";
 import PrivateSection from "@/components/PrivateSection";
 import InvitationSection from "@/components/InvitationSection";
@@ -27,10 +26,10 @@ export default function Home() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
       />
       <Hero />
-      <PhotoBreak label="Rooftop al atardecer, brindis con champán en Madrid" />
       <WhoYouMeet />
-      <PhotoBreak label="Interior con velas, ambiente íntimo y elegante" />
-      <PrivateSection />
+      <div className="bg-rose-tint/40">
+        <PrivateSection />
+      </div>
       <InvitationSection />
       <Footer />
     </main>

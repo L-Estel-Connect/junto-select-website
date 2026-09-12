@@ -1,4 +1,5 @@
 import Section from "./Section";
+import Photo from "./Photo";
 import { eyebrowClasses } from "@/lib/styles";
 
 const attributes = [
@@ -29,34 +30,37 @@ const attributes = [
 
 export default function WhoYouMeet() {
   return (
-    <Section id="quienes" className="py-24 sm:py-32">
-      <div className="text-center">
-        <h2 className={eyebrowClasses}>Who you&rsquo;ll meet</h2>
-        <p className="mt-3 text-2xl font-light text-ink sm:text-3xl">
+    <Section
+      id="quienes"
+      size="lg"
+      className="grid grid-cols-1 items-center gap-10 py-16 sm:py-20 lg:grid-cols-[5fr_6fr] lg:gap-16"
+    >
+      <Photo
+        ratio="aspect-[4/5]"
+        label="Cóctel íntimo y sofisticado en un salón de Madrid"
+        className="w-full lg:max-h-[600px]"
+      />
+
+      <div>
+        <p className={eyebrowClasses}>Who you&rsquo;ll meet</p>
+        <p className="mt-2 text-2xl font-light text-ink sm:text-3xl">
           Una lista de invitados diferente
         </p>
-        <p className="mx-auto mt-8 max-w-[56ch] text-[15px] leading-relaxed text-ink-soft sm:text-base">
+        <p className="mt-5 max-w-[52ch] text-[15px] leading-relaxed text-ink-soft">
           Junto Select está pensado para personas que ya han construido una
           vida que les gusta — y que ahora quieren conocer a alguien con
           quien merezca la pena compartirla.
         </p>
-      </div>
 
-      <dl className="mt-16 divide-y divide-hairline border-t border-hairline">
-        {attributes.map((item) => (
-          <div
-            key={item.word}
-            className="grid grid-cols-1 gap-2 py-7 sm:grid-cols-[220px_1fr] sm:gap-10"
-          >
-            <dt className="text-lg font-normal text-ink sm:text-xl">
-              {item.word}
-            </dt>
-            <dd className="text-[15px] leading-relaxed text-ink-soft sm:text-base">
-              {item.description}
-            </dd>
-          </div>
-        ))}
-      </dl>
+        <ul className="mt-8 space-y-4 border-t border-hairline pt-6">
+          {attributes.map((item) => (
+            <li key={item.word} className="text-[15px] leading-relaxed">
+              <span className="font-medium text-ink">{item.word}</span>{" "}
+              <span className="text-ink-soft">{item.description}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </Section>
   );
 }
