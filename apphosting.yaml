@@ -11,44 +11,43 @@
 # but the same fallback means a build missing these values ships silently
 # broken auth instead of failing loudly.
 #
-# Replace every "SET_ME" below with the real value from:
-# Firebase Console (select-dev-508407) > Project settings > General >
-# Your apps > Web app (create one there first if none exists yet).
+# Values below are the real Select Dev (select-dev-508407) Web app config
+# from Firebase Console > Project settings > General > Your apps.
 # These are public/non-secret client config values — safe to commit as
 # plain `value`, not `secret`.
 env:
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
-    value: "SET_ME"
+    value: "AIzaSyBs2apjAHLDld2OhBtJvy21RSBN31tYhaY"
     availability:
       - BUILD
       - RUNTIME
 
   - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-    value: "SET_ME"
+    value: "select-dev-508407.firebaseapp.com"
     availability:
       - BUILD
       - RUNTIME
 
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
-    value: "SET_ME"
+    value: "select-dev-508407"
     availability:
       - BUILD
       - RUNTIME
 
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
-    value: "SET_ME"
+    value: "select-dev-508407.firebasestorage.app"
     availability:
       - BUILD
       - RUNTIME
 
   - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-    value: "SET_ME"
+    value: "1062108974890"
     availability:
       - BUILD
       - RUNTIME
 
   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
-    value: "SET_ME"
+    value: "1:1062108974890:web:f733abeb4d278612559853"
     availability:
       - BUILD
       - RUNTIME
