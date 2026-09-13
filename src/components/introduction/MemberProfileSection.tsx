@@ -13,7 +13,7 @@ import {
 } from "@/lib/introduction/completion";
 import { primaryButtonClasses } from "@/lib/styles";
 import ProfileCard from "./ProfileCard";
-import { IntroductionLoading } from "./RequireIntroductionAuth";
+import { IntroductionError, IntroductionLoading } from "./RequireIntroductionAuth";
 
 const linkClasses =
   "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
@@ -26,7 +26,7 @@ interface SectionInfo {
 
 export default function MemberProfileSection({ uid }: { uid: string }) {
   const router = useRouter();
-  const { profile, mutate } = useSharedProfile(uid);
+  const { profile, error: profileError, refresh: refreshProfile, mutate } = useSharedProfile(uid);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,6 +37,9 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
   }, [profile, router]);
 
   if (!profile) {
+    if (profileError) {
+      return <IntroductionError message={profileError} onRetry={() => void refreshProfile()} />;
+    }
     return <IntroductionLoading />;
   }
 

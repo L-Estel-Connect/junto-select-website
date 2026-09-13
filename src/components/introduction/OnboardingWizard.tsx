@@ -9,7 +9,7 @@ import { getNextOnboardingRoute } from "@/lib/introduction/completion";
 import { markAboutMeComplete, saveStepAnswer } from "@/lib/introduction/profile";
 import { useSharedProfile } from "@/lib/introduction/profileCache";
 import IneligibleAge from "./IneligibleAge";
-import { IntroductionLoading } from "./RequireIntroductionAuth";
+import { IntroductionError, IntroductionLoading } from "./RequireIntroductionAuth";
 import StepQuestion from "./StepQuestion";
 
 function getByPath(obj: unknown, path: string): unknown {
@@ -26,7 +26,7 @@ function getByPath(obj: unknown, path: string): unknown {
 
 export default function OnboardingWizard({ uid }: { uid: string }) {
   const router = useRouter();
-  const { profile, mutate } = useSharedProfile(uid);
+  const { profile, error: profileError, refresh: refreshProfile, mutate } = useSharedProfile(uid);
   // null = not yet initialized from the loaded profile. Only set once —
   // after that, stepIndex is locally controlled by this wizard, and must
   // NOT reset just because `profile` reference changes (e.g. a `mutate`
@@ -99,7 +99,14 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, currentStep, saving]);
 
-  if (!profile || stepIndex === null || isComplete) {
+  if (!profile) {
+    if (profileError) {
+      return <IntroductionError message={profileError} onRetry={() => void refreshProfile()} />;
+    }
+    return <IntroductionLoading />;
+  }
+
+  if (stepIndex === null || isComplete) {
     return <IntroductionLoading />;
   }
 

@@ -12,7 +12,7 @@ import {
   saveContactPreferences,
 } from "@/lib/introduction/contact";
 import type { ContactMethod, ContactPreferences } from "@/lib/introduction/types";
-import { IntroductionLoading } from "./RequireIntroductionAuth";
+import { IntroductionError, IntroductionLoading } from "./RequireIntroductionAuth";
 
 const METHOD_OPTIONS: { value: ContactMethod; label: string }[] = [
   { value: "whatsapp", label: "WhatsApp" },
@@ -41,7 +41,7 @@ function needsLinkedIn(prefs: ContactPreferences): boolean {
 
 export default function ContactSection({ uid }: { uid: string }) {
   const { user } = useAuth();
-  const { profile, mutate } = useSharedProfile(uid);
+  const { profile, error: profileError, refresh: refreshProfile, mutate } = useSharedProfile(uid);
   const [prefs, setPrefs] = useState<ContactPreferences | null>(null);
   const [phoneInput, setPhoneInput] = useState("");
   const [instagramInput, setInstagramInput] = useState("");
@@ -58,6 +58,10 @@ export default function ContactSection({ uid }: { uid: string }) {
     setPhoneInput(profile.contactPreferences.phone ?? "");
     setInstagramInput(profile.contactPreferences.instagram ?? "");
     setLinkedinInput(profile.contactPreferences.linkedin ?? "");
+  }
+
+  if (!profile && profileError) {
+    return <IntroductionError message={profileError} onRetry={() => void refreshProfile()} />;
   }
 
   if (!prefs) {

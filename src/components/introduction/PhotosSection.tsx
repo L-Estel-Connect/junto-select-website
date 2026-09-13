@@ -14,7 +14,7 @@ import { useSharedProfile } from "@/lib/introduction/profileCache";
 import { getNextOnboardingRoute, getPrerequisiteRedirect } from "@/lib/introduction/completion";
 import { primaryButtonClasses } from "@/lib/styles";
 import PrivatePhotoThumbnail from "./PrivatePhotoThumbnail";
-import { IntroductionLoading } from "./RequireIntroductionAuth";
+import { IntroductionError, IntroductionLoading } from "./RequireIntroductionAuth";
 
 const linkClasses =
   "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
@@ -28,7 +28,7 @@ interface PendingPhoto {
 
 export default function PhotosSection({ uid }: { uid: string }) {
   const router = useRouter();
-  const { profile, mutate } = useSharedProfile(uid);
+  const { profile, error: profileError, refresh: refreshProfile, mutate } = useSharedProfile(uid);
   const [pending, setPending] = useState<PendingPhoto[]>([]);
   const [error, setError] = useState<string | null>(null);
   const objectUrlsRef = useRef(new Set<string>());
@@ -48,6 +48,9 @@ export default function PhotosSection({ uid }: { uid: string }) {
   }, []);
 
   if (!profile) {
+    if (profileError) {
+      return <IntroductionError message={profileError} onRetry={() => void refreshProfile()} />;
+    }
     return <IntroductionLoading />;
   }
 

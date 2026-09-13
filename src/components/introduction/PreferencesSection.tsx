@@ -19,7 +19,7 @@ import {
 } from "@/lib/introduction/completion";
 import type { Dealbreakers, Preferences } from "@/lib/introduction/types";
 import { primaryButtonClasses } from "@/lib/styles";
-import { IntroductionLoading } from "./RequireIntroductionAuth";
+import { IntroductionError, IntroductionLoading } from "./RequireIntroductionAuth";
 
 const GENDER_OPTIONS = [
   { value: "mujer", label: "Mujeres" },
@@ -66,7 +66,7 @@ const linkClasses =
 
 export default function PreferencesSection({ uid }: { uid: string }) {
   const router = useRouter();
-  const { profile, mutate } = useSharedProfile(uid);
+  const { profile, error: profileError, refresh: refreshProfile, mutate } = useSharedProfile(uid);
   const [dealbreakers, setDealbreakers] = useState<Dealbreakers | null>(null);
   const [preferences, setPreferences] = useState<Preferences | null>(null);
 
@@ -88,7 +88,14 @@ export default function PreferencesSection({ uid }: { uid: string }) {
     if (redirect) router.replace(redirect);
   }, [profile, router]);
 
-  if (!profile || !dealbreakers || !preferences) {
+  if (!profile) {
+    if (profileError) {
+      return <IntroductionError message={profileError} onRetry={() => void refreshProfile()} />;
+    }
+    return <IntroductionLoading />;
+  }
+
+  if (!dealbreakers || !preferences) {
     return <IntroductionLoading />;
   }
 

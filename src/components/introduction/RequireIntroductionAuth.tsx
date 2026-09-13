@@ -13,6 +13,33 @@ export function IntroductionLoading() {
 }
 
 /**
+ * The defensive failure state every profile/photo loading gate must show
+ * instead of an indefinite spinner: a stalled or failed fetch (see
+ * profileCache.ts / photoCache.ts) surfaces here with a way to try again,
+ * rather than leaving the person stuck on "Cargando…" forever.
+ */
+export function IntroductionError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="flex min-h-[70svh] flex-col items-center justify-center gap-4 px-6 text-center">
+      <p className="text-sm text-ink-soft">{message}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="rounded-md border border-hairline px-5 py-2 text-sm text-ink transition-colors hover:bg-hairline/30"
+      >
+        Reintentar
+      </button>
+    </div>
+  );
+}
+
+/**
  * Shared guard for every page under /introduction that requires a signed-in
  * user (onboarding, Profile Home, Fotos, Lo que buscas, Tu presentación).
  * Redirects to /introduction when there's definitively no user, and shows

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useAuth } from "@/lib/firebase/useAuth";
 import { signOutUser } from "@/lib/firebase/auth";
-import { IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
+import { IntroductionError, IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
 import { useMemberProfile } from "./useMemberProfile";
 
 const linkClasses =
@@ -31,8 +31,11 @@ function SettingsRow({ label, value }: { label: string; value: React.ReactNode }
 
 export default function SettingsSection({ uid }: { uid: string }) {
   const { user } = useAuth();
-  const { ready } = useMemberProfile(uid);
-  if (!ready) return <IntroductionLoading />;
+  const { ready, error, refresh } = useMemberProfile(uid);
+  if (!ready) {
+    if (error) return <IntroductionError message={error} onRetry={() => void refresh()} />;
+    return <IntroductionLoading />;
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-[560px] flex-col px-6 py-14 sm:px-0">

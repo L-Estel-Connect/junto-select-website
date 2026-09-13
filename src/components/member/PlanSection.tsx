@@ -1,6 +1,6 @@
 "use client";
 
-import { IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
+import { IntroductionError, IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
 import { useMemberProfile } from "./useMemberProfile";
 
 /**
@@ -10,8 +10,11 @@ import { useMemberProfile } from "./useMemberProfile";
  * profile/account, most likely) before this can show real state.
  */
 export default function PlanSection({ uid }: { uid: string }) {
-  const { ready } = useMemberProfile(uid);
-  if (!ready) return <IntroductionLoading />;
+  const { ready, error, refresh } = useMemberProfile(uid);
+  if (!ready) {
+    if (error) return <IntroductionError message={error} onRetry={() => void refresh()} />;
+    return <IntroductionLoading />;
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-[560px] flex-col px-6 py-14 sm:px-0">

@@ -1,6 +1,6 @@
 "use client";
 
-import { usePhotoState } from "@/lib/introduction/photoCache";
+import { retryPhoto, usePhotoState } from "@/lib/introduction/photoCache";
 
 /**
  * Renders a private profile photo from the shared photo cache (see
@@ -34,8 +34,15 @@ export default function PrivatePhotoThumbnail({
         </div>
       )}
       {state.status === "error" && (
-        <div className="flex h-full w-full items-center justify-center px-3 text-center">
+        <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-3 text-center">
           <p className="text-xs text-ink-soft">No se pudo cargar la foto.</p>
+          <button
+            type="button"
+            onClick={() => retryPhoto(path)}
+            className="text-xs text-ink underline decoration-hairline underline-offset-4"
+          >
+            Reintentar
+          </button>
         </div>
       )}
       {primary && (

@@ -18,7 +18,7 @@ import { requireFinalized } from "@/lib/introduction/completion";
  */
 export function useMemberProfile(uid: string) {
   const router = useRouter();
-  const { profile } = useSharedProfile(uid);
+  const { profile, error, refresh } = useSharedProfile(uid);
 
   useEffect(() => {
     if (!profile) return;
@@ -27,5 +27,5 @@ export function useMemberProfile(uid: string) {
   }, [profile, router]);
 
   const ready = Boolean(profile) && !requireFinalized(profile!);
-  return { profile, ready };
+  return { profile, ready, error, refresh };
 }

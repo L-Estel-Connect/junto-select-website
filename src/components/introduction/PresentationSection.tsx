@@ -12,7 +12,7 @@ import {
 import { getNextOnboardingRoute, getPrerequisiteRedirect } from "@/lib/introduction/completion";
 import type { PresentationPrompts } from "@/lib/introduction/types";
 import { primaryButtonClasses } from "@/lib/styles";
-import { IntroductionLoading } from "./RequireIntroductionAuth";
+import { IntroductionError, IntroductionLoading } from "./RequireIntroductionAuth";
 
 const textareaClasses =
   "w-full rounded-md border border-hairline bg-paper px-4 py-3 text-[15px] leading-relaxed text-ink placeholder:text-ink-soft/80 transition-colors focus:border-rose-dark focus:outline-none";
@@ -39,7 +39,7 @@ const MAX_PROMPT_LENGTH = 300;
 
 export default function PresentationSection({ uid }: { uid: string }) {
   const router = useRouter();
-  const { profile, mutate } = useSharedProfile(uid);
+  const { profile, error: profileError, refresh: refreshProfile, mutate } = useSharedProfile(uid);
   const [prompts, setPrompts] = useState<PresentationPrompts | null>(null);
   const [reviewText, setReviewText] = useState("");
   const [reviewTextInitialized, setReviewTextInitialized] = useState(false);
@@ -67,7 +67,14 @@ export default function PresentationSection({ uid }: { uid: string }) {
     if (redirect) router.replace(redirect);
   }, [profile, router]);
 
-  if (!profile || !prompts) {
+  if (!profile) {
+    if (profileError) {
+      return <IntroductionError message={profileError} onRetry={() => void refreshProfile()} />;
+    }
+    return <IntroductionLoading />;
+  }
+
+  if (!prompts) {
     return <IntroductionLoading />;
   }
 

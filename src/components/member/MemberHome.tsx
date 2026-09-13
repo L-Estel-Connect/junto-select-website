@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useSharedProfile } from "@/lib/introduction/profileCache";
 import { requireFinalized } from "@/lib/introduction/completion";
 import { primaryButtonClasses } from "@/lib/styles";
-import { IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
+import { IntroductionError, IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
 
 const linkClasses =
   "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
@@ -22,7 +22,7 @@ function StatusRow({ label, value }: { label: string; value: string }) {
 
 export default function MemberHome({ uid }: { uid: string }) {
   const router = useRouter();
-  const { profile } = useSharedProfile(uid);
+  const { profile, error: profileError, refresh: refreshProfile } = useSharedProfile(uid);
 
   useEffect(() => {
     if (!profile) return;
@@ -30,7 +30,14 @@ export default function MemberHome({ uid }: { uid: string }) {
     if (redirect) router.replace(redirect);
   }, [profile, router]);
 
-  if (!profile || requireFinalized(profile)) {
+  if (!profile) {
+    if (profileError) {
+      return <IntroductionError message={profileError} onRetry={() => void refreshProfile()} />;
+    }
+    return <IntroductionLoading />;
+  }
+
+  if (requireFinalized(profile)) {
     return <IntroductionLoading />;
   }
 

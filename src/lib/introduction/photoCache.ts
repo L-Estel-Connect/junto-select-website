@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { getBytes, ref } from "firebase/storage";
 import { storage } from "@/lib/firebase/client";
 import { watchAuthState } from "@/lib/firebase/auth";
@@ -27,6 +27,16 @@ import { watchAuthState } from "@/lib/firebase/auth";
  * until React re-renders it away (delete/replace already trigger that
  * re-render via the profile cache's `mutate`), which is an acceptable,
  * momentary cosmetic edge case — not a memory-safety or correctness one.
+ *
+ * IMPORTANT — self-healing design (fixed after a production incident):
+ * see the matching comment in profileCache.ts. The same bug existed here:
+ * a fetch only ever started inside `subscribe` (called once per mount),
+ * so a cache clear mid-flight left a mounted `PrivatePhotoThumbnail`
+ * stuck showing "Cargando…" forever even though the original Storage
+ * request had already completed successfully. Fixed the same way: a
+ * single global version counter for every snapshot, `clearPhotoCache`
+ * explicitly notifying every previously-registered listener, and a
+ * dependency-free `useEffect` that re-arms a stalled entry on any render.
  */
 
 export type PhotoState =
@@ -36,43 +46,83 @@ export type PhotoState =
 
 interface Entry {
   state: PhotoState;
-  version: number;
+  // Distinct from `state.status === "loading"`, which is also true for
+  // an entry that exists but has never actually been dispatched yet
+  // (e.g. one `getOrCreateEntry` just created for a new subscriber). The
+  // self-healing effect below needs to tell "loading because a fetch is
+  // genuinely in flight" apart from "loading because nothing has started
+  // one yet" — without this flag it would either never start the very
+  // first fetch, or start a duplicate one on every render.
+  fetching: boolean;
   listeners: Set<() => void>;
 }
 
 const cache = new Map<string, Entry>();
 
-function bump(entry: Entry) {
-  entry.version += 1;
+// See profileCache.ts: a single global counter, not a per-entry one, so
+// swapping an entry out (e.g. on clearPhotoCache) is always detected as
+// a change instead of possibly matching the old value by coincidence.
+let globalVersion = 0;
+
+// A fetch pending longer than this is surfaced as a recoverable error
+// instead of an indefinite spinner. The underlying request is never
+// aborted — a late success still lands and clears the error normally.
+const STALL_TIMEOUT_MS = 12000;
+
+function notify(entry: Entry) {
+  globalVersion += 1;
   entry.listeners.forEach((listener) => listener());
 }
 
+function getOrCreateEntry(path: string): Entry {
+  let entry = cache.get(path);
+  if (!entry) {
+    entry = { state: { status: "loading" }, fetching: false, listeners: new Set() };
+    cache.set(path, entry);
+  }
+  return entry;
+}
+
 /** Starts (and dedupes) the actual Storage fetch for `path` — called at most once per path per session, regardless of how many components ask for it or how many times, concurrently or not. */
-function startLoad(path: string): Entry {
-  const entry: Entry = { state: { status: "loading" }, version: 0, listeners: new Set() };
-  cache.set(path, entry);
+function startLoad(path: string): void {
+  const entry = getOrCreateEntry(path);
+  if (entry.fetching) return;
+  entry.fetching = true;
+  entry.state = { status: "loading" };
+  notify(entry);
+
+  let settled = false;
+  const timeoutId = setTimeout(() => {
+    if (!settled) {
+      entry.state = {
+        status: "error",
+        error: "Esto está tardando más de lo normal. Inténtalo de nuevo.",
+      };
+      notify(entry);
+    }
+  }, STALL_TIMEOUT_MS);
 
   getBytes(ref(storage, path))
     .then((bytes) => {
       const blob = new Blob([bytes], { type: "image/jpeg" });
       const url = URL.createObjectURL(blob);
       entry.state = { status: "loaded", url };
-      bump(entry);
     })
     .catch((error) => {
       // Every outcome reaches a terminal state — this is what keeps
-      // "Cargando…" from ever being able to hang forever, the same
-      // property the original single-component fix relied on, now
-      // guaranteed once per path instead of once per component instance.
+      // "Cargando…" from ever being able to hang forever.
       console.error("Failed to load photo", path, error);
       entry.state = {
         status: "error",
         error: error instanceof Error ? error.message : String(error),
       };
-      bump(entry);
+    })
+    .finally(() => {
+      settled = true;
+      clearTimeout(timeoutId);
+      entry.fetching = false;
+      notify(entry);
     });
-
-  return entry;
 }
 
 /**
@@ -85,7 +135,15 @@ function startLoad(path: string): Entry {
 export function seedPhotoCache(path: string, blob: Blob): void {
   if (cache.has(path)) return;
   const url = URL.createObjectURL(blob);
-  cache.set(path, { state: { status: "loaded", url }, version: 0, listeners: new Set() });
+  cache.set(path, { state: { status: "loaded", url }, fetching: false, listeners: new Set() });
+}
+
+/** Discards a failed (or stalled) entry and starts a fresh fetch — the retry action behind the "No se pudo cargar la foto" state's retry button. */
+export function retryPhoto(path: string): void {
+  const entry = cache.get(path);
+  if (entry && entry.state.status !== "error") return;
+  cache.delete(path);
+  startLoad(path);
 }
 
 /** The path was deleted or is about to be replaced — never serve its (possibly now-dangling) cached bytes again. */
@@ -94,14 +152,31 @@ export function invalidatePhoto(path: string): void {
   if (!entry) return;
   if (entry.state.status === "loaded") URL.revokeObjectURL(entry.state.url);
   cache.delete(path);
+  globalVersion += 1;
+  entry.listeners.forEach((listener) => listener());
 }
 
-/** Revokes every cached object URL and empties the cache — session teardown / sign-out, so no private photo bytes linger in memory for whoever uses this tab next. */
+/**
+ * Revokes every cached object URL and resets every entry — session
+ * teardown / sign-out, so no private photo bytes linger in memory for
+ * whoever uses this tab next.
+ *
+ * Resets each entry's fields IN PLACE rather than removing it from the
+ * map — see the matching comment on `clearProfileCache` in
+ * profileCache.ts for why this is load-bearing, not a style choice: a
+ * mounted `PrivatePhotoThumbnail`'s listener is attached to one specific
+ * entry object at mount and never re-attached just because a render
+ * happens, so discarding that object would leave any later replacement's
+ * eventual result with no one to notify.
+ */
 export function clearPhotoCache(): void {
   for (const entry of cache.values()) {
     if (entry.state.status === "loaded") URL.revokeObjectURL(entry.state.url);
+    entry.state = { status: "loading" };
+    entry.fetching = false;
   }
-  cache.clear();
+  globalVersion += 1;
+  cache.forEach((entry) => entry.listeners.forEach((listener) => listener()));
 }
 
 let watcherStarted = false;
@@ -125,17 +200,32 @@ export function usePhotoState(path: string): PhotoState {
   ensureAuthWatcher();
 
   const subscribe = useCallback((onStoreChange: () => void) => {
-    let entry = cache.get(path);
-    if (!entry) entry = startLoad(path);
+    const entry = getOrCreateEntry(path);
     entry.listeners.add(onStoreChange);
     return () => {
-      entry!.listeners.delete(onStoreChange);
+      entry.listeners.delete(onStoreChange);
     };
   }, [path]);
 
-  const getSnapshot = useCallback(() => cache.get(path)?.version ?? -1, [path]);
+  const getSnapshot = useCallback(() => globalVersion, []);
 
   useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-  return cache.get(path)?.state ?? { status: "loading" };
+  const entry = getOrCreateEntry(path);
+
+  // Self-healing: re-checked after every render (mount, a version bump
+  // from elsewhere, or a cache clear), not only once at initial
+  // subscribe time — see the file-level comment. Checking `fetching`
+  // (not just `cache.has(path)`) is what makes this correct: an entry
+  // that merely exists but was never dispatched (state "loading",
+  // fetching false — e.g. one just created above, or one left behind by
+  // a cache clear) still needs `startLoad`; one that's genuinely in
+  // flight (fetching true) must not be re-triggered.
+  useEffect(() => {
+    if (entry.state.status === "loading" && !entry.fetching) {
+      startLoad(path);
+    }
+  });
+
+  return entry.state;
 }
