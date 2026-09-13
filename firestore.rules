@@ -48,8 +48,34 @@ service cloud.firestore {
     // way would break onboarding itself, which is explicitly out of scope
     // to touch in this change. Flagged again in the final report as a
     // pre-existing gap, not introduced or worsened here.
-    function searchStatusUnchanged() {
-      return request.resource.data.meta.searchStatus == resource.data.meta.searchStatus;
+    // `meta.matchingAnchorAt`/`matchingSubscriptionId`/
+    // `matchingPeriodsProcessed`/`nextMatchingDueAt` (added for the
+    // per-member-anniversary matching model — see
+    // src/lib/matching/dueScheduler.ts) carry the exact same risk as
+    // `searchStatus` above and get the identical treatment: only the
+    // Stripe webhook (Admin SDK) ever sets them. Without this, a
+    // signed-in user could set their own `nextMatchingDueAt` into the
+    // past to force themselves into extra matching periods, or forge
+    // `matchingPeriodsProcessed` down to make an already-used period
+    // look unused. Same known limitation as searchStatus: this guards
+    // `update` only, not `create` — a hand-built create request could in
+    // principle set these at document-creation time, but the real
+    // onboarding flow never does, and locking `create` too would need
+    // touching the same profile-creation path this change doesn't.
+    //
+    // Uses `.get(key, default)`, NOT plain dot access, for the four new
+    // fields specifically: unlike `searchStatus` (always present since
+    // profile creation), a profile that has never had a paid subscription
+    // genuinely has no `matchingAnchorAt` etc. at all — plain dot access
+    // on a missing map key is a rules EVALUATION ERROR, which denies the
+    // whole update, not just these fields — that would have broken every
+    // ordinary onboarding write for anyone without these fields yet.
+    function matchingStateUnchanged() {
+      return request.resource.data.meta.searchStatus == resource.data.meta.searchStatus
+        && request.resource.data.meta.get('matchingAnchorAt', null) == resource.data.meta.get('matchingAnchorAt', null)
+        && request.resource.data.meta.get('matchingSubscriptionId', null) == resource.data.meta.get('matchingSubscriptionId', null)
+        && request.resource.data.meta.get('matchingPeriodsProcessed', null) == resource.data.meta.get('matchingPeriodsProcessed', null)
+        && request.resource.data.meta.get('nextMatchingDueAt', null) == resource.data.meta.get('nextMatchingDueAt', null);
     }
 
     match /profiles/{uid} {
@@ -60,7 +86,7 @@ service cloud.firestore {
       allow update: if request.auth != null
         && request.auth.uid == uid
         && birthDateIsEligible(request.resource.data.private.birthDate)
-        && searchStatusUnchanged();
+        && matchingStateUnchanged();
       allow delete: if false;
     }
 

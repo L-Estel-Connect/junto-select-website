@@ -19,12 +19,19 @@ import type { ScoreDimensionBreakdown } from "./scoring";
  * in the cycle's config — the "live test with specific accounts" stage.
  * limited_live: real writes, no explicit allowlist, but capped to
  * `maxMembersPerRun` recipients — a broader but still bounded live stage.
- * production: real writes, the full active_search pool. Nothing in this
- * codebase schedules `production` automatically — see engine.ts and the
- * README for what activating the automatic monthly scheduler actually
- * requires (a manual Cloud Scheduler setup, deliberately not done yet).
+ * production: real writes, the full active_search pool, uncapped — a
+ * manual/administrative "run for literally everyone right now" tool (see
+ * engine.ts's time-budget loop for how it scales); NOT what the automatic
+ * scheduler uses. member_period: real writes, restricted to exactly the
+ * one person named in `allowlistPersonIds` — behaves like `allowlist`
+ * (same recipient-filtering code path) but is the mode the automatic
+ * per-member due-date scheduler actually uses (see
+ * src/lib/matching/dueScheduler.ts), kept as its own named mode purely so
+ * the admin Matching Cycles list can tell "the real automatic pipeline"
+ * apart from a manual allowlist test run, and so the two are free to
+ * diverge later without an overloaded meaning.
  */
-export type CycleMode = "dry_run" | "allowlist" | "limited_live" | "production";
+export type CycleMode = "dry_run" | "allowlist" | "limited_live" | "production" | "member_period";
 
 export type CycleStatus = "pending" | "running" | "completed" | "failed";
 

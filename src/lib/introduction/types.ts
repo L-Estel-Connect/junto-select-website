@@ -266,6 +266,42 @@ export interface ProfileDocument {
     // Set only when duplicateStatus is confirmed_duplicate (or was, before
     // being resolved) — the uid of the account this one was merged into.
     duplicateOf: string | null;
+    /**
+     * Per-member matching-cycle anchor (added for the per-member-anniversary
+     * matching model — see src/lib/matching/dueScheduler.ts). Written ONLY
+     * by the Stripe webhook, from `subscription.start_date` — immutable for
+     * the life of one continuous subscription, which is exactly "when did
+     * this member's matching month start." Never touched by onboarding or
+     * any other client write path; protected from client writes the same
+     * way `searchStatus` already is (firestore.rules).
+     */
+    matchingAnchorAt: unknown | null;
+    /**
+     * The Stripe subscription id `matchingAnchorAt`/`matchingPeriodsProcessed`
+     * belong to. Lets the webhook tell "just a renewal/status update on the
+     * SAME subscription" (leave the anchor and counter alone) apart from
+     * "a genuinely NEW subscription" (a fresh signup, or a resubscription
+     * after full cancellation — reset the anchor and counter to start this
+     * member's matching clock over).
+     */
+    matchingSubscriptionId: string | null;
+    /**
+     * How many monthly matching periods have been completed for the
+     * CURRENT subscription. Periods are always derived from
+     * `matchingAnchorAt + matchingPeriodsProcessed` clamped months —
+     * never by repeatedly adding "+1 month" to a previous (possibly
+     * already clamped) due date, which would drift. Starts at 0, meaning
+     * the first period is due immediately (matchingAnchorAt + 0 months).
+     */
+    matchingPeriodsProcessed: number;
+    /**
+     * Derived from the two fields above, but also STORED so it can be
+     * queried directly ("who is due right now") — Firestore can't filter
+     * on a computed expression. Recomputed and rewritten every time
+     * `matchingPeriodsProcessed` advances; never hand-edited independently
+     * of it.
+     */
+    nextMatchingDueAt: unknown | null;
     createdAt: unknown;
     updatedAt: unknown;
   };

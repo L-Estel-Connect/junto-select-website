@@ -129,18 +129,16 @@ The form posts to `POST /api/invitation`, which calls the Brevo Contacts
 API server-side (`src/lib/brevo.ts`) — the API key never reaches the
 browser.
 
-1. Set `BREVO_API_KEY` in your deployment environment (see
-   `.env.example`). Without it the route returns a `503` and the form shows
-   a graceful error — this is expected until the key is configured.
-   **Not currently set in `apphosting.yaml`** — the invitation form is
-   deployed but cannot reach Brevo until this secret exists (see the
-   October 2026 operational audit report for the exact `firebase
-   apphosting:secrets:set` command).
-2. Set `BREVO_LIST_ID` to your EXISTING Brevo list's numeric id (Contacts →
-   Lists) to attach new contacts to it. Also not currently set — without
-   it, contacts are still created/updated in Brevo, just without a list.
-   Never invent or create a new list here; this must be the account
-   owner's real, already-existing list id.
+1. Set `BREVO_API_KEY` as a Secret Manager secret (`apphosting.yaml`
+   already declares the variable, pointing at the secret — see "Manual
+   setup" below for the exact commands). **The secret itself still needs
+   creating — not yet done.** Until it exists, every submission is still
+   durably captured in Firestore (`invitationRequests/{id}`, below) and
+   the user-facing request still succeeds; only the Brevo sync itself is
+   unavailable, recorded as `brevoSyncStatus: "failed"` on the document.
+2. `BREVO_LIST_ID` is set to `12` in `apphosting.yaml` — the account
+   owner's confirmed EXISTING Brevo list. Never point this at a new or
+   different list without the account owner explicitly saying so.
 3. **Attribute mapping is deliberately narrow** (`src/lib/brevoPayload.ts`,
    pure/unit-tested): only `NOMBRE`, `GENERO`, `PROFESION` (only if
    filled), `TELEFONO` (only if filled). `GENERO` reuses an EXISTING Brevo
@@ -180,6 +178,54 @@ rejected attribute all fail the SAME way from the user's point of view
 independently. This replaces the original design, where the entire
 submission existed only as a Brevo API call and a Brevo failure meant the
 person's request was lost with no record anywhere.
+
+### Manual setup: creating the BREVO_API_KEY secret
+
+```bash
+firebase apphosting:secrets:set BREVO_API_KEY --project select-dev-508407
+firebase apphosting:secrets:grantaccess BREVO_API_KEY --project select-dev-508407 --backend <backend-id>
+```
+
+### Transactional email queue (not sending anything yet)
+
+`src/lib/notifications/outboundEmails.ts` — a generic, provider-agnostic
+`outboundEmails` Firestore collection that call sites write to when
+something worth emailing about happens. No consumer/sender exists yet
+(needs Brevo credentials, a sender identity, and templates the account
+owner hasn't provided — see the operational audit report for the
+CRITICAL/RECOMMENDED/OPTIONAL classification of which emails are worth
+building at all). Three call sites queue an entry today:
+
+- **`invoice.payment_failed`** (`/api/billing/webhook`) — queues
+  `type: "payment_failed"` with just `uid` (the future sender resolves the
+  email from Firebase Auth at send time, not eagerly here).
+- **Account deletion** (`/api/member/delete-profile`) — queues
+  `type: "account_deleted"` with the email captured INLINE, before
+  anything is deleted (once the Auth user is gone there's no uid left to
+  resolve an address from). Queueing is best-effort and never blocks the
+  deletion itself.
+- **`POST /api/admin/billing/queue-renewal-reminders`** — a separate,
+  independently-scheduled endpoint (same `MATCHING_ADMIN_SECRET` auth)
+  that calls `findUpcomingRenewalReminders()` (`billing/renewalReminders.ts` —
+  3-/6-month plans only, 7 days before `currentPeriodEnd`, skipping
+  anything already `cancelAtPeriodEnd`) and queues one
+  `type: "renewal_reminder"` entry per candidate, with a deterministic
+  doc id (`renewal_{uid}_{periodEndDate}`) so repeated calls before the
+  reminder is actually sent just re-write the same pending entry rather
+  than piling up duplicates. Recommended cadence: once daily —
+  completely independent of the matching scheduler above (different
+  Cloud Scheduler job, different endpoint, different data source):
+
+  ```bash
+  gcloud scheduler jobs create http junto-select-renewal-reminders \
+    --location=europe-west1 \
+    --schedule="0 9 * * *" \
+    --time-zone="Europe/Madrid" \
+    --uri="https://<your-app-hosting-domain>/api/admin/billing/queue-renewal-reminders" \
+    --http-method=POST \
+    --headers="x-admin-secret=<the MATCHING_ADMIN_SECRET value>" \
+    --attempt-deadline=60s
+  ```
 
 ## Junto Select Introduction (`/introduction` → `/member`)
 
@@ -470,9 +516,21 @@ dealbreakers/preferences:
 its supporting duplicate-account and account-linking infrastructure.
 Everything here is server-only (Admin SDK); no UI consumes any of this yet
 beyond the still-placeholder "Mis propuestas" page. Manual, ad hoc runs
-still go through `/api/admin/matching/*` (below); the automatic monthly
-run has its own dedicated endpoint — see "Automatic monthly scheduling"
-further down, added in the October 2026 operational audit.
+still go through `/api/admin/matching/*` (below); the automatic scheduler
+has its own dedicated endpoint — see "Automatic matching scheduling"
+further down.
+
+**Each member's matching cycle is anchored to THEIR OWN paid-membership
+start date, never to a shared calendar month.** An October 2026 pass
+initially built a "1st of every calendar month" scheduler
+(`/api/admin/matching/run-monthly-cycle`, a `monthly-YYYY-MM` cycleId) —
+this was corrected before that Cloud Scheduler job was ever created,
+because it meant a member who subscribed on, say, the 15th could wait
+over two weeks for their first matching period. That route, the
+`monthlyProductionCycleId` helper, and every calendar-month reference are
+now gone from this codebase; see "Automatic matching scheduling" below
+for the model that replaced it. There is exactly ONE way an automatic
+matching cycle gets created — do not reintroduce a second one.
 
 **Algorithm** (`hardFilters.ts`, `scoring.ts`, `engine.ts`), strictly in
 this order, never reordered or overridden by anything downstream:
@@ -641,7 +699,7 @@ substantially expanded this change.
 **Passive vs. active_search** (`meta.searchStatus`): `passive` (the
 default for everyone) can still be selected as a candidate for someone
 else's cycle, but never receives their own proposals. `active_search`
-receives up to 3 proposals per monthly cycle. There is no Stripe
+receives up to 3 proposals per matching period. There is no Stripe
 integration, so nothing is ever inferred into `active_search` from
 profile completeness or payment — it's flipped only by an explicit
 allowlist/admin action today, and by a future billing webhook once
@@ -690,80 +748,168 @@ active Pass cooldown, or permanently `blocked` (a human/safety action via
 `blockPair()` — not yet wired to an API route). Rollout modes
 (`CycleMode`): `dry_run` (computes and records bookkeeping, writes
 **nothing** to `proposals`/`pairHistory`/`invitations`), `allowlist`
-(real writes, only for `config.allowlistPersonIds`), `limited_live` (real
-writes, capped by `maxMembersPerRun`, no allowlist), `production` (the
-full `active_search` pool, uncapped — see below).
+(real writes, only for `config.allowlistPersonIds` — a manual test-list
+tool), `limited_live` (real writes, capped by `maxMembersPerRun`, no
+allowlist), `production` (real writes, the full `active_search` pool,
+uncapped — a manual "run for literally everyone right now" administrative
+tool, not what the automatic scheduler uses), `member_period` (real
+writes, restricted to exactly the one personId in `allowlistPersonIds` —
+the mode the automatic scheduler below actually uses; kept as its own
+named mode rather than reusing `allowlist` purely so the two are free to
+diverge later, and so the admin cycles list isn't ambiguous about which
+is which).
 
-### Automatic monthly scheduling
+### Automatic matching scheduling
 
-`POST /api/admin/matching/run-monthly-cycle` (same `MATCHING_ADMIN_SECRET`
+**The model**: a member's matching clock starts when their paid
+membership does, and runs on a rolling ~monthly cadence from THAT date —
+not the 1st of the calendar month, and not their Stripe billing/renewal
+date (see "Matching period vs. billing renewal" below). Two members who
+subscribe on different days have different, independent due dates.
+
+**Data model** (`ProfileDocument.meta`, `src/lib/introduction/types.ts`):
+- `matchingAnchorAt` — Stripe's `subscription.start_date` for the
+  member's current, continuously-renewing subscription. Immutable for the
+  life of that subscription; written ONLY by the Stripe webhook.
+- `matchingSubscriptionId` — which subscription the anchor belongs to.
+  Lets the webhook tell "just a renewal/status update on the same
+  subscription" (leave the anchor alone) apart from "a genuinely new
+  subscription" (first-ever signup, or a resubscription after full
+  cancellation — reset the anchor and start the matching clock over).
+- `matchingPeriodsProcessed` — how many periods have completed for the
+  current subscription. Starts at 0.
+- `nextMatchingDueAt` — derived, but also stored so it's queryable:
+  `matchingPeriodDate(matchingAnchorAt, matchingPeriodsProcessed)` (see
+  below). Recomputed and rewritten every time the counter advances; never
+  hand-edited independently of it.
+
+All four are protected in `firestore.rules` exactly like `searchStatus`
+already was (`matchingStateUnchanged()`) — a client could otherwise set
+their own `nextMatchingDueAt` into the past to force extra periods.
+
+**Deterministic anniversary math** (`matchingPeriodDate` in
+`matching/config.ts`): period N's date is the anchor's ORIGINAL
+day-of-month, N months later, clamped to that target month's actual
+length — the same convention Stripe itself uses for its own billing
+anchors, so it never compounds drift from a previously-clamped short
+month. A member who starts 31 January: period 1 = 28 February (29 in a
+leap year, verified against `Date.UTC`'s own rollover, never a hand-rolled
+leap-year check) — but period 2 is 31 March, NOT 28 March: it re-targets
+the original day-of-month (31) against March's own length, not
+February's clamped result. All Y/M/D math reads Europe/Madrid civil time
+(`Intl.DateTimeFormat`, not the server's UTC clock) — Stripe timestamps
+are UTC, and a payment at, say, 23:30 UTC in October is already the next
+calendar day in Madrid (CEST, UTC+2).
+
+**`POST /api/admin/matching/run-due-cycle`** (same `MATCHING_ADMIN_SECRET`
 auth as every other admin matching route — zero new IAM/infra needed to
-call it) is the scheduler-facing entry point, added in the October 2026
-operational audit. It derives a `monthly-YYYY-MM` cycleId from the CURRENT
-CALENDAR MONTH in **Europe/Madrid** (`monthlyProductionCycleId` in
-`config.ts`, computed via `Intl.DateTimeFormat` rather than the server's
-own UTC clock, so the boundary is correct even though App Hosting runs in
-UTC) and calls `runMatchingCycle(cycleId, "production")`. This is
-DELIBERATELY independent of any member's Stripe billing/renewal date —
-see "Billing renewal vs. matching cycle" below.
+call it) is the ONE scheduler-facing entry point. Each invocation
+(`runDueMatchingScan`, `matching/dueScheduler.ts`):
 
-Calling this endpoint more than once within the same Madrid calendar
-month — a Cloud Scheduler retry, or a human triggering it by hand — always
-resolves to the same cycleId, and `runMatchingCycle` already treats a
-`completed` cycle as a pure no-op and a partially-run one as safely
-resumable (per-member `claimMemberRun` + deterministic proposal ids), so
-this can never create a second monthly allowance for the same member.
+1. Queries `profiles` for `meta.searchStatus == "active_search" AND
+   meta.nextMatchingDueAt <= now` (composite index in
+   `firestore.indexes.json`), bounded to 500 per call — "do not load an
+   unbounded future population into memory." If more than 500 are due at
+   once, the rest are simply picked up on the next invocation, since
+   "due" is a standing condition, never a point-in-time event that can be
+   missed.
+2. For each due member, runs `runMatchingCycle(periodCycleId, "member_period",
+   { allowlistPersonIds: [personId] })` — the exact same, already-tested
+   hard-filter/scoring/proposal machinery as every other mode, just
+   targeted at one recipient. `periodCycleId` (`matchingPeriodId` in
+   `config.ts`) is derived from the personId and that period's OWN
+   calendar date — not from whatever day the scan happens to run — so
+   retrying or re-triggering resolves to the identical cycleId and
+   `runMatchingCycle`'s existing "a completed cycle is a pure no-op"
+   guarantee makes a duplicate allowance for the same period structurally
+   impossible.
+3. Only on a `completed` memberRun does it advance
+   `matchingPeriodsProcessed`/`nextMatchingDueAt`. A failed or still-claimed
+   run is left alone — the member stays "due" and is retried on the very
+   next scan, reusing engine.ts's own stale-claim reclaim logic.
 
-**The 50-member cap fix**: `production` mode's `selectRecipients`
-(`engine.ts`) no longer slices to `maxMembersPerRun` — every other mode
-(`dry_run`/`allowlist`/`limited_live`) keeps that safety valve unchanged.
-A `production` cycle instead loops over its full recipient list inside a
-wall-clock time budget (`PRODUCTION_CYCLE_TIME_BUDGET_MS`, 4 minutes,
-`config.ts`); if the budget is hit before the list is exhausted, the cycle
-is left `running` (not `completed`) and the next scheduled invocation of
-the SAME cycleId resumes it, skipping everyone already processed. This is
-what makes the monthly run scale to hundreds/thousands of members without
-either a blind unbounded cap or new batching infrastructure.
+**First period after payment**: the webhook does NOT run matching
+directly (a slow/failing matching call inside a Stripe webhook risks
+webhook timeouts and unnecessary Stripe retries — deliberately avoided).
+Instead, the webhook sets `matchingPeriodsProcessed = 0` and
+`nextMatchingDueAt = matchingAnchorAt` (i.e. due immediately) the moment a
+new subscription is detected — the SAME due-scan mechanism above then
+picks them up on its very next run. No special-casing of "the first
+period" exists anywhere; it's the identical code path as every later one,
+which is what keeps this simple.
+
+**Recovery from a scheduler outage** (deliberate): a member overdue by
+more than one period only ever has ONE period advanced per scan
+invocation — never several at once. They remain "due" and get their next
+period on the following scan, catching up gradually rather than bursting
+several months of proposals into a single run.
+
+**Observability**: each scan invocation writes a summary to
+`matchingScans/{autoId}` (counts only — no member identity, no proposal
+content) via `recordMatchingScan`, visible on `/admin/matching` under
+"Escaneos automáticos" — separate from the "Ciclos manuales/
+administrativos" table below it, which now excludes `member_period`
+cycles entirely (`listCycles()` in `admin/matchingCycles.ts` — otherwise,
+at even moderate scale, that list would gain one row per member per
+period and become both unreadable and an ever-growing full-collection
+read).
 
 **Still required, outside this codebase** (Console/`gcloud`, deliberately
-not done here): a Cloud Scheduler job that calls this endpoint. Recommended
-minimal setup — a single job at `0 5 1 * *` in `Europe/Madrid`, HTTP
-target, `x-admin-secret` header sourced from the same `MATCHING_ADMIN_SECRET`
-Secret Manager secret already used by the other matching routes:
+not done here): a Cloud Scheduler job calling this endpoint. Recommended —
+every 2 hours, so a newly-paying member's first period is picked up
+within a couple of hours rather than up to a full day; an ordinary
+once-daily cadence (the operational audit's own original suggestion) is
+also perfectly correct, just with more latency for that first-period case:
 
 ```bash
-gcloud scheduler jobs create http junto-select-monthly-matching \
+gcloud scheduler jobs create http junto-select-due-matching \
   --location=europe-west1 \
-  --schedule="0 5 1 * *" \
+  --schedule="0 */2 * * *" \
   --time-zone="Europe/Madrid" \
-  --uri="https://<your-app-hosting-domain>/api/admin/matching/run-monthly-cycle" \
+  --uri="https://<your-app-hosting-domain>/api/admin/matching/run-due-cycle" \
   --http-method=POST \
   --headers="x-admin-secret=<the MATCHING_ADMIN_SECRET value>" \
-  --attempt-deadline=1800s
+  --attempt-deadline=300s
 ```
 
-For a large eligible population that needs more than one pass to finish
-within a single day, add a second, short-interval job (e.g. every 15
-minutes for the first few hours after the 1st) hitting the same endpoint
-— idempotent by construction, so extra calls before the cycle completes
-are harmless no-ops/resumptions. An OIDC-authenticated Cloud Scheduler job
-(verifying a Google-signed identity token instead of a header secret) is
-a more robust alternative if a secret value living in the Scheduler job's
-own configuration is not an acceptable tradeoff — this requires additional
-IAM setup (a dedicated invoker service account) not done here.
+An OIDC-authenticated Cloud Scheduler job (verifying a Google-signed
+identity token instead of a header secret) is a more robust alternative
+if a secret value living in the Scheduler job's own configuration is not
+an acceptable tradeoff — this requires additional IAM setup (a dedicated
+invoker service account) not done here. Also deploy the new composite
+index (`firebase deploy --only firestore:indexes`) and the updated
+`firestore.rules` before enabling the schedule.
 
-### Billing renewal vs. matching cycle — never conflated
+### Matching period vs. billing renewal — never conflated
 
-Two independent systems, on purpose: (1) the monthly matching cycle above,
-gated purely by the Madrid calendar month; (2) a member's Stripe
-subscription renewal, on whatever date they originally checked out. A
-member who buys a 3-month membership on 15 October is `active_search`
-immediately (webhook-driven) and is eligible for the October cycle
-whenever it next runs, then the November cycle on/after 1 November, then
-December on/after 1 December — regardless of the fact that their Stripe
-renewal happens around 15 January. A renewal-reminder email (see "Missing
-operational automations" in the audit report) is tied to that Stripe date,
-never to the calendar-month cycle, and vice versa.
+Two independent systems, on purpose: (1) the matching period above,
+anchored to the member's OWN subscription start date and advancing on a
+rolling ~monthly cadence from it; (2) a member's Stripe subscription
+renewal, which for the 3- and 6-month plans happens far less often than
+monthly. Example: a 6-month member starts 15 October — matching periods
+are due 15 Nov, 15 Dec, 15 Jan, 15 Feb, 15 Mar (five more, six total
+including the immediate first one), while their Stripe renewal is a
+single event around 15 April. A renewal-reminder email (see the
+operational audit report, and `billing/renewalReminders.ts`) is tied to
+that Stripe date and computed entirely separately — neither system reads
+the other's state.
+
+**Cancellation**: `cancelAtPeriodEnd = true` does NOT stop matching
+periods — `searchStatus` (and therefore due-scan eligibility) is driven
+by the subscription's Stripe `status`, not by whether renewal is
+scheduled to stop. A member who cancels renewal keeps receiving matching
+periods through the rest of their already-paid entitlement, exactly as
+they keep receiving proposals under the pre-existing billing design (see
+"Stripe membership billing" below) — nothing new needed here, this falls
+out of the existing architecture.
+
+**Payment failure**: same story — `past_due` is still an entitled status
+(`isEntitledStatus`), so a member stays `active_search` and keeps
+receiving due matching periods during Stripe's own retry window, exactly
+like the pre-existing billing behavior. Only once Stripe exhausts retries
+and the subscription genuinely becomes `canceled`/`unpaid` does
+`searchStatus` flip to `passive`, at which point the due-scan query
+excludes them and no further periods are ever granted.
 
 **What's NOT built** (by explicit scope, not oversight): the
 member-facing "Mis propuestas" UI for actually seeing a proposal/
@@ -817,12 +963,15 @@ never three separate monthly installments dressed up as one plan. No
 copy (49 €/1 mes, 129 €/3 meses, 234 €/6 meses).
 
 An active membership entitles a member to **up to 3 proposals per
-calendar month, never accumulating and never multiplied by plan length**
-— a 6-month plan does not mean 18 proposals. This falls out of the
-existing architecture for free, with no new quota-tracking code: `MAX_
-PROPOSALS_PER_MEMBER` (matching/config.ts) is already enforced **per
-monthly cycle** regardless of billing period, and billing only ever
-flips the boolean `meta.searchStatus`, never a counter.
+matching period (anchored to their own membership start date, on a
+rolling ~monthly cadence — see "Automatic matching scheduling" above),
+never accumulating and never multiplied by plan length** — a 6-month plan
+does not mean 18 proposals, it means up to 3 per period across roughly
+six periods. This falls out of the existing architecture for free, with
+no new quota-tracking code: `MAX_PROPOSALS_PER_MEMBER` (matching/config.ts)
+is already enforced **per matching period** regardless of billing period,
+and billing only ever flips the boolean `meta.searchStatus`, never a
+counter.
 
 ### The one thing billing is allowed to touch
 

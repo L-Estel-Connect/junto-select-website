@@ -5,7 +5,7 @@ import type { CycleConfig, CycleMode } from "@/lib/matching/types";
 
 export const runtime = "nodejs";
 
-const VALID_MODES: CycleMode[] = ["dry_run", "allowlist", "limited_live", "production"];
+const VALID_MODES: CycleMode[] = ["dry_run", "allowlist", "limited_live", "production", "member_period"];
 
 /**
  * Manually triggers (or resumes) one matching cycle. There is no automatic
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   if (!mode || !VALID_MODES.includes(mode as CycleMode)) {
     return NextResponse.json({ ok: false, error: "invalid_mode" }, { status: 400 });
   }
-  if (mode === "allowlist" && !config?.allowlistPersonIds?.length) {
+  if ((mode === "allowlist" || mode === "member_period") && !config?.allowlistPersonIds?.length) {
     return NextResponse.json(
       { ok: false, error: "allowlist_mode_requires_allowlistPersonIds" },
       { status: 400 },

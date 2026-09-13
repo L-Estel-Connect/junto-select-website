@@ -2,9 +2,23 @@ import "server-only";
 import { adminDb } from "@/lib/firebase/admin";
 import type { MatchingCycleDocument, MemberRunDocument } from "@/lib/matching/types";
 
-/** One matchingCycles doc per month at V1 scale — a full collection read is the smallest sensible approach (see README §16). */
+/**
+ * Lists manual/administrative cycles only (dry_run, allowlist,
+ * limited_live, production) — a small, human-triggered set, safe to read
+ * in full and browse one by one. `member_period` cycles (one per member
+ * per matching period, from the automatic per-member-anniversary
+ * scheduler — see dueScheduler.ts) are deliberately excluded: at even
+ * moderate scale there would be many hundreds of these per day, which
+ * would both make this page useless to a human (one row per member) and
+ * turn this into an ever-growing full-collection read. The `!=` filter
+ * excludes them at the query level, not just from the display, so this
+ * stays cheap regardless of how many member_period cycles accumulate.
+ * See "Matching runs" (matchingScans.ts) for observing the automatic
+ * scheduler's health instead — a per-scan-invocation summary, not
+ * per-member-cycle detail.
+ */
 export async function listCycles(): Promise<MatchingCycleDocument[]> {
-  const snap = await adminDb.collection("matchingCycles").get();
+  const snap = await adminDb.collection("matchingCycles").where("mode", "!=", "member_period").get();
   const cycles = snap.docs.map((d) => d.data() as MatchingCycleDocument);
   return cycles.sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
 }

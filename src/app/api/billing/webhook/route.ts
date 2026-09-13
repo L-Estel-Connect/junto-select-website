@@ -4,6 +4,9 @@ import { adminDb } from "@/lib/firebase/admin";
 import { getStripe } from "@/lib/stripe/client";
 import { planKeyForPriceId } from "@/lib/stripe/plans";
 import { isEntitledStatus, type BillingDocument, type BillingStatus } from "@/lib/billing/types";
+import { matchingPeriodDate } from "@/lib/matching/config";
+import { queueOutboundEmail } from "@/lib/notifications/outboundEmails";
+import type { ProfileDocument } from "@/lib/introduction/types";
 
 export const runtime = "nodejs";
 
@@ -103,6 +106,21 @@ async function handleEvent(stripe: Stripe, event: Stripe.Event): Promise<void> {
         },
         { merge: true },
       );
+      if (event.type === "invoice.payment_failed") {
+        // Best-effort: a member whose renewal payment failed should be
+        // told, so they don't silently lose access days later with no
+        // warning (see the operational audit — no sender is wired up
+        // yet, this just makes sure the event isn't lost once one is).
+        // Never allowed to affect the webhook's own success/failure.
+        await queueOutboundEmail({
+          type: "payment_failed",
+          uid,
+          email: null,
+          data: { subscriptionId: subscription.id },
+        }).catch((error) => {
+          console.error(`Stripe webhook: failed to queue payment_failed email for uid ${uid}`, error);
+        });
+      }
       // The subscription's own `status` (past_due / active / unpaid /
       // canceled) is what actually drives searchStatus — Stripe's own
       // dunning/retry configuration decides how status evolves after a
@@ -196,13 +214,49 @@ async function syncSubscription(subscription: Stripe.Subscription): Promise<void
   // incomplete or ineligible profile still receives zero proposals,
   // because `loadEligiblePool()` in the matching engine filters on THOSE
   // fields separately, upstream of this one.
-  await adminDb
-    .doc(`profiles/${uid}`)
-    .update({
-      "meta.searchStatus": isEntitledStatus(status) ? "active_search" : "passive",
-      "meta.updatedAt": now,
-    })
-    .catch((err) => {
-      console.error(`Stripe webhook: failed to update searchStatus for uid ${uid}`, err);
-    });
+  const profileRef = adminDb.doc(`profiles/${uid}`);
+  const update: Record<string, unknown> = {
+    "meta.searchStatus": isEntitledStatus(status) ? "active_search" : "passive",
+    "meta.updatedAt": now,
+  };
+
+  // Per-member matching-cycle anchor: only (re)initialized the first time
+  // THIS subscription id is seen — a renewal/status update on an ONGOING
+  // subscription must never reset it (that would restart the member's
+  // matching clock every time Stripe fires an event). A genuinely NEW
+  // subscription id (first-ever signup, or a resubscription after full
+  // cancellation) correctly starts a fresh matching clock from this
+  // subscription's own start date — never from the calendar, never from
+  // "now" on a later event. `matchingPeriodsProcessed` resets to 0
+  // (period 0's due date = the anchor itself), which is what makes the
+  // member's first matching period begin as soon as they're
+  // active_search, without waiting for anything else to trigger it — the
+  // due-matching scan (dueScheduler.ts) picks them up on its very next
+  // run, the same mechanism that serves every later period too.
+  try {
+    const profileSnap = await profileRef.get();
+    const existingSubscriptionId = (profileSnap.data() as ProfileDocument | undefined)?.meta
+      ?.matchingSubscriptionId;
+    // `start_date` is always present on a real Stripe subscription object;
+    // guarded anyway so a malformed/partial event can never write an
+    // Invalid Date into `matchingAnchorAt` — which would fail the ENTIRE
+    // `profileRef.update(update)` call below (Firestore rejects invalid
+    // Date values), silently taking `meta.searchStatus` down with it.
+    if (existingSubscriptionId !== subscription.id && typeof subscription.start_date === "number") {
+      const anchor = new Date(subscription.start_date * 1000);
+      update["meta.matchingAnchorAt"] = anchor;
+      update["meta.matchingSubscriptionId"] = subscription.id;
+      update["meta.matchingPeriodsProcessed"] = 0;
+      update["meta.nextMatchingDueAt"] = matchingPeriodDate(anchor, 0);
+    }
+  } catch (error) {
+    // Never let a failure to read the existing anchor block the billing
+    // sync itself — worst case, the anchor stays unset until the next
+    // webhook event for this subscription retries this check.
+    console.error(`Stripe webhook: failed to check matching anchor for uid ${uid}`, error);
+  }
+
+  await profileRef.update(update).catch((err) => {
+    console.error(`Stripe webhook: failed to update profile state for uid ${uid}`, err);
+  });
 }

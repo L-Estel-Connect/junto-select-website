@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { adminAuth, adminDb, getAdminStorageBucket } from "@/lib/firebase/admin";
 import { requireFirebaseUser } from "@/lib/firebase/serverAuth";
 import { getStripe } from "@/lib/stripe/client";
+import { queueOutboundEmail } from "@/lib/notifications/outboundEmails";
 import type { BillingDocument, BillingStatus } from "@/lib/billing/types";
 
 export const runtime = "nodejs";
@@ -64,6 +65,18 @@ export async function POST(request: Request) {
       );
     }
   }
+
+  // Captured now, before anything is deleted: once the profile/Auth user
+  // are gone below, there is no uid left to resolve an email address
+  // from, unlike payment_failed/renewal_reminder which can resolve it
+  // lazily at send time. A queueing failure must never abort a deletion
+  // the member explicitly requested and already had Stripe safely
+  // canceled for — hence the swallowed catch.
+  await queueOutboundEmail({ type: "account_deleted", uid: null, email: auth.email, data: {} }).catch(
+    (error) => {
+      console.error(`delete-profile: failed to queue account_deleted email for uid ${uid}`, error);
+    },
+  );
 
   try {
     const bucket = getAdminStorageBucket();

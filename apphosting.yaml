@@ -101,6 +101,28 @@ env:
     availability:
       - RUNTIME
 
+  # --- Brevo (public invitation-form contact sync) ---
+  # See README "Brevo configuration required". BREVO_LIST_ID is the
+  # account owner's EXISTING Brevo list (Contacts -> Lists) — not a
+  # secret, so a plain value like ADMIN_ALLOWLIST_EMAILS above. Never
+  # create a new list here; this must always point at that same list.
+  - variable: BREVO_LIST_ID
+    value: "12"
+    availability:
+      - RUNTIME
+
+  # Server-only Brevo API key. RUNTIME only, Secret Manager — same
+  # treatment as STRIPE_SECRET_KEY below. STILL NEEDS TO BE SET: run
+  #   firebase apphosting:secrets:set BREVO_API_KEY --project select-dev-508407
+  #   firebase apphosting:secrets:grantaccess BREVO_API_KEY --project select-dev-508407 --backend <backend-id>
+  # Until then, /api/invitation still captures every submission in
+  # Firestore (invitationRequests/{id}) — only the Brevo sync itself is
+  # unavailable, and that failure never blocks the user-facing request.
+  - variable: BREVO_API_KEY
+    secret: BREVO_API_KEY
+    availability:
+      - RUNTIME
+
   # --- Stripe (Paid Membership V1) ---
   # See README "Stripe membership billing" for the full setup checklist.
   # ALL of this must point at TEST MODE keys/prices until the user has

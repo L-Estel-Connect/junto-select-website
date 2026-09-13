@@ -88,21 +88,26 @@ function selectRecipients(
 ): EligibleProfile[] {
   let recipients = pool.filter((p) => p.profile.meta.searchStatus === "active_search");
 
-  if ((mode === "allowlist" || mode === "dry_run") && config.allowlistPersonIds) {
+  if (
+    (mode === "allowlist" || mode === "dry_run" || mode === "member_period") &&
+    config.allowlistPersonIds
+  ) {
     const allow = new Set(config.allowlistPersonIds);
     recipients = recipients.filter((p) => allow.has(p.personId));
   }
 
-  // `production` is the real monthly-scheduled run: it must eventually
-  // reach every eligible active_search member, however many there are —
-  // not just the first `maxMembersPerRun`. `loadEligiblePool`'s query has
-  // no explicit orderBy, so Firestore returns it in a stable document-ID
-  // order; slicing here would otherwise select the SAME first N members
-  // on every retry, never making progress past them. See
-  // runMatchingCycle's time-budget loop below for how a large population
-  // is still processed safely across however many scheduled invocations
-  // it takes. Every other mode keeps its existing bounded-rollout safety
-  // valve (dry_run/allowlist/limited_live) unchanged.
+  // `production` is the manual/administrative "run for the whole
+  // active_search pool right now" tool: it must be able to reach every
+  // eligible member, however many there are, not just the first
+  // `maxMembersPerRun`. `loadEligiblePool`'s query has no explicit
+  // orderBy, so Firestore returns it in a stable document-ID order;
+  // slicing here would otherwise select the SAME first N members on every
+  // retry, never making progress past them. See runMatchingCycle's
+  // time-budget loop below for how a large population is still processed
+  // safely within one invocation. Every other mode keeps its existing
+  // bounded-rollout safety valve (dry_run/allowlist/limited_live) — and
+  // member_period, which always resolves to exactly one recipient —
+  // unchanged.
   if (mode === "production") return recipients;
 
   return recipients.slice(0, config.maxMembersPerRun);

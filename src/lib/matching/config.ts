@@ -43,29 +43,67 @@ export function addMonths(date: Date, months: number): Date {
 }
 
 /**
- * Deterministic cycleId for the automatic monthly production run, derived
- * from the CALENDAR month in Europe/Madrid — deliberately independent of
- * any member's Stripe billing/renewal date (see README "Monthly matching
- * engine vs. billing renewal — never conflate the two"). Computed via
- * Intl.DateTimeFormat rather than `date.getUTCMonth()`/`getMonth()` so the
- * boundary is correct in Madrid local time (CET/CEST) even though the
- * server itself runs in UTC — a naive UTC-based check would flip a day
- * early or late around the month boundary depending on the time of year's
- * DST offset. Every call within the same Madrid calendar month returns
- * the same id, which is what makes re-triggering the scheduled endpoint
- * (a retry, or an accidental duplicate trigger) a safe no-op/resume
- * rather than a second cycle for the same month — see runMatchingCycle's
- * own "a cycleId already `completed` is a pure no-op" guarantee.
+ * Reads a Date's Y/M/D as they fall in Europe/Madrid civil time — the
+ * basis for every date computation below. Stripe timestamps are UTC; a
+ * member's own sense of "which day I subscribed on" is the Madrid date,
+ * which can differ from the UTC date near midnight (e.g. 23:30 UTC in
+ * October, Madrid CEST = UTC+2, is already the next day locally).
  */
-export function monthlyProductionCycleId(date: Date): string {
+function madridYMD(date: Date): { year: number; month: number; day: number } {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Madrid",
     year: "numeric",
     month: "2-digit",
+    day: "2-digit",
   }).formatToParts(date);
-  const year = parts.find((p) => p.type === "year")?.value;
-  const month = parts.find((p) => p.type === "month")?.value;
-  return `monthly-${year}-${month}`;
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  return { year: get("year"), month: get("month"), day: get("day") };
+}
+
+/** Number of days in a given Y/M (1-indexed month), leap years included via JS's own Date rollover. */
+function daysInMonth(year: number, month1To12: number): number {
+  return new Date(Date.UTC(year, month1To12, 0)).getUTCDate();
+}
+
+/**
+ * Deterministic per-member matching-period anchor date. `periodsElapsed=0`
+ * is the anchor day itself (the day the member's continuous subscription
+ * started, per `subscription.start_date` — see the webhook); each
+ * increment adds exactly one month to the ORIGINAL anchor day, clamped to
+ * the target month's actual length — the same convention Stripe itself
+ * uses for its own monthly billing anchors, so it never compounds drift
+ * from a previously-clamped short month. A member who starts 31 January:
+ * period 1 = 28 Feb (or 29 in a leap year) — the clamped last day of
+ * February — but period 2 is 31 March, NOT 28 March: it re-targets the
+ * original day-of-month (31) against March's own length, not February's
+ * clamped result. Returned at UTC midnight of the resulting Madrid
+ * calendar date — callers needing a precise instant (e.g. a Firestore
+ * range query boundary) should treat this as "on or after this date, in
+ * Europe/Madrid".
+ */
+export function matchingPeriodDate(anchor: Date, periodsElapsed: number): Date {
+  const { year, month, day } = madridYMD(anchor);
+  const targetMonthIndex0 = month - 1 + periodsElapsed; // 0-indexed, may exceed 11
+  const targetYear = year + Math.floor(targetMonthIndex0 / 12);
+  const targetMonth1To12 = (((targetMonthIndex0 % 12) + 12) % 12) + 1;
+  const clampedDay = Math.min(day, daysInMonth(targetYear, targetMonth1To12));
+  return new Date(Date.UTC(targetYear, targetMonth1To12 - 1, clampedDay));
+}
+
+/**
+ * Deterministic id for one member's one matching period — the idempotency
+ * key that makes "the same member can never receive two allowances for
+ * the same period" hold regardless of how many times or how many days
+ * late the due-scanner processes them. Keyed by the period's own
+ * calendar date (Madrid, YYYY-MM-DD), not by whatever day the scanner
+ * actually ran on.
+ */
+export function matchingPeriodId(personId: string, periodDate: Date): string {
+  const { year, month, day } = madridYMD(periodDate);
+  const y = String(year).padStart(4, "0");
+  const m = String(month).padStart(2, "0");
+  const d = String(day).padStart(2, "0");
+  return `anniv_${personId}_${y}-${m}-${d}`;
 }
 
 /** Canonical, order-independent id for a pair — the same doc regardless of who proposed to whom. */
