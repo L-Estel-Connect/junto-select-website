@@ -34,7 +34,19 @@ export async function POST(request: Request) {
       httpOnly: true,
       secure: true,
       sameSite: "lax",
-      path: "/admin",
+      // NOT "/admin": that would only ever be sent back on requests whose
+      // path itself starts with "/admin" per RFC 6265 path-matching, which
+      // "/api/admin/dashboard/photo" (path-authenticated by this exact
+      // cookie — see that route) does NOT, since "/api" and "/admin" are
+      // different top-level segments. A prior version scoped this cookie
+      // to "/admin" and the photo route silently, unconditionally 401'd
+      // for every real admin because of it — proven with a real browser,
+      // not just by reading the spec: the cookie was simply never
+      // attached to that request. "/" is the narrowest path that actually
+      // covers both real consumers (the /admin/** page-load layout check,
+      // and this one API route under /api/admin/**), since they share no
+      // common non-root path prefix.
+      path: "/",
       maxAge: ADMIN_TOKEN_COOKIE_MAX_AGE_SECONDS,
     });
     return response;
@@ -51,7 +63,11 @@ export async function DELETE() {
     httpOnly: true,
     secure: true,
     sameSite: "lax",
-    path: "/admin",
+    // Must match the Path the cookie was actually SET with (see POST
+    // above) — a clearing Set-Cookie only clears a cookie whose Path
+    // attribute matches exactly; a mismatched Path here would silently
+    // leave the real cookie in place while appearing to log out.
+    path: "/",
     maxAge: 0,
   });
   return response;

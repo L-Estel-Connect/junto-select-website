@@ -83,7 +83,10 @@ export async function requireAdminFromAuthHeader(request: Request): Promise<Admi
  * The cookie name used to gate initial page loads (see
  * src/app/admin/(dashboard)/layout.tsx) — holds a short-lived raw Firebase
  * ID token (NOT a Firestore session or anything bespoke), httpOnly +
- * Secure + SameSite=Lax, scoped to /admin. Storing the ID token itself
+ * Secure + SameSite=Lax, Path=/ (see /api/admin/session's own comment for
+ * why it's "/" and not "/admin" — it has to cover both the /admin/** page
+ * layout AND /api/admin/dashboard/photo, which share no path prefix other
+ * than the root). Storing the ID token itself
  * (rather than inventing a session mechanism) means page loads and API
  * calls are authorized through the identical verifyAdminToken check above —
  * one rule, enforced the same way everywhere, never a second, looser one
