@@ -3,10 +3,11 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import type { ProfileDocument } from "@/lib/introduction/types";
 import { resolvePersonId } from "./identity";
-import { passesHardFilters } from "./hardFilters";
+import { isProfileInEligiblePool } from "./eligibility";
+import { evaluateHardFilters } from "./hardFilters";
 import { scorePair, SCORING_VERSION } from "./scoring";
 import type { ScoreResult } from "./scoring";
-import { isPairEligible, markPairPendingInTransaction } from "./pairHistory";
+import { getPairEligibility, markPairPendingInTransaction } from "./pairHistory";
 import {
   DEFAULT_CYCLE_CONFIG,
   MAX_PROPOSALS_PER_MEMBER,
@@ -16,8 +17,11 @@ import {
 import type {
   CycleConfig,
   CycleMode,
+  HardFilterFailureReason,
   MatchingCycleDocument,
+  MemberRunDiagnostics,
   MemberRunDocument,
+  PairHistoryExclusionReason,
 } from "./types";
 
 /**
@@ -37,13 +41,19 @@ import type {
  * proposals or a count above 3.
  */
 
-interface EligibleProfile {
+export interface EligibleProfile {
   uid: string;
   personId: string;
   profile: ProfileDocument;
 }
 
-async function loadEligiblePool(): Promise<EligibleProfile[]> {
+/**
+ * The full Madrid-eligible, non-duplicate pool of unique people — exported
+ * (in addition to being used by runMatchingCycle below) so the admin
+ * dashboard's manual-suggestion search can offer the same candidate pool
+ * the algorithm itself draws from, rather than a separate ad hoc query.
+ */
+export async function loadEligiblePool(): Promise<EligibleProfile[]> {
   const snap = await adminDb
     .collection("profiles")
     .where("meta.profileStatus", "==", "active_for_matching")
@@ -57,24 +67,11 @@ async function loadEligiblePool(): Promise<EligibleProfile[]> {
   for (const doc of snap.docs) {
     const uid = doc.id;
     const profile = doc.data() as ProfileDocument;
-    if (
-      profile.meta.duplicateStatus === "suspected" ||
-      profile.meta.duplicateStatus === "confirmed_duplicate"
-    ) {
-      continue;
-    }
-    // V1 product scope: Madrid only. `market` is a constant today (see
-    // AboutMeVisible.market) — checked explicitly anyway so this is the
-    // one line that needs to change once a second market exists, rather
-    // than a schema migration. Unknown availability is excluded, same as
-    // any other unknown self-report data — never assumed compatible.
-    if (
-      profile.visible.market !== "madrid" ||
-      profile.visible.marketAvailability == null ||
-      profile.visible.marketAvailability === "not_regular_in_market"
-    ) {
-      continue;
-    }
+    // profileStatus is already filtered by the query above; this also
+    // covers duplicate exclusion and the Madrid-only pool gate — see
+    // eligibility.ts (shared with manualSuggestion.ts, so both draw from
+    // the exact same definition of "in the pool").
+    if (!isProfileInEligiblePool(profile)) continue;
     const personId = resolvePersonId(uid, profile);
     if (!byPersonId.has(personId)) {
       byPersonId.set(personId, { uid, personId, profile });
@@ -184,6 +181,8 @@ async function writeProposalIfRoom(
       scoreCoverage: result.coverage,
       scoreConfidence: result.confidence,
       scoreBreakdown: result.breakdown,
+      source: "algorithm",
+      adminSuggestion: null,
       stage: "proposed",
       passType: null,
       createdAt: now,
@@ -197,6 +196,10 @@ async function writeProposalIfRoom(
   });
 }
 
+function incrementReason<T extends string>(bucket: Partial<Record<T, number>>, reason: T): void {
+  bucket[reason] = (bucket[reason] ?? 0) + 1;
+}
+
 async function processRecipient(
   cycleId: string,
   recipient: EligibleProfile,
@@ -207,22 +210,52 @@ async function processRecipient(
   const otherPeople = pool.filter((p) => p.personId !== recipient.personId);
   const capped = otherPeople.slice(0, config.maxCandidatesPerMember);
 
-  // 1. Hard requirements first — never overridable by scoring below.
+  // 1. Hard requirements first — never overridable by scoring below. Every
+  // exclusion here is also tallied into an aggregate (never per-candidate)
+  // reason count — see MemberRunDiagnostics — so a zero-selection outcome
+  // can be explained later without a per-candidate rejection log.
+  const hardFilterExcluded: Partial<Record<HardFilterFailureReason, number>> = {};
+  const pairHistoryExcluded: Partial<Record<PairHistoryExclusionReason, number>> = {};
   const passingHard: EligibleProfile[] = [];
   for (const candidate of capped) {
-    if (!passesHardFilters(recipient.profile, candidate.profile)) continue;
-    if (!(await isPairEligible(recipient.personId, candidate.personId))) continue;
+    const { passes, failureReason } = evaluateHardFilters(recipient.profile, candidate.profile);
+    if (!passes) {
+      incrementReason(hardFilterExcluded, failureReason as HardFilterFailureReason);
+      continue;
+    }
+    const { eligible, reason } = await getPairEligibility(recipient.personId, candidate.personId);
+    if (!eligible) {
+      incrementReason(pairHistoryExcluded, reason as PairHistoryExclusionReason);
+      continue;
+    }
     passingHard.push(candidate);
   }
 
-  // 2 & 3. Structured scoring, then the minimum-quality threshold.
-  const qualified = passingHard
-    .map((candidate) => ({ candidate, result: scorePair(recipient.profile, candidate.profile) }))
+  // 2. Structured scoring for every hard-filter survivor (not just the
+  // eventual top 3) — needed so diagnostics can report "above threshold"
+  // and "highest score seen" even when the eventual proposal count is 0.
+  const scored = passingHard.map((candidate) => ({
+    candidate,
+    result: scorePair(recipient.profile, candidate.profile),
+  }));
+
+  // 3. Minimum-quality threshold.
+  const aboveThreshold = scored
     .filter(({ result }) => result.score >= config.qualityThreshold)
-    .sort((a, b) => b.result.score - a.result.score)
-    // 4. Maximum 3 — quality over quota: fewer than 3 (even 0) is valid,
-    // and this cap is never relaxed to "reach" 3.
-    .slice(0, MAX_PROPOSALS_PER_MEMBER);
+    .sort((a, b) => b.result.score - a.result.score);
+
+  // 4. Maximum 3 — quality over quota: fewer than 3 (even 0) is valid, and
+  // this cap is never relaxed to "reach" 3.
+  const qualified = aboveThreshold.slice(0, MAX_PROPOSALS_PER_MEMBER);
+
+  const diagnostics: MemberRunDiagnostics = {
+    candidatePoolSize: capped.length,
+    hardFilterExcluded,
+    pairHistoryExcluded,
+    hardFilterSurvivors: passingHard.length,
+    aboveQualityThreshold: aboveThreshold.length,
+    highestScore: scored.length > 0 ? Math.max(...scored.map((s) => s.result.score)) : null,
+  };
 
   const memberRunRef = adminDb.doc(`matchingCycles/${cycleId}/memberRuns/${recipient.personId}`);
 
@@ -234,6 +267,7 @@ async function processRecipient(
       completedAt: FieldValue.serverTimestamp(),
       candidateCount: passingHard.length,
       proposalCount: qualified.length,
+      diagnostics,
     });
     return qualified.length;
   }
@@ -247,6 +281,7 @@ async function processRecipient(
     status: "completed",
     completedAt: FieldValue.serverTimestamp(),
     candidateCount: passingHard.length,
+    diagnostics,
   });
 
   return written;

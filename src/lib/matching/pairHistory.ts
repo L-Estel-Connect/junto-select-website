@@ -5,6 +5,7 @@ import { addMonths, PASS_COOLDOWN_MONTHS, pairKey } from "./config";
 import type {
   InvitationDocument,
   PairHistoryDocument,
+  PairHistoryExclusionReason,
   PairHistoryState,
   PassType,
   ProposalDocument,
@@ -16,32 +17,95 @@ function pairHistoryRef(personIdA: string, personIdB: string) {
 
 /**
  * Whether a pair may be freshly PROPOSED right now (i.e. a new selection
- * by the algorithm) — not the same question as whether an existing
- * proposal/invitation may proceed to its next stage. Pass -> minimum
- * 6-month cooldown, then eligible again (no automatic "time healed it"
- * upgrade beyond that). `pending`/`invited` (already mid-flow, undecided)
- * and `mutual` (an existing introduction) are never re-proposed. `blocked`
- * is permanent until a human resolves it.
+ * by the algorithm, or an admin manual suggestion) — not the same question
+ * as whether an existing proposal/invitation may proceed to its next
+ * stage. Pass -> minimum 6-month cooldown, then eligible again (no
+ * automatic "time healed it" upgrade beyond that). `pending`/`invited`
+ * (already mid-flow, undecided) and `mutual` (an existing introduction)
+ * are never re-proposed. `blocked` is permanent until a human resolves it.
+ * `isPairEligible` is a thin boolean-only wrapper, used wherever the reason
+ * for exclusion doesn't matter.
  */
-export async function isPairEligible(personIdA: string, personIdB: string): Promise<boolean> {
-  const snap = await pairHistoryRef(personIdA, personIdB).get();
-  if (!snap.exists) return true;
-
-  const history = snap.data() as PairHistoryDocument;
+/**
+ * Pure classifier, extracted so both a single-pair lookup (below) and a
+ * batch lookup (manualSuggestion.ts's candidate search, which fetches many
+ * pairHistory docs in two queries rather than one `.get()` per candidate)
+ * apply the identical rule.
+ */
+export function classifyPairHistoryState(
+  history: PairHistoryDocument | null,
+): { eligible: boolean; reason: PairHistoryExclusionReason | null } {
+  if (!history) return { eligible: true, reason: null };
   switch (history.state) {
     case "blocked":
+      return { eligible: false, reason: "blocked" };
     case "mutual":
+      return { eligible: false, reason: "mutual" };
     case "pending":
     case "invited":
-      return false;
+      return { eligible: false, reason: "pending_or_invited" };
     case "passed": {
       const cooldownUntil = history.cooldownUntil as Timestamp | null;
-      if (!cooldownUntil) return true;
-      return Date.now() >= cooldownUntil.toDate().getTime();
+      if (!cooldownUntil || Date.now() >= cooldownUntil.toDate().getTime()) {
+        return { eligible: true, reason: null };
+      }
+      return { eligible: false, reason: "cooldown" };
     }
     default:
-      return true;
+      return { eligible: true, reason: null };
   }
+}
+
+export async function getPairEligibility(
+  personIdA: string,
+  personIdB: string,
+): Promise<{ eligible: boolean; reason: PairHistoryExclusionReason | null }> {
+  const snap = await pairHistoryRef(personIdA, personIdB).get();
+  return classifyPairHistoryState(snap.exists ? (snap.data() as PairHistoryDocument) : null);
+}
+
+export async function isPairEligible(personIdA: string, personIdB: string): Promise<boolean> {
+  return (await getPairEligibility(personIdA, personIdB)).eligible;
+}
+
+/** Raw pair history, for admin display (pair timeline, cooldown status) — null if the pair has never interacted. */
+export async function getPairHistoryDocument(
+  personIdA: string,
+  personIdB: string,
+): Promise<PairHistoryDocument | null> {
+  const snap = await pairHistoryRef(personIdA, personIdB).get();
+  return snap.exists ? (snap.data() as PairHistoryDocument) : null;
+}
+
+/**
+ * Every pairHistory doc touching `personId`, fetched in two queries (not
+ * one per candidate/pair) and indexed by the OTHER person's personId —
+ * shared by manualSuggestion.ts's candidate search and the admin member
+ * detail view.
+ */
+export async function loadPairHistoryMapFor(personId: string): Promise<Map<string, PairHistoryDocument>> {
+  const [lowSnap, highSnap] = await Promise.all([
+    adminDb.collection("pairHistory").where("personIdLow", "==", personId).get(),
+    adminDb.collection("pairHistory").where("personIdHigh", "==", personId).get(),
+  ]);
+  const map = new Map<string, PairHistoryDocument>();
+  for (const doc of [...lowSnap.docs, ...highSnap.docs]) {
+    const data = doc.data() as PairHistoryDocument;
+    const other = data.personIdLow === personId ? data.personIdHigh : data.personIdLow;
+    map.set(other, data);
+  }
+  return map;
+}
+
+/**
+ * Every permanently blocked pair — for the admin Review screen. `pairHistory`
+ * is expected to stay small at V1 scale (bounded by actual proposed/invited
+ * pairs, not the full member-pair combinatorics), so a full collection query
+ * filtered by state is the smallest sensible approach; see README §16.
+ */
+export async function listBlockedPairs(): Promise<PairHistoryDocument[]> {
+  const snap = await adminDb.collection("pairHistory").where("state", "==", "blocked").get();
+  return snap.docs.map((d) => d.data() as PairHistoryDocument);
 }
 
 /**

@@ -39,3 +39,26 @@ export function proposalId(
 ): string {
   return `${cycleId}_${recipientPersonId}_${candidatePersonId}`;
 }
+
+/**
+ * Reserved cycleId for admin/founder manual suggestions (see
+ * manualSuggestion.ts) — deliberately never a real document in
+ * `matchingCycles`, so the Matching Cycles admin screen (which lists that
+ * collection) never shows it as a cycle, and so nothing here touches the
+ * per-cycle memberRun proposalCount that enforces the algorithmic max-3 —
+ * a manual suggestion is structurally outside that mechanism, not merely
+ * exempted from it by a conditional check.
+ */
+export const MANUAL_SUGGESTION_CYCLE_ID = "manual";
+
+/**
+ * Deterministic id for a manual suggestion, keyed by the unordered pair —
+ * same pattern as pairKey/proposalId elsewhere. This is what makes "never
+ * allow repeated manual pushing of the same person" and "prevent duplicate
+ * active proposals for the same pair" the same guarantee: a second attempt
+ * at suggesting the same two people to each other resolves to the same
+ * document id and is refused as already existing, not written twice.
+ */
+export function manualProposalId(personIdA: string, personIdB: string): string {
+  return `${MANUAL_SUGGESTION_CYCLE_ID}_${pairKey(personIdA, personIdB)}`;
+}

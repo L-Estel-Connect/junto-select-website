@@ -1,5 +1,6 @@
 import { getAge, hasChildUnderAge } from "@/lib/introduction/age";
 import type { ProfileDocument } from "@/lib/introduction/types";
+import type { HardFilterFailureReason } from "./types";
 
 /** A partner's children counting as "young" for the partnerHasYoungChildrenOk dealbreaker. */
 const YOUNG_CHILD_AGE_THRESHOLD = 15;
@@ -118,30 +119,82 @@ function acceptsFutureChildrenIntention(profile: ProfileDocument, other: Profile
   return intention === pref;
 }
 
-/** True only if BOTH profiles' dealbreakers would accept the other. */
-export function passesHardFilters(a: ProfileDocument, b: ProfileDocument): boolean {
+/**
+ * Fixed check order, shared by both reciprocal directions — this is what
+ * makes `evaluateHardFilters`'s "first failing reason" a stable, meaningful
+ * attribution rather than an arbitrary one, and is the single source of
+ * truth both `passesHardFilters` and the diagnostics in engine.ts rely on.
+ */
+const CHECKS: Array<{
+  reason: HardFilterFailureReason;
+  accepts: (profile: ProfileDocument, other: ProfileDocument, otherAge: number | null) => boolean;
+}> = [
+  { reason: "gender", accepts: (p, o) => acceptsGender(p, o.visible.gender) },
+  { reason: "age", accepts: (p, _o, otherAge) => acceptsAge(p, otherAge) },
+  { reason: "distance", accepts: (p, o) => acceptsDistance(p, o) },
+  { reason: "relationship_intention", accepts: (p, o) => acceptsIntention(p, o) },
+  { reason: "smoking", accepts: (p, o) => acceptsSmoking(p, o) },
+  { reason: "children", accepts: (p, o) => acceptsChildren(p, o) },
+  { reason: "young_children", accepts: (p, o) => acceptsYoungChildren(p, o) },
+  { reason: "future_children", accepts: (p, o) => acceptsFutureChildrenIntention(p, o) },
+];
+
+export interface HardFilterEvaluation {
+  passes: boolean;
+  /**
+   * The first check (in CHECKS order) that failed, checking a's acceptance
+   * of b first, then b's acceptance of a — null when passes is true. Used
+   * to bucket per-run rejection diagnostics (see engine.ts /
+   * MemberRunDiagnostics) without ever logging a per-candidate reason list.
+   */
+  failureReason: HardFilterFailureReason | null;
+}
+
+/**
+ * Reciprocal hard-filter evaluation with an explainable failure reason —
+ * `passesHardFilters` below is a thin boolean-only wrapper over this, so
+ * every existing caller's behavior is completely unchanged.
+ */
+export function evaluateHardFilters(a: ProfileDocument, b: ProfileDocument): HardFilterEvaluation {
   const ageA = ageOf(a);
   const ageB = ageOf(b);
 
-  const aAcceptsB =
-    acceptsGender(a, b.visible.gender) &&
-    acceptsAge(a, ageB) &&
-    acceptsDistance(a, b) &&
-    acceptsIntention(a, b) &&
-    acceptsSmoking(a, b) &&
-    acceptsChildren(a, b) &&
-    acceptsYoungChildren(a, b) &&
-    acceptsFutureChildrenIntention(a, b);
+  for (const { reason, accepts } of CHECKS) {
+    if (!accepts(a, b, ageB)) return { passes: false, failureReason: reason };
+  }
+  for (const { reason, accepts } of CHECKS) {
+    if (!accepts(b, a, ageA)) return { passes: false, failureReason: reason };
+  }
+  return { passes: true, failureReason: null };
+}
 
-  const bAcceptsA =
-    acceptsGender(b, a.visible.gender) &&
-    acceptsAge(b, ageA) &&
-    acceptsDistance(b, a) &&
-    acceptsIntention(b, a) &&
-    acceptsSmoking(b, a) &&
-    acceptsChildren(b, a) &&
-    acceptsYoungChildren(b, a) &&
-    acceptsFutureChildrenIntention(b, a);
+/** True only if BOTH profiles' dealbreakers would accept the other. */
+export function passesHardFilters(a: ProfileDocument, b: ProfileDocument): boolean {
+  return evaluateHardFilters(a, b).passes;
+}
 
-  return aAcceptsB && bAcceptsA;
+export interface HardFilterFailure {
+  reason: HardFilterFailureReason;
+  /** Which side's dealbreaker rejected the other — for a human-readable admin explanation. */
+  direction: "a_rejects_b" | "b_rejects_a";
+}
+
+/**
+ * Every failing check, in both directions — unlike `evaluateHardFilters`
+ * (which stops at the first failure for cheap aggregate diagnostics), this
+ * is for the manual-suggestion admin UI, which needs to show the operator
+ * the complete list of failed requirements before refusing to let them
+ * send a suggestion that breaks one, not just the first one found.
+ */
+export function evaluateHardFiltersDetailed(a: ProfileDocument, b: ProfileDocument): HardFilterFailure[] {
+  const ageA = ageOf(a);
+  const ageB = ageOf(b);
+  const failures: HardFilterFailure[] = [];
+  for (const { reason, accepts } of CHECKS) {
+    if (!accepts(a, b, ageB)) failures.push({ reason, direction: "a_rejects_b" });
+  }
+  for (const { reason, accepts } of CHECKS) {
+    if (!accepts(b, a, ageA)) failures.push({ reason, direction: "b_rejects_a" });
+  }
+  return failures;
 }

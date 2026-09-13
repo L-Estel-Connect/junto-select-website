@@ -82,3 +82,12 @@ env:
     secret: MATCHING_ADMIN_SECRET
     availability:
       - RUNTIME
+
+  # The ONLY email(s) allowed to sign in to /admin (the Admin Dashboard).
+  # A plain value, not a secret — an email address isn't sensitive the way
+  # an API key is, and this needs to be easy to read/update without a
+  # Secret Manager round-trip. RUNTIME only. See README "Admin Dashboard".
+  - variable: ADMIN_ALLOWLIST_EMAILS
+    value: "lara.dewavrin@gmail.com"
+    availability:
+      - RUNTIME

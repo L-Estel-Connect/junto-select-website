@@ -677,11 +677,12 @@ action outside this codebase, deliberately not done.
 member-facing "Mis propuestas" UI for actually seeing a proposal/
 invitation and clicking Interested/Pasar (the actions exist server-side
 and are tested directly — see below); mutual-introduction contact reveal;
-an admin dashboard for the funnel analytics or duplicate-candidate
-review queue; a Firestore-rule-enforced `meta.profileStatus` (see the
-limitation noted above); a member-facing (Firebase-ID-token-
-authenticated) version of the decision routes — today's routes are
-admin-secret-protected only, mirroring `MATCHING_ADMIN_SECRET` below.
+a Firestore-rule-enforced `meta.profileStatus` (see the limitation noted
+above); a member-facing (Firebase-ID-token-authenticated) version of the
+decision routes — today's routes are admin-secret-protected only,
+mirroring `MATCHING_ADMIN_SECRET` below. (The admin dashboard for funnel
+analytics and duplicate-candidate review — once listed here as
+unbuilt — now exists; see "Admin Dashboard" below.)
 
 **Manual setup required before this can run anywhere but the emulator:**
 add a `MATCHING_ADMIN_SECRET` secret in Secret Manager and grant the App
@@ -702,6 +703,219 @@ below); everything else under `matchingCycles`, `memberRuns`,
 `pairHistory`, `people`, `duplicateCandidates` is covered by the existing
 default-deny wildcard rule, since it's Admin-SDK-only with no legitimate
 client path.
+
+## Admin Dashboard (`/admin`)
+
+An operational home for the founder to understand Junto Select at a
+glance, inspect any member or matching decision, and intervene in the
+specific, narrow ways product judgment calls for — never a raw Firestore
+viewer, never a way to edit scores/weights/preferences by hand.
+
+### Authorization — server-side, not a URL secret
+
+There is exactly one authorized identity by default:
+`lara.dewavrin@gmail.com`, configurable via the server-only
+`ADMIN_ALLOWLIST_EMAILS` env var (comma-separated; see
+`src/lib/admin/session.ts`). This is completely separate from
+`MATCHING_ADMIN_SECRET` above — that secret gates unattended automation
+(a script/cron calling `/api/admin/matching/*`); this gates a real human
+in a browser, so it verifies a real Firebase identity on every single
+request:
+
+- **Sign-in**: `/admin/login` (Google sign-in only, reusing the existing
+  `signInWithGoogle()` — no magic-link option here, since exactly one
+  person uses this). On success, the client POSTs the fresh Firebase ID
+  token to `/api/admin/session`, which calls `verifyAdminToken()`
+  (`adminAuth.verifyIdToken(token, true)` — `checkRevoked: true`, so a
+  disabled/revoked account fails even with an unexpired token — then
+  requires `email_verified === true` AND the email is on the allowlist)
+  and, only if that passes, sets an httpOnly/Secure/SameSite=Lax cookie
+  (`__junto_admin_token`, scoped to `/admin`, holding the raw ID token —
+  not a bespoke session format) and a 55-minute expiry. A non-admin
+  Google account gets a 403 here and never receives the cookie.
+- **Every page load**: `src/app/admin/(dashboard)/layout.tsx` is a Server
+  Component that calls `requireAdminFromCookie()` (same `verifyAdminToken`
+  check, reading the cookie via `next/headers`) **before rendering any
+  child route**, redirecting to `/admin/login` on any failure. No
+  dashboard markup — and therefore no dashboard data — is ever produced
+  for an unauthorized request; this isn't a client-side redirect a
+  browser could race past.
+- **Every data/action endpoint**: every route under
+  `/api/admin/dashboard/*` independently calls
+  `requireAdminFromAuthHeader()` (the same `verifyAdminToken` check again,
+  reading a fresh `Authorization: Bearer <idToken>` header the client
+  attaches via `src/lib/admin/adminFetch.ts`) — never trusting that the
+  page-load cookie check already happened, since an API route is a
+  separate request. An authenticated non-admin, or no token at all,
+  always gets 401 from these, regardless of what URL they hit.
+- **Background refresh**: `AdminShell` silently refreshes the cookie every
+  45 minutes via a forced token refresh, so a long working session
+  doesn't need re-login — the underlying check is still re-run, and would
+  still reject a revoked/de-allowlisted account, on every single refresh.
+- The `/api/admin/dashboard/photo` route (used for `<img>` thumbnails,
+  which can't send custom headers) is the one exception: it's
+  cookie-authenticated instead of header-authenticated, using the same
+  `requireAdminFromCookie()` check. It never creates a Storage download
+  URL — it streams bytes server-side via the Admin SDK, exactly like
+  `duplicates.ts` already does for photo-hash comparison, preserving
+  `storage.rules`'s existing "no bypass token, ever" design for profile
+  photos.
+
+No Firestore or Storage security rule was changed for any of this — every
+dashboard read/write goes through the Admin SDK server-side (which
+already bypasses those rules, same as the matching engine always has);
+the dashboard makes zero direct Firestore/Storage calls from the browser.
+
+### What it shows
+
+- **`/admin`** — member counts (total/active/passive/eligible/incomplete/
+  suspected-duplicate, each clickable into a filtered `/admin/members`
+  view), the current cycle's 0/1/2/3 selection counts, the
+  selection→introduction funnel (`analytics.ts`'s `FunnelStats`, reused
+  as-is), and an "needs attention" list (zero-selection active members,
+  failed/stale runs, open duplicate reviews, blocked pairs).
+- **`/admin/members`** — searchable/filterable list; **`/admin/members/[uid]`**
+  — full profile, private hard requirements vs. soft preferences (labeled
+  in plain Spanish, not raw enum values — `src/lib/admin/labels.ts`
+  derives these from the same `aboutMeSteps` option lists onboarding
+  itself uses, so the dashboard can't drift from what a member actually
+  saw), matching history grouped by month with a human status per pair
+  ("Le interesó — esperando respuesta de la otra persona", etc.), and the
+  current cycle's diagnostics (see below).
+- **`/admin/matching`** / **`/admin/matching/[cycleId]`** — cycle list
+  with aggregate 0/1/2/3/error counts, and a per-recipient breakdown with
+  a "Reintentar pendientes/fallidos" button — this doesn't add any new
+  engine capability, it just re-invokes the already-idempotent
+  `runMatchingCycle()` for that cycle id, which already reclaims
+  stale/failed `memberRuns` on every call (`claimMemberRun`). Starting a
+  **new** cycle, or changing its mode, is deliberately NOT exposed here —
+  see "Intentionally deferred" below.
+- **`/admin/proposals`** / **`/admin/proposals/[id]`** — every proposal,
+  filterable by stage/source/cycle, and a pair detail view: both people's
+  profiles side by side, the full lifecycle timeline (proposed → member
+  decision → invitation → candidate decision → introduction → contact
+  reveal state), pairHistory (cooldown/blocked), and the "Why" panel.
+- **`/admin/introductions`** — every mutual introduction, with the
+  original score, selection/mutual/introduction dates, and contact-reveal
+  state (still always null — no reveal flow exists, same as before).
+- **`/admin/review`** — open `duplicateCandidates` (Confirm duplicate →
+  the existing `mergePeople()`, admin picks which side is primary; Mark
+  not duplicate → dismiss) and every blocked pair, plus a form to block a
+  new pair (name-search picker on each side, a required reason, a
+  confirmation dialog) — calling the exact same `blockPair()` the
+  secret-protected `/api/admin/matching/block-pair` route already used,
+  just from a Firebase-session-authenticated dashboard route instead.
+
+### The "Why" panel — deterministic, from the persisted breakdown only
+
+`src/lib/admin/why.ts`'s `computeMatchWhy()` turns a proposal's already-
+persisted `scoreBreakdown`/`coverage`/`confidence` (Scoring V2, see
+above) into plain-language lines — nothing here is generated or invented:
+each dimension's `fit` value is bucketed into one of four fixed tiers
+(good ≥0.75, partial ≥0.5, weak >0, mismatch =0) with wording that never
+overstates a weak contribution, and a non-evaluated dimension always says
+so explicitly ("sin datos suficientes para evaluarlo") rather than being
+silently dropped or implied to be a mismatch. An expandable "detalle
+técnico" table shows the raw weight/fit/contribution/scoring version
+underneath, for anyone who wants it.
+
+### Zero-selection diagnostics — a schema addition, aggregate-only
+
+The engine previously had no record of *why* a member got fewer than 3
+(or zero) proposals beyond a bare candidate/proposal count. `engine.ts`
+now buckets every hard-filter rejection by its first-failing reason
+(`hardFilters.ts`'s `evaluateHardFilters`, checked in a fixed order) and
+every pairHistory exclusion by its reason (cooldown/blocked/pending/
+mutual — `pairHistory.ts`'s `getPairEligibility`), and persists the
+aggregate counts — never a per-candidate log — as
+`MemberRunDocument.diagnostics` (`types.ts`): pool size, hard-filter
+rejection counts by reason, pairHistory rejection counts by reason, hard-
+filter survivors, how many cleared the quality threshold, and the highest
+score seen even if nothing cleared it. This is what
+`/admin/members/[uid]` and `/admin/matching/[cycleId]` render directly;
+it changes no matching behavior, only what gets recorded once a decision
+is already made.
+
+### Founder / manual suggestion
+
+From a member's detail page, "Sugerir alguien" opens a search over the
+same eligible pool the algorithm itself draws from
+(`engine.ts`'s `loadEligiblePool`, now exported and shared via
+`eligibility.ts`'s `isProfileInEligiblePool`). Every safety constraint is
+re-checked **server-side**, on both the preview and the actual creation
+call — never trusted from what the search UI showed a moment earlier
+(`src/lib/matching/manualSuggestion.ts`):
+
+- Blocked pair, confirmed/suspected duplicate, and Madrid-pool eligibility
+  are **never** overridable — a suggestion request failing any of these
+  is refused outright, no exception path exists.
+- A pair failing the reciprocal hard filters
+  (`evaluateHardFiltersDetailed`, listing every failed check in both
+  directions) is refused with "Not compatible with current hard
+  requirements" and the specific failed requirement(s) — the admin cannot
+  silently override a user-declared dealbreaker.
+- Existing pairHistory (an active cooldown, an already-pending/invited
+  pair, an existing mutual introduction) is respected exactly as the
+  algorithm respects it — no override architecture was invented.
+- **Does not consume the normal monthly 0-3 algorithmic quota.** A manual
+  suggestion is created with a reserved `cycleId` of `"manual"`
+  (`config.ts`'s `MANUAL_SUGGESTION_CYCLE_ID`) and never touches any
+  `matchingCycles/*/memberRuns` document — the ONLY place the max-3 cap
+  is enforced — so it's structurally outside that mechanism, not merely
+  exempted from it by a conditional check.
+- **Cannot be repeated.** The resulting proposal's id is deterministic —
+  `manualProposalId()`, keyed by the unordered pair, same pattern as
+  `proposalId`/`pairKey` elsewhere — so a second attempt at suggesting the
+  same two people to each other (now, or after any future cooldown would
+  have expired) resolves to the same document and is refused as
+  `already_suggested`. This is also what prevents duplicate active
+  proposals for the same pair, via the same mechanism.
+- The resulting proposal (`source: "admin_manual"`, plus an
+  `adminSuggestion` record of who/when/optional-internal-note) enters the
+  **identical** Proposal → Invitation → Introduction lifecycle as an
+  algorithmic one — `recordMemberDecision`/`recordCandidateDecision` are
+  entirely agnostic to `source`. It never creates an introduction
+  directly, never reveals contact, and never bypasses either side's own
+  Interested/Pass decision. The internal note (if any) is stored only on
+  the proposal document, which is never client-readable by anyone other
+  than the recipient, and even then only the member-facing fields a
+  future "Mis propuestas" UI would choose to render — not this note.
+- Both recipient and candidate must be in the eligible pool
+  (`isProfileInEligiblePool`) — deliberately not restricted to
+  `searchStatus: "active_search"` recipients only, since "met both at an
+  event" is exactly the kind of exceptional case this exists for and may
+  involve someone not yet an active/paying searcher. Documented here as
+  a product decision, not an oversight.
+
+### Intentionally deferred / explicitly NOT built
+
+Per the spec this shipped against: raw Firestore/JSON editing anywhere;
+editing a score, weight, or threshold from the UI; a blanket "approve
+every match" step; direct introduction creation or a contact-reveal
+override; user impersonation; bulk profile editing; starting a **new**
+matching cycle or changing an existing one's mode/config from the
+dashboard (only *retrying* an existing cycle with its own stored
+mode/config is exposed — see above); an "unblock pair" action (mirrors
+the existing matching-engine route, which also has none); Stripe/billing
+management (so `searchStatus` stays read-only here, exactly as it is
+everywhere else in the app); any charting/analytics beyond the funnel
+counts `analytics.ts` already computed; outcome-feedback tracking on
+introductions.
+
+### Data access approach (V1 scale)
+
+Every dashboard list (`/admin/members`, `/admin/proposals`,
+`/admin/review`, the Overview counts) is a single bounded Admin SDK
+`.get()` on the relevant collection, filtered/searched/paginated **in
+memory** server-side inside the API route — never streamed to the
+browser wholesale, only the current page is. This deliberately avoids
+building a composite Firestore index for every filter combination the
+dashboard offers; at the member counts this product has in V1, one full
+collection read per admin request is the smallest sensible approach (see
+"Data / performance" in the spec this shipped against). Revisit with real
+server-side query pagination + composite indexes if the member base grows
+enough for this to matter — nothing about the API response shapes would
+need to change, only how each route builds its result internally.
 
 ### AI presentation generation
 
@@ -784,6 +998,17 @@ then trigger a new build (an existing build's bundle won't pick up a
 later-edited apphosting.yaml retroactively). It also pins
 `NEXT_PUBLIC_USE_FIREBASE_EMULATOR` to `"false"` so it can't accidentally
 end up `"true"` in production.
+
+Also add (server-only, not `NEXT_PUBLIC_*`):
+
+```
+ADMIN_ALLOWLIST_EMAILS=lara.dewavrin@gmail.com
+```
+
+Comma-separated list of the only email(s) allowed into `/admin` — see
+"Admin Dashboard" above. Already set in `apphosting.yaml` as a plain
+value (not a secret; an email address isn't sensitive the way an API key
+is), so no manual Secret Manager step is needed for this one.
 
 ### Running against the Firebase Emulator Suite locally
 

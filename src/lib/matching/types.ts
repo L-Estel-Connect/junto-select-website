@@ -62,6 +62,50 @@ export interface MatchingCycleDocument {
 
 export type MemberRunStatus = "claimed" | "completed" | "failed";
 
+/**
+ * Why a candidate never became a proposal for this recipient, in this run.
+ * Attributed as the FIRST reciprocal hard-filter check that failed, checked
+ * in a fixed order (see hardFilters.ts) — a candidate can technically fail
+ * more than one, but bucketing by first-failure keeps these counts a clean
+ * partition of "candidates excluded by a hard filter" rather than a set of
+ * overlapping tallies that don't sum to anything.
+ */
+export type HardFilterFailureReason =
+  | "gender"
+  | "age"
+  | "distance"
+  | "relationship_intention"
+  | "smoking"
+  | "children"
+  | "young_children"
+  | "future_children";
+
+/** Why a candidate that DID pass the reciprocal hard filter was still excluded, per pairHistory. */
+export type PairHistoryExclusionReason = "pending_or_invited" | "cooldown" | "blocked" | "mutual";
+
+/**
+ * Aggregate-only diagnostics for "why did this member get zero (or few)
+ * selections" — deliberately never a per-candidate log (see README /
+ * matching audit §9): just how many candidates existed, how many were
+ * excluded by each category of reason, and how many cleared each stage.
+ * Computed fresh every run and overwritten, not accumulated — this is a
+ * snapshot of the most recent run's outcome, not a history.
+ */
+export interface MemberRunDiagnostics {
+  /** Candidates actually considered this run (after the global Madrid/duplicate pool gate and maxCandidatesPerMember cap). */
+  candidatePoolSize: number;
+  /** First-failing-reason counts among candidates rejected by the reciprocal hard filter. */
+  hardFilterExcluded: Partial<Record<HardFilterFailureReason, number>>;
+  /** Counts among hard-filter survivors additionally excluded by pairHistory (cooldown, blocked, already mid-flow, already mutual). */
+  pairHistoryExcluded: Partial<Record<PairHistoryExclusionReason, number>>;
+  /** Passed both the hard filter and pairHistory eligibility. */
+  hardFilterSurvivors: number;
+  /** Of those survivors, how many scored at or above the cycle's quality threshold. */
+  aboveQualityThreshold: number;
+  /** Best score among all survivors, evaluated or not against the threshold — null if there were none. */
+  highestScore: number | null;
+}
+
 export interface MemberRunDocument {
   personId: string;
   status: MemberRunStatus;
@@ -76,6 +120,8 @@ export interface MemberRunDocument {
   proposalCount: number;
   candidateCount: number;
   error: string | null;
+  /** Absent/undefined on memberRuns written before this diagnostics feature existed. */
+  diagnostics?: MemberRunDiagnostics;
 }
 
 // --- Proposal -> Invitation -> Introduction lifecycle -----------------
@@ -116,6 +162,29 @@ export type ProposalStage =
   | "mutual_interested"
   | "expired";
 
+/**
+ * `algorithm`: the normal monthly matching cycle. `admin_manual`: the
+ * founder-suggestion exception (see manualSuggestion.ts) — the admin picked
+ * this specific candidate outside the normal 0-3-per-cycle flow. Both enter
+ * the identical Proposal -> Invitation -> Introduction lifecycle below;
+ * this only ever affects how the proposal was SELECTED, never what happens
+ * to it afterward.
+ */
+export type ProposalSource = "algorithm" | "admin_manual";
+
+/**
+ * Who made an admin_manual suggestion, when, and (optionally) why —
+ * internal-only, same as scoreBreakdown: never rendered to either member.
+ * `note` is a free-text operational reason ("met both at event") for the
+ * admin's own later reference, not shown to anyone else.
+ */
+export interface AdminSuggestionMeta {
+  adminUid: string;
+  adminEmail: string;
+  note: string | null;
+  createdAt: unknown;
+}
+
 export interface ProposalDocument {
   cycleId: string;
   recipientPersonId: string; // the active/paid member this was selected FOR
@@ -126,6 +195,10 @@ export interface ProposalDocument {
   candidateUid: string;
   score: number;
   scoringVersion: number;
+  /** Absent/undefined on proposals written before this field existed — treat as "algorithm". */
+  source?: ProposalSource;
+  /** Only present when source === "admin_manual". */
+  adminSuggestion?: AdminSuggestionMeta | null;
   // Internal-only observability (§10 of the matching audit) — never shown
   // to a member. Lets a later calibration pass see not just the final
   // score but why: how much of the total possible weight was actually
@@ -237,7 +310,8 @@ export type DuplicateCandidateSignal =
   | "linkedin_exact"
   | "photo_hash_exact";
 
-export type DuplicateCandidateStatus = "open" | "dismissed" | "escalated";
+/** "merged" is set only after a human confirms via identity.mergePeople — see the admin review route. */
+export type DuplicateCandidateStatus = "open" | "dismissed" | "escalated" | "merged";
 
 export interface DuplicateCandidateDocument {
   uidLow: string;
