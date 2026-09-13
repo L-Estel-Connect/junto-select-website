@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Section from "@/components/Section";
 import Wordmark from "@/components/Wordmark";
 import AuthButtons from "@/components/introduction/AuthButtons";
@@ -65,8 +66,24 @@ export default function IntroductionLandingPage() {
       </div>
 
       <p className="max-w-[38ch] text-xs leading-relaxed text-ink-soft">
-        Al continuar, aceptas que Junto Select guarde tu información de
-        forma privada para poder ofrecerte presentaciones seleccionadas.
+        Al continuar, aceptas nuestros{" "}
+        <Link
+          href="/terminos"
+          target="_blank"
+          className="underline decoration-hairline underline-offset-4 hover:text-ink"
+        >
+          Términos y Condiciones
+        </Link>{" "}
+        y nuestra{" "}
+        <Link
+          href="/privacidad"
+          target="_blank"
+          className="underline decoration-hairline underline-offset-4 hover:text-ink"
+        >
+          Política de Privacidad
+        </Link>
+        , que explican cómo guardamos tu información de forma privada para
+        poder ofrecerte presentaciones seleccionadas.
       </p>
     </Section>
   );

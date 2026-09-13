@@ -76,6 +76,11 @@ export default function SettingsSection({ uid }: { uid: string }) {
             Política de privacidad
           </Link>
         </div>
+        <div className="border-b border-hairline py-4">
+          <Link href="/aviso-legal" className={`text-[14px] ${linkClasses}`}>
+            Aviso legal
+          </Link>
+        </div>
       </SettingsGroup>
 
       <SettingsGroup title="Sesión">
