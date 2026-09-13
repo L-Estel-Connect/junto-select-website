@@ -11,6 +11,15 @@
 # but the same fallback means a build missing these values ships silently
 # broken auth instead of failing loudly.
 #
+# Keeps at least one instance warm at all times instead of the default
+# scale-to-zero behavior, so the first request after a period of no
+# traffic doesn't pay a cold-start penalty (container start + Next.js
+# server init) on top of the app's own load time. This introduces a
+# small baseline Cloud Run cost (one instance billed continuously)
+# instead of paying only for active request time.
+runConfig:
+  minInstances: 1
+
 # Values below are the real Select Dev (select-dev-508407) Web app config
 # from Firebase Console > Project settings > General > Your apps.
 # These are public/non-secret client config values — safe to commit as

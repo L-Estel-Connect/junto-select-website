@@ -3,14 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getOrCreateProfile, finalizeOnboarding } from "@/lib/introduction/profile";
+import { finalizeOnboarding } from "@/lib/introduction/profile";
+import { useSharedProfile } from "@/lib/introduction/profileCache";
 import {
   getPrerequisiteRedirect,
   isPhotosComplete,
   isPreferencesComplete,
   isPresentationComplete,
 } from "@/lib/introduction/completion";
-import type { ProfileDocument } from "@/lib/introduction/types";
 import { primaryButtonClasses } from "@/lib/styles";
 import ProfileCard from "./ProfileCard";
 import { IntroductionLoading } from "./RequireIntroductionAuth";
@@ -26,19 +26,9 @@ interface SectionInfo {
 
 export default function MemberProfileSection({ uid }: { uid: string }) {
   const router = useRouter();
-  const [profile, setProfile] = useState<ProfileDocument | null>(null);
+  const { profile, mutate } = useSharedProfile(uid);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getOrCreateProfile(uid).then((doc) => {
-      if (!cancelled) setProfile(doc);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [uid]);
 
   useEffect(() => {
     if (!profile) return;
@@ -61,9 +51,7 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
     setSaving(true);
     try {
       await finalizeOnboarding(uid);
-      setProfile((prev) =>
-        prev ? { ...prev, meta: { ...prev.meta, onboardingFinalized: true } } : prev,
-      );
+      mutate((prev) => ({ ...prev, meta: { ...prev.meta, onboardingFinalized: true } }));
     } catch {
       setError("No hemos podido guardar tu perfil. Inténtalo de nuevo.");
     } finally {

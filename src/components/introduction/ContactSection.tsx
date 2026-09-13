@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { SingleChoiceField, MultiChipField, FieldRow } from "./PreferenceFields";
 import { useAuth } from "@/lib/firebase/useAuth";
-import { getOrCreateProfile } from "@/lib/introduction/profile";
+import { useSharedProfile } from "@/lib/introduction/profileCache";
 import {
   isValidInstagram,
   isValidLinkedIn,
@@ -41,25 +41,24 @@ function needsLinkedIn(prefs: ContactPreferences): boolean {
 
 export default function ContactSection({ uid }: { uid: string }) {
   const { user } = useAuth();
+  const { profile, mutate } = useSharedProfile(uid);
   const [prefs, setPrefs] = useState<ContactPreferences | null>(null);
   const [phoneInput, setPhoneInput] = useState("");
   const [instagramInput, setInstagramInput] = useState("");
   const [linkedinInput, setLinkedinInput] = useState("");
   const [touched, setTouched] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    getOrCreateProfile(uid).then((doc) => {
-      if (cancelled) return;
-      setPrefs(doc.contactPreferences);
-      setPhoneInput(doc.contactPreferences.phone ?? "");
-      setInstagramInput(doc.contactPreferences.instagram ?? "");
-      setLinkedinInput(doc.contactPreferences.linkedin ?? "");
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [uid]);
+  // Adjusted during render (not in an effect) — initializes local state
+  // from the loaded profile exactly once, then locally controlled — same
+  // reasoning as PreferencesSection: this page autosaves per field, so
+  // local state (not `profile`) is the source of truth once loaded. See
+  // OnboardingWizard.tsx for why this pattern is safe and doesn't loop.
+  if (profile && prefs === null) {
+    setPrefs(profile.contactPreferences);
+    setPhoneInput(profile.contactPreferences.phone ?? "");
+    setInstagramInput(profile.contactPreferences.instagram ?? "");
+    setLinkedinInput(profile.contactPreferences.linkedin ?? "");
+  }
 
   if (!prefs) {
     return <IntroductionLoading />;
@@ -67,6 +66,7 @@ export default function ContactSection({ uid }: { uid: string }) {
 
   function persist(next: ContactPreferences) {
     setPrefs(next);
+    mutate((prev) => ({ ...prev, contactPreferences: next }));
     void saveContactPreferences(uid, next);
   }
 

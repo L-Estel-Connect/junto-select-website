@@ -10,18 +10,14 @@ import {
   NumberRangeField,
   SingleChoiceField,
 } from "./PreferenceFields";
-import { getOrCreateProfile } from "@/lib/introduction/profile";
+import { useSharedProfile } from "@/lib/introduction/profileCache";
 import { saveDealbreakers, savePreferences } from "@/lib/introduction/preferences";
 import {
   getNextOnboardingRoute,
   getPrerequisiteRedirect,
   isPreferencesComplete,
 } from "@/lib/introduction/completion";
-import type {
-  Dealbreakers,
-  Preferences,
-  ProfileDocument,
-} from "@/lib/introduction/types";
+import type { Dealbreakers, Preferences } from "@/lib/introduction/types";
 import { primaryButtonClasses } from "@/lib/styles";
 import { IntroductionLoading } from "./RequireIntroductionAuth";
 
@@ -70,22 +66,21 @@ const linkClasses =
 
 export default function PreferencesSection({ uid }: { uid: string }) {
   const router = useRouter();
-  const [profile, setProfile] = useState<ProfileDocument | null>(null);
+  const { profile, mutate } = useSharedProfile(uid);
   const [dealbreakers, setDealbreakers] = useState<Dealbreakers | null>(null);
   const [preferences, setPreferences] = useState<Preferences | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    getOrCreateProfile(uid).then((doc) => {
-      if (cancelled) return;
-      setProfile(doc);
-      setDealbreakers(doc.dealbreakers);
-      setPreferences(doc.preferences);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [uid]);
+  // Adjusted during render (not in an effect) — initializes local state
+  // from the loaded profile exactly once, then locally controlled: this
+  // page autosaves on every change, so it must not be clobbered by a
+  // later `mutate` from elsewhere re-deriving these from a stale `profile`
+  // snapshot (the local state IS the source of truth for what's on screen
+  // once editing has started). See OnboardingWizard.tsx for why this
+  // pattern is safe and doesn't loop.
+  if (profile && dealbreakers === null && preferences === null) {
+    setDealbreakers(profile.dealbreakers);
+    setPreferences(profile.preferences);
+  }
 
   useEffect(() => {
     if (!profile) return;
@@ -110,6 +105,7 @@ export default function PreferencesSection({ uid }: { uid: string }) {
     if (!profile || !dealbreakers) return;
     const next = { ...dealbreakers, ...patch };
     setDealbreakers(next);
+    mutate((prev) => ({ ...prev, dealbreakers: next }));
     void saveDealbreakers(uid, next, profile);
   }
 
@@ -117,6 +113,7 @@ export default function PreferencesSection({ uid }: { uid: string }) {
     if (!preferences) return;
     const next = { ...preferences, ...patch };
     setPreferences(next);
+    mutate((prev) => ({ ...prev, preferences: next }));
     void savePreferences(uid, next);
   }
 

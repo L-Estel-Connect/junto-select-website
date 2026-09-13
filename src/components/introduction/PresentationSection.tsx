@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase/client";
-import { getOrCreateProfile } from "@/lib/introduction/profile";
+import { useSharedProfile } from "@/lib/introduction/profileCache";
 import {
   approvePresentation,
   savePresentationPrompts,
 } from "@/lib/introduction/presentation";
 import { getNextOnboardingRoute, getPrerequisiteRedirect } from "@/lib/introduction/completion";
-import type { PresentationPrompts, ProfileDocument } from "@/lib/introduction/types";
+import type { PresentationPrompts } from "@/lib/introduction/types";
 import { primaryButtonClasses } from "@/lib/styles";
 import { IntroductionLoading } from "./RequireIntroductionAuth";
 
@@ -39,25 +39,27 @@ const MAX_PROMPT_LENGTH = 300;
 
 export default function PresentationSection({ uid }: { uid: string }) {
   const router = useRouter();
-  const [profile, setProfile] = useState<ProfileDocument | null>(null);
+  const { profile, mutate } = useSharedProfile(uid);
   const [prompts, setPrompts] = useState<PresentationPrompts | null>(null);
   const [reviewText, setReviewText] = useState("");
+  const [reviewTextInitialized, setReviewTextInitialized] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    getOrCreateProfile(uid).then((doc) => {
-      if (cancelled) return;
-      setProfile(doc);
-      setPrompts(doc.presentation.prompts);
-      setReviewText(doc.presentation.approvedText ?? doc.presentation.generatedText ?? "");
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [uid]);
+  // Adjusted during render (not in an effect) — initializes local state
+  // from the loaded profile exactly once. `prompts` is then autosaved
+  // locally, and `reviewText` becomes the person's own edit buffer,
+  // neither of which should reset just because `profile` changes
+  // reference elsewhere. See OnboardingWizard.tsx for why this pattern is
+  // safe and doesn't loop.
+  if (profile && prompts === null) {
+    setPrompts(profile.presentation.prompts);
+  }
+  if (profile && !reviewTextInitialized) {
+    setReviewText(profile.presentation.approvedText ?? profile.presentation.generatedText ?? "");
+    setReviewTextInitialized(true);
+  }
 
   useEffect(() => {
     if (!profile) return;
@@ -100,14 +102,10 @@ export default function PresentationSection({ uid }: { uid: string }) {
         throw new Error("generation_failed");
       }
       setReviewText(data.text);
-      setProfile((prev) =>
-        prev
-          ? {
-              ...prev,
-              presentation: { ...prev.presentation, generatedText: data.text!, status: "draft" },
-            }
-          : prev,
-      );
+      mutate((prev) => ({
+        ...prev,
+        presentation: { ...prev.presentation, generatedText: data.text!, status: "draft" },
+      }));
     } catch {
       setError(
         "No hemos podido generar tu presentación ahora mismo. Inténtalo de nuevo en unos minutos.",
@@ -123,14 +121,10 @@ export default function PresentationSection({ uid }: { uid: string }) {
     setSaving(true);
     try {
       await approvePresentation(uid, reviewText.trim(), profile);
-      setProfile((prev) =>
-        prev
-          ? {
-              ...prev,
-              presentation: { ...prev.presentation, approvedText: reviewText.trim(), status: "approved" },
-            }
-          : prev,
-      );
+      mutate((prev) => ({
+        ...prev,
+        presentation: { ...prev.presentation, approvedText: reviewText.trim(), status: "approved" },
+      }));
     } catch {
       setError("No hemos podido guardar tu presentación. Inténtalo de nuevo.");
     } finally {

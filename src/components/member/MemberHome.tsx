@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getOrCreateProfile } from "@/lib/introduction/profile";
+import { useSharedProfile } from "@/lib/introduction/profileCache";
 import { requireFinalized } from "@/lib/introduction/completion";
-import type { ProfileDocument } from "@/lib/introduction/types";
 import { primaryButtonClasses } from "@/lib/styles";
 import { IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
 
@@ -23,17 +22,7 @@ function StatusRow({ label, value }: { label: string; value: string }) {
 
 export default function MemberHome({ uid }: { uid: string }) {
   const router = useRouter();
-  const [profile, setProfile] = useState<ProfileDocument | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getOrCreateProfile(uid).then((doc) => {
-      if (!cancelled) setProfile(doc);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [uid]);
+  const { profile } = useSharedProfile(uid);
 
   useEffect(() => {
     if (!profile) return;

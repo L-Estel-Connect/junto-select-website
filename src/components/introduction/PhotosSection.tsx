@@ -10,9 +10,8 @@ import {
   uploadPhoto,
 } from "@/lib/introduction/photos";
 import { UnsupportedImageError } from "@/lib/introduction/imageProcessing";
-import { getOrCreateProfile } from "@/lib/introduction/profile";
+import { useSharedProfile } from "@/lib/introduction/profileCache";
 import { getNextOnboardingRoute, getPrerequisiteRedirect } from "@/lib/introduction/completion";
-import type { ProfileDocument } from "@/lib/introduction/types";
 import { primaryButtonClasses } from "@/lib/styles";
 import PrivatePhotoThumbnail from "./PrivatePhotoThumbnail";
 import { IntroductionLoading } from "./RequireIntroductionAuth";
@@ -29,20 +28,10 @@ interface PendingPhoto {
 
 export default function PhotosSection({ uid }: { uid: string }) {
   const router = useRouter();
-  const [profile, setProfile] = useState<ProfileDocument | null>(null);
+  const { profile, mutate } = useSharedProfile(uid);
   const [pending, setPending] = useState<PendingPhoto[]>([]);
   const [error, setError] = useState<string | null>(null);
   const objectUrlsRef = useRef(new Set<string>());
-
-  useEffect(() => {
-    let cancelled = false;
-    getOrCreateProfile(uid).then((doc) => {
-      if (!cancelled) setProfile(doc);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [uid]);
 
   useEffect(() => {
     if (!profile) return;
@@ -96,7 +85,7 @@ export default function PhotosSection({ uid }: { uid: string }) {
 
     try {
       const path = await uploadPhoto(uid, file, profile);
-      setProfile((prev) => (prev ? { ...prev, photos: [...prev.photos, path] } : prev));
+      mutate((prev) => ({ ...prev, photos: [...prev.photos, path] }));
       settlePending(id, { status: "saved" });
       window.setTimeout(() => removePending(id), 1200);
     } catch (err) {
@@ -115,9 +104,7 @@ export default function PhotosSection({ uid }: { uid: string }) {
     setError(null);
     try {
       await deletePhoto(uid, path, profile);
-      setProfile((prev) =>
-        prev ? { ...prev, photos: prev.photos.filter((p) => p !== path) } : prev,
-      );
+      mutate((prev) => ({ ...prev, photos: prev.photos.filter((p) => p !== path) }));
     } catch {
       setError("No hemos podido eliminar la foto. Inténtalo de nuevo.");
     }
@@ -128,11 +115,7 @@ export default function PhotosSection({ uid }: { uid: string }) {
     setError(null);
     try {
       await makePrimaryPhoto(uid, path, profile);
-      setProfile((prev) =>
-        prev
-          ? { ...prev, photos: [path, ...prev.photos.filter((p) => p !== path)] }
-          : prev,
-      );
+      mutate((prev) => ({ ...prev, photos: [path, ...prev.photos.filter((p) => p !== path)] }));
     } catch {
       setError("No hemos podido actualizar tus fotos. Inténtalo de nuevo.");
     }

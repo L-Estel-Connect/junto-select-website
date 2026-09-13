@@ -2,7 +2,6 @@
 
 import {
   deleteObject,
-  getBytes,
   ref,
   uploadBytes,
   type StorageReference,
@@ -12,6 +11,7 @@ import { updateProfileFields } from "./profile";
 import { computeProfileStatus } from "./completion";
 import type { ProfileDocument } from "./types";
 import { processPhotoFile } from "./imageProcessing";
+import { invalidatePhoto, seedPhotoCache } from "./photoCache";
 
 /**
  * Current business rule for how many photos a profile may have. Deliberately
@@ -28,9 +28,15 @@ function photoRef(uid: string, photoId: string): StorageReference {
 /**
  * Uploads one photo and appends it to the profile's photo list, then
  * recomputes and persists profile completion/eligibility. Photos are
- * stored as Storage paths (not download URLs) — see getPhotoObjectUrl for
+ * stored as Storage paths (not download URLs) — see photoCache.ts for
  * why: a download URL's token bypasses Storage Security Rules for anyone
  * who ever obtains it, which is wrong for something meant to stay private.
+ *
+ * Seeds the photo cache directly from the already-in-memory processed
+ * `blob` before returning — the browser already has these exact bytes, so
+ * the `PrivatePhotoThumbnail` that mounts for this new path an instant
+ * later renders immediately instead of re-downloading what was just
+ * uploaded.
  */
 export async function uploadPhoto(
   uid: string,
@@ -44,6 +50,7 @@ export async function uploadPhoto(
   });
 
   const path = `profiles/${uid}/photos/${photoId}`;
+  seedPhotoCache(path, blob);
   const nextPhotos = [...profile.photos, path];
 
   await persistPhotos(uid, nextPhotos, profile);
@@ -64,6 +71,7 @@ export async function deletePhoto(
   // references it again — so that's the safe order to fail in.
   const nextPhotos = profile.photos.filter((p) => p !== path);
   await persistPhotos(uid, nextPhotos, profile);
+  invalidatePhoto(path);
   await deleteObject(ref(storage, path)).catch(() => {
     // Already gone, or this cleanup step failed — either way the
     // Firestore list (already updated above) is the source of truth for
@@ -92,15 +100,4 @@ async function persistPhotos(
     { photos },
     { photosComplete: photos.length >= 1, profileStatus },
   );
-}
-
-/**
- * Fetches a private photo's bytes via the authenticated Storage SDK
- * (rule-checked, unlike a public download URL) and returns a local object
- * URL for display. Caller must revoke it (URL.revokeObjectURL) when done.
- */
-export async function getPhotoObjectUrl(path: string): Promise<string> {
-  const bytes = await getBytes(ref(storage, path));
-  const blob = new Blob([bytes], { type: "image/jpeg" });
-  return URL.createObjectURL(blob);
 }

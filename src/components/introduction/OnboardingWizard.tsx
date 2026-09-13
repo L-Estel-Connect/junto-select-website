@@ -6,12 +6,8 @@ import { Timestamp } from "firebase/firestore";
 import { aboutMeSteps } from "@/lib/introduction/aboutMeFields";
 import { isEligibleAge } from "@/lib/introduction/age";
 import { getNextOnboardingRoute } from "@/lib/introduction/completion";
-import {
-  getOrCreateProfile,
-  markAboutMeComplete,
-  saveStepAnswer,
-} from "@/lib/introduction/profile";
-import type { ProfileDocument } from "@/lib/introduction/types";
+import { markAboutMeComplete, saveStepAnswer } from "@/lib/introduction/profile";
+import { useSharedProfile } from "@/lib/introduction/profileCache";
 import IneligibleAge from "./IneligibleAge";
 import { IntroductionLoading } from "./RequireIntroductionAuth";
 import StepQuestion from "./StepQuestion";
@@ -30,30 +26,38 @@ function getByPath(obj: unknown, path: string): unknown {
 
 export default function OnboardingWizard({ uid }: { uid: string }) {
   const router = useRouter();
-  const [profile, setProfile] = useState<ProfileDocument | null>(null);
-  const [stepIndex, setStepIndex] = useState(0);
+  const { profile, mutate } = useSharedProfile(uid);
+  // null = not yet initialized from the loaded profile. Only set once —
+  // after that, stepIndex is locally controlled by this wizard, and must
+  // NOT reset just because `profile` reference changes (e.g. a `mutate`
+  // from this same component's own save, or a different tab's write
+  // notifying this cache entry).
+  const [stepIndex, setStepIndex] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ineligible, setIneligible] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    getOrCreateProfile(uid).then((doc) => {
-      if (cancelled) return;
-      setProfile(doc);
-      setStepIndex(
-        Math.min(doc.meta.onboardingStepIndex, aboutMeSteps.length),
-      );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [uid]);
+  // Adjusting state during render (not in an effect) — the React-endorsed
+  // pattern for "initialize local state from an async value exactly
+  // once": https://react.dev/learn/you-might-not-need-an-effect. Setting
+  // state here re-renders immediately with the new value before anything
+  // commits, and the `stepIndex === null` guard is false on that very
+  // next render, so this never loops and never fires as an extra
+  // commit/effect the way doing this in a useEffect would.
+  if (profile && stepIndex === null) {
+    setStepIndex(Math.min(profile.meta.onboardingStepIndex, aboutMeSteps.length));
+  }
 
   const totalSteps = aboutMeSteps.length;
-  const currentStep = aboutMeSteps[stepIndex];
+  // Falls back to step 0 only before `stepIndex` is initialized from the
+  // loaded profile — never actually rendered/used at that point, since
+  // the loading guard below returns before reaching any JSX or handler
+  // that reads `currentStep`. Keeps `currentStep`'s type exactly as
+  // before (no `| undefined`) rather than threading an extra null case
+  // through every existing use of it.
+  const currentStep = aboutMeSteps[stepIndex ?? 0];
   const isComplete = Boolean(
-    profile && (profile.meta.aboutMeComplete || stepIndex >= totalSteps),
+    profile && (profile.meta.aboutMeComplete || (stepIndex !== null && stepIndex >= totalSteps)),
   );
 
   useEffect(() => {
@@ -95,7 +99,7 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, currentStep, saving]);
 
-  if (!profile || isComplete) {
+  if (!profile || stepIndex === null || isComplete) {
     return <IntroductionLoading />;
   }
 
@@ -104,6 +108,7 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
   }
 
   async function handleAnswer(value: unknown) {
+    if (stepIndex === null) return; // guarded against in render — defensive only
     setError(null);
 
     // Age eligibility is checked before anything is saved — a person
@@ -155,22 +160,14 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
 
     try {
       await saveStepAnswer(uid, fields, nextIndex);
-      setProfile((prev) =>
-        prev
-          ? {
-              ...prev,
-              meta: { ...prev.meta, onboardingStepIndex: nextIndex },
-            }
-          : prev,
-      );
+      mutate((prev) => ({
+        ...prev,
+        meta: { ...prev.meta, onboardingStepIndex: nextIndex },
+      }));
 
       if (nextIndex >= totalSteps) {
         await markAboutMeComplete(uid);
-        setProfile((prev) =>
-          prev
-            ? { ...prev, meta: { ...prev.meta, aboutMeComplete: true } }
-            : prev,
-        );
+        mutate((prev) => ({ ...prev, meta: { ...prev.meta, aboutMeComplete: true } }));
       } else {
         setStepIndex(nextIndex);
       }
@@ -192,7 +189,7 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
   }
 
   function handleBack() {
-    if (stepIndex === 0) return;
+    if (stepIndex === null || stepIndex === 0) return;
     setError(null);
     setStepIndex(stepIndex - 1);
   }
