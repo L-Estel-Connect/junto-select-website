@@ -27,13 +27,57 @@ service cloud.firestore {
     // read a profile yet, since matching doesn't exist. Later stages will
     // add narrow, explicit read access for a legitimate match, never a
     // blanket "any signed-in user" rule.
+    // `meta.searchStatus` (billing entitlement — receives own proposals or
+    // not) must never move on a client-submitted write: only the Stripe
+    // webhook sets it, via the Admin SDK, which bypasses this rule
+    // entirely. Without this, a signed-in user could set their own
+    // `meta.searchStatus: "active_search"` by hand-building a Firestore
+    // SDK call and skip paying altogether, since `update` below otherwise
+    // allows arbitrary changes to the rest of the document. There is no
+    // legitimate client write path for this field today (it's only ever
+    // set to its default "passive" at profile *creation*, never updated
+    // from the client afterward), so this closes a real gap at zero cost
+    // to existing behavior.
+    //
+    // `meta.profileStatus` (matching eligibility) is NOT locked here even
+    // though it has the same shape of risk — see README "Known
+    // limitation, now actually live" — because, unlike searchStatus, it
+    // genuinely IS written by the client SDK today, from three legitimate
+    // in-product flows (finishing photos, preferences, or the AI
+    // presentation step each recompute and save it). Locking it the same
+    // way would break onboarding itself, which is explicitly out of scope
+    // to touch in this change. Flagged again in the final report as a
+    // pre-existing gap, not introduced or worsened here.
+    function searchStatusUnchanged() {
+      return request.resource.data.meta.searchStatus == resource.data.meta.searchStatus;
+    }
+
     match /profiles/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
-      allow create, update: if request.auth != null
+      allow create: if request.auth != null
         && request.auth.uid == uid
         && birthDateIsEligible(request.resource.data.private.birthDate);
+      allow update: if request.auth != null
+        && request.auth.uid == uid
+        && birthDateIsEligible(request.resource.data.private.birthDate)
+        && searchStatusUnchanged();
       allow delete: if false;
     }
+
+    // `billing/{uid}` — Stripe-derived membership/entitlement mirror.
+    // Stripe itself is the source of truth; this is a read-optimized cache
+    // written exclusively by server routes (checkout/portal session
+    // creation, the webhook) using the Admin SDK, which bypasses this rule
+    // entirely. The owner may read their own billing state; nobody can
+    // write it from a client, same pattern as `proposals`/`invitations`.
+    match /billing/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // processedStripeEvents/{eventId}: webhook idempotency bookkeeping
+    // only, Admin-SDK-only, no legitimate client read or write path — left
+    // uncovered on purpose and falls through to the default-deny below.
 
     // A member-facing proposal from the V1 matching engine. Recipient-only
     // read (matched against the uid the proposal was actually generated
