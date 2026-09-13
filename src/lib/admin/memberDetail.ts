@@ -11,6 +11,7 @@ import { resolvePersonId } from "@/lib/matching/identity";
 import { loadPairHistoryMapFor } from "@/lib/matching/pairHistory";
 import { isProfileInEligiblePool } from "@/lib/matching/eligibility";
 import { getCurrentCycle } from "@/lib/admin/matchingCycles";
+import type { BillingDocument } from "@/lib/billing/types";
 import { ageOf, getProfileRow } from "./profiles";
 
 const MONTHS_ES = [
@@ -199,6 +200,12 @@ export interface MemberDetail {
   profile: AdminProfileView;
   interactions: MatchingInteraction[];
   currentCycle: CurrentCycleStatus | null;
+  // Read-only mirror of billing/{uid} — Stripe remains the source of
+  // truth; the admin dashboard never writes this, only displays it (spec:
+  // "view-only, no fabrication"). Null means the member has never started
+  // a checkout — distinct from an explicit BillingDocument with
+  // status: "none".
+  billing: BillingDocument | null;
 }
 
 export async function getMemberDetail(uid: string): Promise<MemberDetail | null> {
@@ -207,12 +214,14 @@ export async function getMemberDetail(uid: string): Promise<MemberDetail | null>
   const { profile } = row;
   const personId = resolvePersonId(uid, profile);
 
-  const [asRecipientSnap, asCandidateSnap, pairHistoryMap, currentCycle] = await Promise.all([
+  const [asRecipientSnap, asCandidateSnap, pairHistoryMap, currentCycle, billingSnap] = await Promise.all([
     adminDb.collection("proposals").where("recipientPersonId", "==", personId).get(),
     adminDb.collection("proposals").where("candidatePersonId", "==", personId).get(),
     loadPairHistoryMapFor(personId),
     getCurrentCycle(),
+    adminDb.doc(`billing/${uid}`).get(),
   ]);
+  const billing = billingSnap.exists ? (billingSnap.data() as BillingDocument) : null;
 
   const proposalDocs = new Map<string, ProposalDocument>();
   for (const d of [...asRecipientSnap.docs, ...asCandidateSnap.docs]) {
@@ -316,5 +325,6 @@ export async function getMemberDetail(uid: string): Promise<MemberDetail | null>
     profile: toAdminProfileView(uid, personId, profile),
     interactions,
     currentCycle: currentCycleStatus,
+    billing,
   };
 }

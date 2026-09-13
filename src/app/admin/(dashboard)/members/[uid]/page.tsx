@@ -22,6 +22,24 @@ import {
   PAIR_HISTORY_REASON_LABELS,
 } from "@/lib/admin/labels";
 import type { MemberDetail } from "@/lib/admin/memberDetail";
+import { PLAN_DISPLAY } from "@/lib/billing/plans";
+
+const BILLING_STATUS_LABELS: Record<string, string> = {
+  none: "Sin membresía",
+  active: "Activa",
+  trialing: "En prueba",
+  past_due: "Pago pendiente (reintentando)",
+  canceled: "Cancelada",
+  incomplete: "Pago incompleto",
+  incomplete_expired: "Pago incompleto (expirado)",
+  unpaid: "Impagada",
+};
+
+function adminFormatDate(value: unknown): string {
+  const ts = value as { toDate?: () => Date } | null | undefined;
+  const date = ts?.toDate ? ts.toDate() : null;
+  return date ? date.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" }) : "—";
+}
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -91,6 +109,31 @@ export default function MemberDetailPage({ params }: { params: Promise<{ uid: st
           Sugerir alguien
         </button>
       </div>
+
+      {/* Membresía — read-only mirror of Stripe, never editable here */}
+      <section className="mt-10">
+        <SectionHeading>Membresía</SectionHeading>
+        <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-hairline bg-white p-5 sm:grid-cols-3">
+          <Field
+            label="Estado"
+            value={member.billing ? (BILLING_STATUS_LABELS[member.billing.status] ?? member.billing.status) : "Sin membresía"}
+          />
+          <Field label="Plan" value={member.billing?.planKey ? PLAN_DISPLAY[member.billing.planKey].label : ""} />
+          <Field
+            label={member.billing?.cancelAtPeriodEnd ? "Finaliza el" : "Próxima renovación"}
+            value={member.billing?.currentPeriodEnd ? adminFormatDate(member.billing.currentPeriodEnd) : ""}
+          />
+        </div>
+        {member.billing?.status === "past_due" && (
+          <p className="mt-2 text-[13px] text-[#8a3b3b]">
+            Último cobro fallido — Stripe está reintentando automáticamente.
+          </p>
+        )}
+        <p className="mt-2 text-[12px] text-ink-soft">
+          Stripe es la fuente de la verdad. Esta vista es solo de lectura — cualquier cambio de plan,
+          cancelación o reembolso se gestiona en el Stripe Dashboard, nunca desde aquí.
+        </p>
+      </section>
 
       {/* A. Perfil */}
       <section className="mt-10">
