@@ -100,3 +100,45 @@ env:
     value: "lara.dewavrin@gmail.com"
     availability:
       - RUNTIME
+
+  # --- Stripe (Paid Membership V1) ---
+  # See README "Stripe membership billing" for the full setup checklist.
+  # ALL of this must point at TEST MODE keys/prices until the user has
+  # explicitly reviewed and approved going live — nothing in this repo
+  # enables Stripe Live Mode by itself.
+
+  # Server-only secret key. RUNTIME only, Secret Manager — never a plain
+  # `value`, same treatment as ANTHROPIC_API_KEY above. Starts with
+  # `sk_test_` in test mode.
+  - variable: STRIPE_SECRET_KEY
+    secret: STRIPE_SECRET_KEY
+    availability:
+      - RUNTIME
+
+  # Signing secret for the webhook endpoint (`/api/billing/webhook`),
+  # obtained when the endpoint is registered in the Stripe Dashboard (or
+  # `stripe listen` locally). Server-only, RUNTIME only, Secret Manager.
+  - variable: STRIPE_WEBHOOK_SECRET
+    secret: STRIPE_WEBHOOK_SECRET
+    availability:
+      - RUNTIME
+
+  # The three sellable plans' Stripe Price IDs — the server-side allowlist
+  # `src/lib/stripe/plans.ts` maps a client-supplied plan key to one of
+  # these; the client can never supply a Price ID or amount directly. Not
+  # secrets (a Price ID alone can't charge anything without the secret key
+  # above), so plain `value`s, same treatment as ADMIN_ALLOWLIST_EMAILS.
+  # "SET_ME" placeholders — replace with the real TEST MODE Price IDs
+  # created in the Stripe Dashboard (see README) before this can work.
+  - variable: STRIPE_PRICE_MONTHLY
+    value: "SET_ME"
+    availability:
+      - RUNTIME
+  - variable: STRIPE_PRICE_THREE_MONTH
+    value: "SET_ME"
+    availability:
+      - RUNTIME
+  - variable: STRIPE_PRICE_SIX_MONTH
+    value: "SET_ME"
+    availability:
+      - RUNTIME

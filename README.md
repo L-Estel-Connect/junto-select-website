@@ -250,25 +250,25 @@ flow (via `requireFinalized()` in `completion.ts`) if onboarding isn't
 finished yet; `/member/profile` has its own finer-grained prerequisite
 check since it's also the finalize step.
 
-**Proposals, Connections, and Plan are intentionally empty-state shells**
-— no matching engine, no mutual-interest logic, and no billing exist yet.
-Each page's own file comment says what it's structurally ready for later
-(e.g. Proposals' eventual Nuevas/Pendientes/Pasadas sections) without
-building UI for data that doesn't exist. Settings' "Cancelar suscripción"
-(Plan) and "Eliminar perfil" (Settings) are both disabled placeholders —
-neither does anything yet, on purpose; see "What a real Plan/deletion
-flow would need" below for what's actually missing before either could
-be real.
+**Proposals and Connections are intentionally empty-state shells** — no
+mutual-interest UI yet (the server-side lifecycle exists, see "Monthly
+matching engine" below). Each page's own file comment says what it's
+structurally ready for later. Settings' "Eliminar perfil" is a disabled
+placeholder — deleting an account safely (Stripe subscription, Storage
+photos, matching history) is real, unbuilt scope, deliberately left for
+later.
 
-### What a real "Mi plan" would need
+### "Mi plan" — real billing state (see "Stripe membership billing" below)
 
-Nothing about membership tier or billing exists in the data model today
-— Plan's "Perfil pasivo" is a hardcoded placeholder, not a read of real
-state. Before this page can show anything real, the profile (or a
-sibling document) needs at least: a membership tier field (e.g. `"free"
-| "active_select"`), a renewal/expiry date, and whatever Stripe (or
-equivalent) sends via webhook to keep that field in sync — none of which
-this pass builds.
+`/member/plan` (`PlanSection.tsx`) now reads real membership state from
+`billing/{uid}` instead of a hardcoded "Perfil pasivo" placeholder:
+passive/free members see the three paid plans and a Stripe Checkout button;
+active members see their real plan, renewal date, and a "Gestionar mi
+membresía" button into the Stripe Customer Portal. "Cancelar suscripción"
+as a standalone button was replaced by that Portal link — Stripe's
+hosted portal is both simpler to build correctly and is where Stripe's own
+payment-method-update/dunning flows already live, so member-facing
+cancellation never needed a bespoke page.
 
 ### Contact preferences
 
@@ -704,6 +704,169 @@ below); everything else under `matchingCycles`, `memberRuns`,
 default-deny wildcard rule, since it's Admin-SDK-only with no legitimate
 client path.
 
+## Stripe membership billing (Paid Membership V1)
+
+`src/lib/billing/`, `src/lib/stripe/`, `src/app/api/billing/*` — the paid
+membership that gates `meta.searchStatus` (see above: "flipped to
+`active_search` only by an explicit allowlist entry today, and by a future
+billing webhook once Stripe exists" — that webhook now exists). **Stripe
+Checkout + the Stripe Customer Portal, in TEST MODE only**; nothing in
+this codebase can activate Stripe Live Mode, and every route/test in this
+section was built and run against test-mode Stripe and the Firebase
+Emulator Suite, never real customer data.
+
+### Product model (do not change without explicit sign-off)
+
+Three plans, each a single **upfront** charge for its full duration,
+auto-renewing at the same cadence and the same price — technically a
+Stripe recurring Price whose *billing interval itself* is 1/3/6 months,
+never three separate monthly installments dressed up as one plan. No
+12-month plan exists. See `src/lib/billing/plans.ts` for the exact prices/
+copy (49 €/1 mes, 129 €/3 meses, 234 €/6 meses).
+
+An active membership entitles a member to **up to 3 proposals per
+calendar month, never accumulating and never multiplied by plan length**
+— a 6-month plan does not mean 18 proposals. This falls out of the
+existing architecture for free, with no new quota-tracking code: `MAX_
+PROPOSALS_PER_MEMBER` (matching/config.ts) is already enforced **per
+monthly cycle** regardless of billing period, and billing only ever
+flips the boolean `meta.searchStatus`, never a counter.
+
+### The one thing billing is allowed to touch
+
+**BILLING ENTITLEMENT (Stripe-derived) is architecturally separate from
+MATCHING ELIGIBILITY (profile completeness, Madrid market, duplicate
+status, blocks — `isProfileInEligiblePool` in `matching/eligibility.ts`).**
+The webhook (`/api/billing/webhook`) writes exactly one thing on the
+`profiles/{uid}` document: `meta.searchStatus` (`"active_search"` while a
+subscription is `active`/`trialing`/`past_due`, `"passive"` otherwise). It
+never touches `meta.profileStatus`, `meta.duplicateStatus`, or any
+`eligibility.ts` check. A member who pays but has an incomplete profile,
+lives outside Madrid, or is a suspected duplicate still receives zero
+proposals — `matching/engine.ts`'s `loadEligiblePool()` filters on those
+fields entirely independently, upstream of the `searchStatus` check in
+`selectRecipients()`. Paying can never be a way to skip profile review.
+
+### Data model
+
+- **`billing/{uid}`** (`src/lib/billing/types.ts`) — a Firestore document,
+  deliberately separate from `profiles/{uid}`: owner-readable, but
+  `write: if false` in `firestore.rules` (same pattern as `proposals`/
+  `invitations`), so no client can ever forge their own entitlement.
+  Written exclusively by `/api/billing/webhook` (and, for
+  `stripeCustomerId`/`termsAcceptance` only, by `create-checkout-session`)
+  using the Admin SDK. Stripe remains the source of truth for everything
+  else — this is a read-optimized mirror, not a second ledger: every write
+  sets the full current state read from Stripe, nothing is ever
+  incremented or derived locally.
+- **`processedStripeEvents/{eventId}`** — webhook idempotency bookkeeping
+  only (Stripe's delivery is at-least-once). Admin-SDK-only, falls through
+  to the default-deny rule.
+- **`firestore.rules`**: `profiles/{uid}`'s `update` rule now additionally
+  requires `meta.searchStatus` to be unchanged from the existing document —
+  closing a real, previously-unenforced gap (a signed-in user could
+  otherwise have set their own `active_search` by hand-building a
+  Firestore SDK call). `meta.profileStatus` is deliberately **not** locked
+  the same way, since — unlike `searchStatus` — it genuinely is written by
+  the client SDK today from legitimate onboarding flows (finishing photos/
+  preferences/presentation); see "Known limitation" above, unchanged by
+  this pass.
+
+### Server-side price allowlist (price-injection prevention)
+
+The client only ever sends an opaque `planKey`
+(`"monthly" | "three_month" | "six_month"`) — never a Price ID, amount, or
+currency. `src/lib/stripe/plans.ts`'s `getStripePriceId()` is the sole,
+server-only mapping from that key to a real Stripe Price ID (from an env
+var); Stripe itself computes the charge from that Price. There is no code
+path anywhere that accepts a client-supplied Price ID or amount.
+
+### Routes
+
+- **`POST /api/billing/create-checkout-session`** — authenticated
+  (Firebase ID token, same Bearer pattern as `generate-presentation`).
+  Body: `{ planKey, termsAccepted: true }`. Rejects if terms weren't
+  accepted, if a subscription is already active/trialing/past_due (send
+  them to the Portal instead), or if the plan's Price ID isn't configured.
+  Creates (or reuses) a Stripe Customer tagged `metadata.firebaseUid`,
+  records `termsAcceptance` (version/plan/timestamp) on `billing/{uid}`,
+  and returns a Checkout Session URL. `success_url`/`cancel_url` only pick
+  which transient banner `/member/plan` shows — never proof of payment.
+- **`POST /api/billing/create-portal-session`** — authenticated. Looks up
+  `billing/{uid}.stripeCustomerId` server-side (never a client-supplied
+  customer id) and returns a Stripe Customer Portal URL — the preferred,
+  Stripe-hosted path for plan management/cancellation, so this app never
+  needed a bespoke cancellation flow or state machine.
+- **`POST /api/billing/webhook`** — signature-verified
+  (`stripe.webhooks.constructEvent`) before anything is parsed, then
+  de-duplicated by Stripe event id. Handles `checkout.session.completed`,
+  `customer.subscription.created|updated|deleted`, and
+  `invoice.payment_failed|paid`. Payment-failure handling is entirely
+  Stripe's own dunning/retry lifecycle — the subscription's `status` field
+  (`past_due` → retries → `active` again, or eventually `canceled`/
+  `unpaid`) is mirrored as-is; there is no custom retry/grace-period state
+  machine in this codebase. A member in `past_due` is treated as still
+  entitled (keeps receiving proposals) while Stripe retries, with a
+  "revisa tu método de pago" banner on `/member/plan` — a senior-judgment
+  call made explicit here, not hidden: the alternative (cutting access on
+  the very first failed charge) is harsher than Stripe's own product
+  design intends and was not specified either way.
+
+### UI
+
+`/member/plan` (`PlanSection.tsx`) — passive members see the three plans,
+required disclosures, a terms checkbox, and a Checkout button; active
+members see their real plan/status/renewal (from a live `billing/{uid}`
+Firestore listener — see `useBilling.ts` — so the screen updates itself
+the instant the webhook lands, no polling) and a "Gestionar mi membresía"
+button into the Portal. The admin member-detail page
+(`/admin/members/[uid]`) shows the same plan/status/renewal read-only,
+explicitly labeled as Stripe-sourced and non-editable.
+
+### Manual setup required before this can process a real (test-mode) payment
+
+1. In the Stripe Dashboard (**test mode**), create one Product with three
+   recurring Prices — 49€/1 month, 129€/3 months, 234€/6 months (Stripe
+   supports an arbitrary `interval_count` on a `month` interval, so each
+   plan is genuinely "charge every N months," not N monthly installments).
+2. Set `STRIPE_PRICE_MONTHLY`/`STRIPE_PRICE_THREE_MONTH`/
+   `STRIPE_PRICE_SIX_MONTH` in `apphosting.yaml` to those three Price IDs
+   (replacing the `"SET_ME"` placeholders).
+3. Create `STRIPE_SECRET_KEY` (the test-mode secret key) and
+   `STRIPE_WEBHOOK_SECRET` in Secret Manager, exactly like `ANTHROPIC_API_KEY`:
+   ```bash
+   firebase apphosting:secrets:set STRIPE_SECRET_KEY --project select-dev-508407
+   firebase apphosting:secrets:grantaccess STRIPE_SECRET_KEY --project select-dev-508407 --backend <backend-id>
+   firebase apphosting:secrets:set STRIPE_WEBHOOK_SECRET --project select-dev-508407
+   firebase apphosting:secrets:grantaccess STRIPE_WEBHOOK_SECRET --project select-dev-508407 --backend <backend-id>
+   ```
+4. In the Stripe Dashboard, register a webhook endpoint at
+   `https://<your-app-hosting-domain>/api/billing/webhook` subscribed to:
+   `checkout.session.completed`, `customer.subscription.created`,
+   `customer.subscription.updated`, `customer.subscription.deleted`,
+   `invoice.payment_failed`, `invoice.paid` — copy its signing secret into
+   `STRIPE_WEBHOOK_SECRET` above.
+5. Enable the Stripe Customer Portal (Dashboard → Settings → Billing →
+   Customer portal) and turn on "Cancel subscription."
+6. Deploy the updated `firestore.rules` (new `billing/{uid}` rule +
+   `searchStatus` lock — see "Deploying Firestore and Storage rules").
+
+Locally against the emulators, use the Stripe CLI:
+`stripe listen --forward-to localhost:3000/api/billing/webhook` (prints a
+local webhook secret to use as `STRIPE_WEBHOOK_SECRET`), and
+`stripe trigger checkout.session.completed` / edit a test subscription's
+status in the Stripe Dashboard to exercise the other event types.
+
+### Known issue — explicitly out of scope for this pass
+
+The "¿Cuál es tu relación con Madrid?" (`marketAvailability`) onboarding
+step's four options are not clickable for at least one legacy-account
+recovery path. This is a pre-existing onboarding bug, unrelated to
+billing, and was explicitly left unfixed here per direct instruction — it
+does not block a member from ever having completed onboarding earlier
+under the older schema, only affects that one recovery path going
+forward. **TODO, tracked, not fixed in this change.**
+
 ## Admin Dashboard (`/admin`)
 
 An operational home for the founder to understand Junto Select at a
@@ -896,10 +1059,13 @@ override; user impersonation; bulk profile editing; starting a **new**
 matching cycle or changing an existing one's mode/config from the
 dashboard (only *retrying* an existing cycle with its own stored
 mode/config is exposed — see above); an "unblock pair" action (mirrors
-the existing matching-engine route, which also has none); Stripe/billing
-management (so `searchStatus` stays read-only here, exactly as it is
-everywhere else in the app); any charting/analytics beyond the funnel
-counts `analytics.ts` already computed; outcome-feedback tracking on
+the existing matching-engine route, which also has none); any Stripe/
+billing MANAGEMENT action (the member detail page shows plan/status/
+renewal read-only — see "Stripe membership billing" below — but there is
+no cancel, refund, or plan-change control anywhere in `/admin`; that
+always happens in the Stripe Dashboard or the member's own Customer
+Portal, never here); any charting/analytics beyond the funnel counts
+`analytics.ts` already computed; outcome-feedback tracking on
 introductions.
 
 ### Data access approach (V1 scale)
