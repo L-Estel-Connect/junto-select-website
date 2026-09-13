@@ -18,8 +18,20 @@ export type BillingStatus =
 
 export interface TermsAcceptance {
   version: string;
+  /** Separate from `version` (Terms) since the two documents can change independently. */
+  privacyVersion: string;
   planKey: PlanKey;
   acceptedAt: unknown; // Firestore Timestamp
+  /**
+   * The member's express request (RDL 1/2007 art. 71/103) that the paid
+   * search service begin immediately, before the 14-day statutory
+   * withdrawal period ends — captured as its own explicit checkbox at
+   * checkout, distinct from ordinary Terms acceptance. Always `true` when
+   * present (the checkout route requires it before creating a session);
+   * this field exists so the record has a timestamped, versioned trace of
+   * that specific consent, not just of accepting the Terms in general.
+   */
+  immediateServiceRequested: boolean;
 }
 
 /**

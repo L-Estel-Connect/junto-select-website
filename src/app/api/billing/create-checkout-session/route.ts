@@ -8,8 +8,10 @@ import type { BillingDocument } from "@/lib/billing/types";
 
 export const runtime = "nodejs";
 
-/** Bumped only if the terms/disclosures copy shown before checkout changes materially. */
-const CURRENT_TERMS_VERSION = "2026-09-membership-v1";
+/** Bumped only if the Terms & Conditions text changes materially. */
+const CURRENT_TERMS_VERSION = "2026-09-terminos-v1";
+/** Bumped only if the Privacy Policy text changes materially — independent of CURRENT_TERMS_VERSION. */
+const CURRENT_PRIVACY_VERSION = "2026-09-privacidad-v1";
 
 /**
  * Starts a paid-membership subscription. Two things make price injection
@@ -31,7 +33,7 @@ export async function POST(request: Request) {
   if (auth instanceof NextResponse) return auth;
   const { uid, email } = auth;
 
-  let body: { planKey?: unknown; termsAccepted?: unknown };
+  let body: { planKey?: unknown; termsAccepted?: unknown; immediateServiceRequested?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -45,6 +47,16 @@ export async function POST(request: Request) {
 
   if (body.termsAccepted !== true) {
     return NextResponse.json({ ok: false, error: "terms_not_accepted" }, { status: 400 });
+  }
+
+  // A second, separate affirmative request — distinct from ordinary Terms
+  // acceptance — that the paid search service begin immediately, before
+  // Spain's statutory 14-day withdrawal period (RDL 1/2007) ends. Required
+  // because search/matching genuinely starts as soon as payment succeeds;
+  // without this express request on record, starting the service early
+  // wouldn't be properly documented as the consumer's own informed choice.
+  if (body.immediateServiceRequested !== true) {
+    return NextResponse.json({ ok: false, error: "immediate_service_not_requested" }, { status: 400 });
   }
 
   let priceId: string;
@@ -89,7 +101,13 @@ export async function POST(request: Request) {
   await billingRef.set(
     {
       stripeCustomerId: customerId,
-      termsAcceptance: { version: CURRENT_TERMS_VERSION, planKey, acceptedAt: now },
+      termsAcceptance: {
+        version: CURRENT_TERMS_VERSION,
+        privacyVersion: CURRENT_PRIVACY_VERSION,
+        planKey,
+        acceptedAt: now,
+        immediateServiceRequested: true,
+      },
       updatedAt: now,
       createdAt: billing?.createdAt ?? now,
       status: billing?.status ?? "none",
