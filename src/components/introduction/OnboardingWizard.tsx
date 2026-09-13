@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Timestamp } from "firebase/firestore";
-import { aboutMeSteps } from "@/lib/introduction/aboutMeFields";
+import { aboutMeSteps, type AboutMeStep } from "@/lib/introduction/aboutMeFields";
 import { isEligibleAge } from "@/lib/introduction/age";
-import { getNextOnboardingRoute } from "@/lib/introduction/completion";
+import { getNextOnboardingRoute, isAboutMeComplete } from "@/lib/introduction/completion";
 import { markAboutMeComplete, saveStepAnswer } from "@/lib/introduction/profile";
 import { useSharedProfile } from "@/lib/introduction/profileCache";
+import { logDebugEvent } from "@/lib/introduction/onboardingDebug";
+import type { ProfileDocument } from "@/lib/introduction/types";
 import IneligibleAge from "./IneligibleAge";
 import { IntroductionError, IntroductionLoading } from "./RequireIntroductionAuth";
 import StepQuestion from "./StepQuestion";
@@ -22,6 +24,49 @@ function getByPath(obj: unknown, path: string): unknown {
           : undefined,
       obj,
     );
+}
+
+/**
+ * Whether `step` already has a real answer on `profile` — the per-step
+ * building block for `firstUnansweredStepIndex` below. Mirrors the
+ * per-field checks in completion.ts's `isAboutMeComplete` (the
+ * authoritative definition also used by the matching engine and
+ * `getNextOnboardingRoute`), rather than re-deriving its own notion of
+ * "answered".
+ */
+function isStepAnswered(profile: ProfileDocument, step: AboutMeStep): boolean {
+  if (step.type === "children") return profile.visible.hasChildren !== null;
+  if (step.type === "childrenAges") {
+    if (profile.visible.hasChildren !== true) return true; // doesn't apply
+    return (
+      profile.visible.childrenBirthYears !== null &&
+      profile.visible.childrenBirthYears.length === profile.visible.childrenCount
+    );
+  }
+  const value = getByPath(profile, step.path);
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "string") return value.trim().length > 0;
+  return value !== null && value !== undefined;
+}
+
+/**
+ * Finds the first step (in wizard order) that still needs an answer,
+ * regardless of what `profile.meta.onboardingStepIndex` says. Exists for
+ * one specific, real scenario: an account whose About Me was marked
+ * complete under an OLDER, shorter version of `aboutMeSteps` (before a
+ * question — e.g. `marketAvailability` — was added later) has a stored
+ * index at or past the CURRENT `aboutMeSteps.length`, but is missing a
+ * real answer for the newer step. Trusting the stored index there would
+ * have the wizard try to redirect to whatever page comes after Sobre ti —
+ * except `getNextOnboardingRoute` (using the same authoritative
+ * `isAboutMeComplete`) disagrees and sends it right back here, an
+ * infinite self-redirect that never renders anything to answer. Resuming
+ * at the actual first gap fixes it by asking the one missing question
+ * instead of looping.
+ */
+function firstUnansweredStepIndex(profile: ProfileDocument): number {
+  const index = aboutMeSteps.findIndex((step) => !isStepAnswered(profile, step));
+  return index === -1 ? aboutMeSteps.length : index;
 }
 
 export default function OnboardingWizard({ uid }: { uid: string }) {
@@ -45,7 +90,16 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
   // next render, so this never loops and never fires as an extra
   // commit/effect the way doing this in a useEffect would.
   if (profile && stepIndex === null) {
-    setStepIndex(Math.min(profile.meta.onboardingStepIndex, aboutMeSteps.length));
+    const storedIndex = Math.min(profile.meta.onboardingStepIndex, aboutMeSteps.length);
+    // See firstUnansweredStepIndex's own comment: only fall back to it
+    // when the stored index claims "done" but the authoritative check
+    // disagrees — the normal, non-legacy case (still mid-flow, or
+    // genuinely complete) always just uses the stored index as before.
+    const initialIndex =
+      storedIndex >= aboutMeSteps.length && !isAboutMeComplete(profile)
+        ? firstUnansweredStepIndex(profile)
+        : storedIndex;
+    setStepIndex(initialIndex);
   }
 
   const totalSteps = aboutMeSteps.length;
@@ -56,15 +110,26 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
   // before (no `| undefined`) rather than threading an extra null case
   // through every existing use of it.
   const currentStep = aboutMeSteps[stepIndex ?? 0];
-  const isComplete = Boolean(
-    profile && (profile.meta.aboutMeComplete || (stepIndex !== null && stepIndex >= totalSteps)),
-  );
+  // The authoritative definition (also used by the matching engine and
+  // getNextOnboardingRoute) — NOT the historical `meta.aboutMeComplete`
+  // flag, which can be stale for an account that was marked complete
+  // before a later question existed. Using the same check here that
+  // getNextOnboardingRoute uses is what guarantees they can never
+  // disagree about whether this page still has something to ask.
+  const isComplete = Boolean(profile && isAboutMeComplete(profile));
 
   useEffect(() => {
+    logDebugEvent(
+      "COMPLETION_STATE_CALCULATED",
+      `isComplete=${isComplete} aboutMeComplete=${profile?.meta.aboutMeComplete} stepIndex=${stepIndex}/${totalSteps}`,
+    );
     if (isComplete && profile) {
-      router.replace(getNextOnboardingRoute(profile));
+      const nextRoute = getNextOnboardingRoute(profile);
+      logDebugEvent("NEXT_ROUTE_CALCULATED", nextRoute);
+      logDebugEvent("REDIRECT", nextRoute);
+      router.replace(nextRoute);
     }
-  }, [isComplete, profile, router]);
+  }, [isComplete, profile, router, stepIndex, totalSteps]);
 
   const currentValue = useMemo(() => {
     if (!profile || !currentStep) return undefined;
@@ -98,6 +163,21 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, currentStep, saving]);
+
+  const renderState = !profile
+    ? profileError
+      ? "RENDER_ERROR_STATE"
+      : "RENDER_LOADING(no profile yet)"
+    : stepIndex === null
+      ? "RENDER_LOADING(stepIndex not initialized)"
+      : isComplete
+        ? "RENDER_LOADING(complete, awaiting redirect)"
+        : ineligible
+          ? "RENDER_INELIGIBLE"
+          : "RENDER_CONTENT";
+  useEffect(() => {
+    logDebugEvent("RENDER_STATE", renderState);
+  }, [renderState]);
 
   if (!profile) {
     if (profileError) {

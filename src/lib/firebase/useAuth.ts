@@ -9,6 +9,7 @@ import {
   watchAuthState,
 } from "./auth";
 import { auth } from "./client";
+import { logDebugEvent, shortUid } from "@/lib/introduction/onboardingDebug";
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -28,6 +29,7 @@ export function useAuth() {
 
     function maybeStopLoading() {
       if (!unsubscribed && authStateKnown && magicLinkSettled) {
+        logDebugEvent("AUTH_LOADING_FALSE");
         setLoading(false);
       }
     }
@@ -65,6 +67,11 @@ export function useAuth() {
 
     const unsubscribe = watchAuthState((nextUser) => {
       if (unsubscribed) return;
+      logDebugEvent(
+        "AUTH_RESOLVED",
+        nextUser ? `uid=${shortUid(nextUser.uid)}` : "no user",
+      );
+      if (nextUser) logDebugEvent("UID_PRESENT", shortUid(nextUser.uid));
       setUser(nextUser);
       authStateKnown = true;
       maybeStopLoading();

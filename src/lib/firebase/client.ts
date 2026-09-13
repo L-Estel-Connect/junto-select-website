@@ -44,6 +44,19 @@ export const auth: Auth = getAuth(app);
 export const db: Firestore = getFirestore(app);
 export const storage: FirebaseStorage = getStorage(app);
 
+if (typeof window !== "undefined") {
+  // Deferred import avoids a require-cycle risk at module-eval time
+  // (this file is imported very early) while still logging as soon as
+  // this module runs, which is effectively "as soon as the client
+  // bundle for this page starts executing."
+  import("@/lib/introduction/onboardingDebug").then(({ logDebugEvent }) => {
+    logDebugEvent(
+      "FIREBASE_INITIALIZED",
+      `projectId=${firebaseConfig.projectId}`,
+    );
+  });
+}
+
 // All Junto Select Introduction user-facing content is Spanish for V1 —
 // this makes Firebase Auth request the Spanish version of its own emails
 // (sign-in link, etc.) instead of whatever the project default is.

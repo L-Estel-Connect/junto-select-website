@@ -17,6 +17,36 @@ import {
   emptyPresentation,
   type ProfileDocument,
 } from "./types";
+import { logDebugEvent } from "./onboardingDebug";
+
+/**
+ * Structural-only description of the RAW Firestore document (before
+ * `withDefaults` fills any gaps) for the temporary debug overlay — see
+ * onboardingDebug.ts. Deliberately reads the pre-merge shape, not the
+ * normalized result, because the whole point is to see whether an
+ * account's stored data is missing/mistyped fields a newer schema
+ * version added; withDefaults would silently paper over exactly that.
+ * No names, dates of birth, or contact info — only field presence/type.
+ */
+function rawShapeSummary(data: Partial<ProfileDocument> | undefined): string {
+  if (!data) return "no document (will be created)";
+  const birthDate = data.private?.birthDate as { toDate?: unknown } | null | undefined;
+  return [
+    `aboutMeComplete=${data.meta?.aboutMeComplete ?? "MISSING"}`,
+    `stepIndex=${data.meta?.onboardingStepIndex ?? "MISSING"}`,
+    `photos=${Array.isArray(data.photos) ? data.photos.length : `MISSING/wrong-type(${typeof data.photos})`}`,
+    `finalized=${data.meta?.onboardingFinalized ?? "MISSING"}`,
+    `personId=${data.meta?.personId ? "present" : "MISSING"}`,
+    `searchStatus=${data.meta?.searchStatus ?? "MISSING"}`,
+    `market=${data.visible?.market ?? "MISSING"}`,
+    `marketAvailability=${data.visible?.marketAvailability ?? "MISSING"}`,
+    `duplicateStatus=${data.meta?.duplicateStatus ?? "MISSING"}`,
+    `birthDate=${birthDate ? (typeof birthDate.toDate === "function" ? "Timestamp" : `wrong-type(${typeof birthDate})`) : "null/missing"}`,
+    `dealbreakers=${data.dealbreakers ? "present" : "MISSING"}`,
+    `preferences=${data.preferences ? "present" : "MISSING"}`,
+    `presentation=${data.presentation ? "present" : "MISSING"}`,
+  ].join(" ");
+}
 
 function profileRef(uid: string) {
   return doc(db, "profiles", uid);
@@ -69,8 +99,11 @@ export async function getOrCreateProfile(
   const snap = await getDoc(ref);
 
   if (snap.exists()) {
-    return withDefaults(uid, snap.data() as Partial<ProfileDocument>);
+    const raw = snap.data() as Partial<ProfileDocument>;
+    logDebugEvent("RAW_PROFILE_SHAPE", rawShapeSummary(raw));
+    return withDefaults(uid, raw);
   }
+  logDebugEvent("RAW_PROFILE_SHAPE", rawShapeSummary(undefined));
 
   const initial: ProfileDocument = withDefaults(uid, {
     meta: {

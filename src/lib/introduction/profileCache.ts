@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { getOrCreateProfile } from "./profile";
 import { watchAuthState } from "@/lib/firebase/auth";
+import { logDebugEvent } from "./onboardingDebug";
 import type { ProfileDocument } from "./types";
 
 /**
@@ -78,9 +79,12 @@ function load(uid: string, force: boolean): Promise<void> {
   const entry = getEntry(uid);
   if (entry.promise && !force) return entry.promise;
 
+  logDebugEvent("PROFILE_FETCH_STARTED", `force=${force}`);
+
   let settled = false;
   const timeoutId = setTimeout(() => {
     if (!settled) {
+      logDebugEvent("PROFILE_FETCH_STALLED", `no response after ${STALL_TIMEOUT_MS}ms`);
       entry.error = "Esto está tardando más de lo normal. Inténtalo de nuevo.";
       notify(entry);
     }
@@ -88,6 +92,7 @@ function load(uid: string, force: boolean): Promise<void> {
 
   entry.promise = getOrCreateProfile(uid)
     .then((doc) => {
+      logDebugEvent("PROFILE_FETCH_RESOLVED", "ok");
       entry.profile = doc;
       entry.error = null;
     })
@@ -96,12 +101,17 @@ function load(uid: string, force: boolean): Promise<void> {
       // remembered as an error rather than leaving `profile` unset with
       // no signal, which previously could leave a page on its loading
       // screen forever with no way out.
+      logDebugEvent(
+        "PROFILE_FETCH_RESOLVED",
+        `error: ${err instanceof Error ? err.message : String(err)}`,
+      );
       entry.error = err instanceof Error ? err.message : "No hemos podido cargar tu perfil.";
     })
     .finally(() => {
       settled = true;
       clearTimeout(timeoutId);
       entry.promise = null;
+      logDebugEvent("CACHE_UPDATED", entry.profile ? "profile set" : `error=${entry.error}`);
       notify(entry);
     });
   return entry.promise;
@@ -180,6 +190,18 @@ export function useSharedProfile(uid: string): SharedProfile {
   useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   const entry = getEntry(uid);
+  const loading = !entry.profile && !entry.error;
+
+  // Effects (not render-time ref checks) so this logs once per actual
+  // transition: React re-runs an effect only when a listed dependency's
+  // value actually changes, which naturally dedupes against the far more
+  // frequent render/getSnapshot calls.
+  useEffect(() => {
+    logDebugEvent("HOOK_SNAPSHOT_RECEIVED", `profile=${Boolean(entry.profile)} error=${Boolean(entry.error)}`);
+  }, [entry.profile, entry.error]);
+  useEffect(() => {
+    if (!loading) logDebugEvent("PROFILE_LOADING_FALSE", entry.error ? "error" : "profile ready");
+  }, [loading, entry.error]);
 
   // Self-healing: re-checked after every render (mount, a version bump
   // from elsewhere, or a cache clear), not only once at initial
