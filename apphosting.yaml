@@ -128,17 +128,17 @@ env:
   # these; the client can never supply a Price ID or amount directly. Not
   # secrets (a Price ID alone can't charge anything without the secret key
   # above), so plain `value`s, same treatment as ADMIN_ALLOWLIST_EMAILS.
-  # "SET_ME" placeholders — replace with the real TEST MODE Price IDs
-  # created in the Stripe Dashboard (see README) before this can work.
+  # TEST MODE Price IDs, created in the Stripe Dashboard (test mode) —
+  # replace with LIVE Price IDs only after explicit sign-off to go live.
   - variable: STRIPE_PRICE_MONTHLY
-    value: "SET_ME"
+    value: "price_1UFH9qGlmEAMyuMwsK1ZAJXq"
     availability:
       - RUNTIME
   - variable: STRIPE_PRICE_THREE_MONTH
-    value: "SET_ME"
+    value: "price_1UFHCWGlmEAMyuMwupyRVcWp"
     availability:
       - RUNTIME
   - variable: STRIPE_PRICE_SIX_MONTH
-    value: "SET_ME"
+    value: "price_1UFHD2GlmEAMyuMwRWxOlFjl"
     availability:
       - RUNTIME
