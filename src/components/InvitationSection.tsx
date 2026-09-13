@@ -1,6 +1,47 @@
+import Link from "next/link";
 import Section from "./Section";
 import InvitationForm from "./InvitationForm";
 import { eyebrowClasses } from "@/lib/styles";
+
+function MembershipOffer() {
+  return (
+    <div className="mt-8 max-w-[46ch] border-t border-hairline pt-6">
+      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-ink-soft">
+        Membresía Junto Select
+      </p>
+      <h3 className="mt-2 font-serif text-[19px] font-normal leading-snug text-ink sm:text-[20px]">
+        ¿Prefieres que busquemos por ti?
+      </h3>
+      <p className="mt-2 text-[14px] leading-relaxed text-ink-soft">
+        Hazte miembro de Junto Select y recibe una selección privada de
+        perfiles compatibles, sin swiping ni catálogos.
+      </p>
+      <ul className="mt-4 space-y-1.5 text-[13px] leading-relaxed text-ink">
+        <li className="flex gap-2.5">
+          <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-ink-soft" />
+          <span>Hasta 3 perfiles seleccionados al mes</span>
+        </li>
+        <li className="flex gap-2.5">
+          <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-ink-soft" />
+          <span>Descuentos y ventajas en eventos Junto Select</span>
+        </li>
+        <li className="flex gap-2.5">
+          <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-ink-soft" />
+          <span>Selección personalizada y privada</span>
+        </li>
+      </ul>
+      <Link
+        href="/introduction"
+        className="mt-5 inline-flex rounded-full border border-ink px-6 py-2.5 text-center text-[12px] font-medium uppercase tracking-[0.14em] text-ink transition-colors hover:bg-ink hover:text-white"
+      >
+        Hazte miembro
+      </Link>
+      <p className="mt-3 text-[12px] text-ink-soft">
+        Desde 49 € · Cancela la renovación cuando quieras.
+      </p>
+    </div>
+  );
+}
 
 export default function InvitationSection() {
   return (
@@ -35,6 +76,8 @@ export default function InvitationSection() {
               asistir.
             </p>
           </div>
+
+          <MembershipOffer />
         </div>
 
         <InvitationForm />

@@ -46,15 +46,10 @@ export default function AvisoLegalPage() {
               <strong>NIF:</strong> B21674171
             </li>
             <li>
-              <strong>Domicilio social:</strong> [DOMICILIO SOCIAL COMPLETO] (El Campello, Alicante,
-              España)
+              <strong>Domicilio social:</strong> El Campello, Alicante, España
             </li>
             <li>
-              <strong>Datos de inscripción en el Registro Mercantil:</strong> [DATOS REGISTRO
-              MERCANTIL]
-            </li>
-            <li>
-              <strong>Email de contacto:</strong> [EMAIL LEGAL / PRIVACIDAD]
+              <strong>Email de contacto:</strong> juntoselect@gmail.com
             </li>
           </ul>
         </section>

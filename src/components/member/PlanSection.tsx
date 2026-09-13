@@ -126,10 +126,15 @@ function ActiveMembership({
         )}
       </div>
 
-      {billing.cancelAtPeriodEnd && renewalDate && (
+      {billing.cancelAtPeriodEnd && renewalDate ? (
         <p className="mt-4 text-[13px] leading-relaxed text-ink-soft">
           Tu membresía seguirá activa hasta el {renewalDate}. Después, tu perfil volverá automáticamente
           al modo pasivo.
+        </p>
+      ) : (
+        <p className="mt-4 text-[13px] leading-relaxed text-ink-soft">
+          Puedes cancelar la renovación cuando quieras. Tu membresía seguirá activa hasta el final del
+          periodo que ya has pagado.
         </p>
       )}
 
@@ -141,14 +146,24 @@ function ActiveMembership({
       >
         {managing ? "Abriendo…" : "Gestionar mi membresía"}
       </button>
+      {!billing.cancelAtPeriodEnd && (
+        <button
+          type="button"
+          onClick={onManage}
+          disabled={managing}
+          className="mt-3 w-full text-center text-[13px] font-medium uppercase tracking-[0.14em] text-[#8a3b3b] underline decoration-hairline underline-offset-4 transition-opacity hover:opacity-80 disabled:opacity-50"
+        >
+          Cancelar suscripción
+        </button>
+      )}
       {manageError && (
         <p role="alert" className="mt-3 text-[13px] text-[#8a3b3b]">
           {manageError}
         </p>
       )}
       <p className="mt-3 text-[12px] text-ink-soft">
-        Se abre el portal seguro de Stripe, donde puedes actualizar tu método de pago, ver tus recibos o
-        cancelar la renovación automática.
+        Ambos botones abren el portal seguro de Stripe, donde puedes actualizar tu método de pago, ver
+        tus recibos o cancelar la renovación automática.
       </p>
     </>
   );

@@ -11,14 +11,6 @@ const linkClasses = "text-ink underline decoration-hairline underline-offset-4 h
 function H2({ children }: { children: React.ReactNode }) {
   return <h2 className="font-serif text-[19px] font-normal text-ink sm:text-[20px]">{children}</h2>;
 }
-function LegalNote({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="mt-3 rounded-md bg-rose-tint/40 px-3 py-2 text-[12px] italic leading-relaxed text-ink-soft">
-      Nota interna — pendiente de completar/revisar: {children}
-    </p>
-  );
-}
-
 export default function PrivacidadPage() {
   return (
     <Section as="main" size="sm" className="py-16 sm:py-20">
@@ -40,9 +32,9 @@ export default function PrivacidadPage() {
             <br />
             NIF: B21674171
             <br />
-            Domicilio: [DOMICILIO SOCIAL COMPLETO]
+            Domicilio: El Campello, Alicante, España
             <br />
-            Email de privacidad: [EMAIL DE PRIVACIDAD]
+            Email de privacidad: juntoselect@gmail.com
           </p>
         </section>
 
@@ -229,41 +221,32 @@ export default function PrivacidadPage() {
             garantías contractuales (como las Cláusulas Contractuales Tipo de la Comisión Europea) o de
             marcos de adecuación vigentes en cada momento.
           </p>
-          <LegalNote>
-            confirmar con cada proveedor (Google/Firebase, Stripe, Anthropic) su estatus actual respecto
-            al Data Privacy Framework UE-EE.UU. y/o las Cláusulas Contractuales Tipo vigentes, y
-            reflejarlo aquí con el detalle exigido antes de publicar en producción.
-          </LegalNote>
         </section>
 
         <section className="space-y-3">
           <H2>7. Plazos de conservación</H2>
           <p>
-            Los plazos operativos exactos de conservación de cada categoría de datos están pendientes de
-            una decisión de negocio/legal definitiva. La estructura prevista es:
+            Conservamos cada categoría de datos solo durante el tiempo necesario para las finalidades
+            descritas en esta política:
           </p>
           <ul className="list-disc space-y-2 pl-5">
             <li>Cuenta y perfil activos: mientras la cuenta permanezca activa.</li>
             <li>Cuenta en modo pasivo: mientras no se solicite la eliminación de la cuenta.</li>
             <li>
-              Cuenta eliminada: [PLAZO PENDIENTE DE DEFINIR] tras la solicitud de eliminación, salvo lo
-              indicado a continuación.
+              Cuenta eliminada: se eliminan de inmediato el perfil, las fotografías y el acceso de
+              inicio de sesión asociados, salvo lo indicado a continuación.
             </li>
             <li>
               Registros de facturación: el plazo exigido por la normativa fiscal y contable española
               (con carácter general, varios años).
             </li>
-            <li>Registros de seguridad: [PLAZO PENDIENTE DE DEFINIR].</li>
+            <li>Registros de seguridad: el tiempo estrictamente necesario para prevenir fraude y proteger la integridad del servicio.</li>
             <li>
               Historial de emparejamiento (propuestas, periodos de espera entre la misma pareja de
-              personas): [PLAZO PENDIENTE DE DEFINIR], por motivos de integridad del servicio.
+              personas): el tiempo necesario para garantizar la integridad del servicio a otros miembros.
             </li>
             <li>Datos necesarios para la gestión de reclamaciones legales: mientras no prescriba la acción correspondiente.</li>
           </ul>
-          <LegalNote>
-            fijar plazos operativos concretos para cada categoría antes de publicar esta política en
-            producción.
-          </LegalNote>
         </section>
 
         <section className="space-y-3">
@@ -279,7 +262,7 @@ export default function PrivacidadPage() {
             <li>Retirar tu consentimiento en cualquier momento, cuando el tratamiento se base en él.</li>
           </ul>
           <p>
-            Para ejercer estos derechos, escríbenos a <strong>[EMAIL DE PRIVACIDAD]</strong>.
+            Para ejercer estos derechos, escríbenos a <strong>juntoselect@gmail.com</strong>.
           </p>
           <p>
             También tienes derecho a presentar una reclamación ante la Agencia Española de Protección
@@ -300,13 +283,13 @@ export default function PrivacidadPage() {
         <section className="space-y-3">
           <H2>9. Eliminación de cuenta</H2>
           <p>
-            La eliminación de cuenta <strong>todavía no está disponible como función autoservicio</strong>{" "}
-            en el producto — actualmente aparece como una opción deshabilitada en Ajustes, ya que
-            requiere un proceso técnico seguro (borrado en Firestore, en Storage, y coordinación con la
-            suscripción activa en Stripe) que aún no se ha construido. Se trata de una carencia de
-            producto pendiente de resolver, no de una función ya operativa. Mientras tanto, puedes
-            solicitar la eliminación de tu cuenta escribiendo a <strong>[EMAIL DE PRIVACIDAD]</strong>,
-            y la gestionaremos manualmente.
+            Puedes eliminar tu perfil en cualquier momento desde Ajustes → Zona sensible → Eliminar
+            perfil. La eliminación es permanente e inmediata: tu perfil deja de ser candidato para
+            futuras propuestas, tus fotografías se eliminan de nuestro almacenamiento, y tu acceso de
+            inicio de sesión se revoca. Si tienes una membresía de pago activa, se cancela de inmediato
+            como parte del mismo proceso, para que nunca sigas siendo cobrado/a por una cuenta que ya no
+            existe. También puedes solicitar la eliminación escribiendo a{" "}
+            <strong>juntoselect@gmail.com</strong>.
           </p>
         </section>
 

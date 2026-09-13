@@ -1,7 +1,6 @@
 import Hero from "@/components/Hero";
 import WhoYouMeet from "@/components/WhoYouMeet";
 import PrivateSection from "@/components/PrivateSection";
-import MembershipSection from "@/components/MembershipSection";
 import InvitationSection from "@/components/InvitationSection";
 import Footer from "@/components/Footer";
 
@@ -31,7 +30,6 @@ export default function Home() {
       <div className="bg-rose-tint/40">
         <PrivateSection />
       </div>
-      <MembershipSection />
       <InvitationSection />
       <Footer />
     </main>

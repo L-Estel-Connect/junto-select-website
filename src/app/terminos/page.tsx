@@ -14,15 +14,6 @@ function H2({ children }: { children: React.ReactNode }) {
 function H3({ children }: { children: React.ReactNode }) {
   return <h3 className="mt-4 text-[15px] font-medium text-ink">{children}</h3>;
 }
-function LegalNote({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="mt-3 rounded-md bg-rose-tint/40 px-3 py-2 text-[12px] italic leading-relaxed text-ink-soft">
-      Nota interna — pendiente de revisión final por abogado especializado en derecho de consumo español/UE:{" "}
-      {children}
-    </p>
-  );
-}
-
 export default function TerminosPage() {
   return (
     <Section as="main" size="sm" className="py-16 sm:py-20">
@@ -43,20 +34,7 @@ export default function TerminosPage() {
             Junto Select Introduction es un servicio prestado por <strong>L-Estel Connect SL</strong>{" "}
             (en adelante, &ldquo;Junto Select&rdquo;, &ldquo;nosotros&rdquo; o &ldquo;la empresa&rdquo;),
             sociedad española con NIF <strong>B21674171</strong> y domicilio en El Campello, Alicante,
-            España.
-          </p>
-          <p>
-            Domicilio social completo: <strong>[DOMICILIO SOCIAL COMPLETO]</strong>.<br />
-            Datos de inscripción en el Registro Mercantil: <strong>[DATOS REGISTRO MERCANTIL]</strong>.
-            <br />
-            Email de contacto legal: <strong>[EMAIL LEGAL / PRIVACIDAD]</strong>.
-          </p>
-          <p className="text-[13px] text-ink-soft">
-            Estos datos se completan también en el{" "}
-            <Link href="/aviso-legal" className={linkClasses}>
-              Aviso Legal
-            </Link>
-            .
+            España. Email de contacto: <strong>juntoselect@gmail.com</strong>.
           </p>
         </section>
 
@@ -195,11 +173,6 @@ export default function TerminosPage() {
             criterios declarados, el funcionamiento de la cuenta y la plataforma) no se presta conforme
             a lo contratado.
           </p>
-          <LegalNote>
-            confirmar que la redacción distingue con suficiente claridad, a efectos del art. 114 y ss.
-            del TRLGDCU, entre &ldquo;no conformidad del servicio&rdquo; (reclamable) y el resultado
-            aleatorio propio de un servicio de intermediación personal (no reclamable).
-          </LegalNote>
         </section>
 
         <section className="space-y-3">
@@ -309,13 +282,8 @@ export default function TerminosPage() {
           <p>
             Para ejercer tu derecho de desistimiento, puedes utilizar el modelo de formulario incluido a
             continuación, o cualquier otra declaración inequívoca, dirigida a:{" "}
-            <strong>[EMAIL PARA DESISTIMIENTO]</strong>.
+            <strong>juntoselect@gmail.com</strong>.
           </p>
-          <LegalNote>
-            confirmar el cálculo exacto del &ldquo;importe proporcional&rdquo; y la redacción de la
-            pérdida del derecho de desistimiento conforme a los arts. 103 y 108 TRLGDCU aplicados a un
-            servicio de suscripción continuada (no un servicio instantáneo de ejecución única).
-          </LegalNote>
 
           <div className="mt-6 rounded-lg border border-hairline p-5">
             <p className="text-[13px] font-medium uppercase tracking-[0.1em] text-ink-soft">
@@ -325,7 +293,7 @@ export default function TerminosPage() {
               (Solo debe rellenar y enviar el presente formulario si desea desistir del contrato)
             </p>
             <div className="mt-4 space-y-2 text-[14px] text-ink">
-              <p>A la atención de L-Estel Connect SL, [EMAIL PARA DESISTIMIENTO]:</p>
+              <p>A la atención de L-Estel Connect SL, juntoselect@gmail.com:</p>
               <p>
                 Por la presente le comunico que desisto de mi contrato de membresía Junto Select
                 Introduction.
@@ -415,10 +383,6 @@ export default function TerminosPage() {
             o cualquier otra responsabilidad que no pueda excluirse conforme a la normativa de consumo
             aplicable.
           </p>
-          <LegalNote>
-            revisar el alcance exacto de la cláusula de limitación de responsabilidad frente al art. 86
-            y ss. TRLGDCU (cláusulas abusivas) antes de publicar en producción.
-          </LegalNote>
         </section>
 
         <section className="space-y-3">
@@ -442,15 +406,9 @@ export default function TerminosPage() {
           </p>
           <p>
             Si tienes una reclamación, puedes contactarnos primero en{" "}
-            <strong>[EMAIL LEGAL / PRIVACIDAD]</strong>. Como consumidor residente en la UE, también
+            <strong>juntoselect@gmail.com</strong>. Como consumidor residente en la UE, también
             puedes acudir a las autoridades de consumo correspondientes a tu domicilio.
           </p>
-          <LegalNote>
-            la Comisión Europea cerró la plataforma de resolución de litigios en línea (ODR) el 20 de
-            julio de 2025; no se ha incluido ningún enlace a dicha plataforma en este documento por
-            estar obsoleta — confirmar si existe un mecanismo sustitutivo aplicable en el momento de la
-            revisión final.
-          </LegalNote>
         </section>
       </div>
 
