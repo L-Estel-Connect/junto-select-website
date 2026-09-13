@@ -12,6 +12,7 @@ import {
   DEFAULT_CYCLE_CONFIG,
   MAX_PROPOSALS_PER_MEMBER,
   MEMBER_RUN_STALE_MINUTES,
+  PRODUCTION_CYCLE_TIME_BUDGET_MS,
   proposalId,
 } from "./config";
 import type {
@@ -91,6 +92,18 @@ function selectRecipients(
     const allow = new Set(config.allowlistPersonIds);
     recipients = recipients.filter((p) => allow.has(p.personId));
   }
+
+  // `production` is the real monthly-scheduled run: it must eventually
+  // reach every eligible active_search member, however many there are —
+  // not just the first `maxMembersPerRun`. `loadEligiblePool`'s query has
+  // no explicit orderBy, so Firestore returns it in a stable document-ID
+  // order; slicing here would otherwise select the SAME first N members
+  // on every retry, never making progress past them. See
+  // runMatchingCycle's time-budget loop below for how a large population
+  // is still processed safely across however many scheduled invocations
+  // it takes. Every other mode keeps its existing bounded-rollout safety
+  // valve (dry_run/allowlist/limited_live) unchanged.
+  if (mode === "production") return recipients;
 
   return recipients.slice(0, config.maxMembersPerRun);
 }
@@ -334,8 +347,22 @@ export async function runMatchingCycle(
   let proposalsCreated = 0;
   let recipientsCompleted = 0;
   let recipientsWithZeroProposals = 0;
+  let timeBudgetExceeded = false;
+  const invocationStartedAt = Date.now();
 
   for (const recipient of recipients) {
+    // Only `production` (the real monthly-scheduled run, potentially
+    // hundreds/thousands of members) ever needs to stop early — every
+    // other mode is already bounded by maxMembersPerRun and reliably
+    // completes in one invocation, exactly as already tested.
+    if (
+      cycle.mode === "production" &&
+      Date.now() - invocationStartedAt > PRODUCTION_CYCLE_TIME_BUDGET_MS
+    ) {
+      timeBudgetExceeded = true;
+      break;
+    }
+
     const claim = await claimMemberRun(cycleId, recipient.personId);
     if (claim === "skip") continue;
 
@@ -355,13 +382,34 @@ export async function runMatchingCycle(
     }
   }
 
+  // Stats accumulate via FieldValue.increment rather than being
+  // overwritten: for every existing (non-production) mode this produces
+  // the exact same final numbers as a flat set, since those cycles always
+  // complete in a single invocation starting from 0 — but it's also what
+  // makes a `production` cycle resumed across several scheduled
+  // invocations report a running TOTAL rather than only its most recent
+  // partial invocation's count.
+  if (timeBudgetExceeded) {
+    // Deliberately NOT marked "completed" — the next scheduled invocation
+    // of this same cycleId resumes it, skipping everyone already
+    // `completed` above via claimMemberRun.
+    await cycleRef.update({
+      "stats.recipientsConsidered": recipients.length,
+      "stats.recipientsCompleted": FieldValue.increment(recipientsCompleted),
+      "stats.proposalsCreated": FieldValue.increment(proposalsCreated),
+      "stats.recipientsWithZeroProposals": FieldValue.increment(recipientsWithZeroProposals),
+    });
+    const partialSnap = await cycleRef.get();
+    return partialSnap.data() as MatchingCycleDocument;
+  }
+
   await cycleRef.update({
     status: "completed",
     completedAt: FieldValue.serverTimestamp(),
     "stats.recipientsConsidered": recipients.length,
-    "stats.recipientsCompleted": recipientsCompleted,
-    "stats.proposalsCreated": proposalsCreated,
-    "stats.recipientsWithZeroProposals": recipientsWithZeroProposals,
+    "stats.recipientsCompleted": FieldValue.increment(recipientsCompleted),
+    "stats.proposalsCreated": FieldValue.increment(proposalsCreated),
+    "stats.recipientsWithZeroProposals": FieldValue.increment(recipientsWithZeroProposals),
   });
 
   const finalSnap = await cycleRef.get();

@@ -13,6 +13,22 @@ export const PASS_COOLDOWN_MONTHS = 6;
 /** A "claimed" memberRun older than this is considered stale/crashed and reclaimable. */
 export const MEMBER_RUN_STALE_MINUTES = 30;
 
+/**
+ * Wall-clock budget for a single invocation of a `production`-mode
+ * (the real monthly-scheduled) cycle, so one HTTP request handler never
+ * risks running into the platform's own request timeout while working
+ * through a large eligible-member population. When exceeded, the
+ * processing loop in engine.ts simply stops and leaves the cycle
+ * `running` (not `completed`) — the next scheduled invocation of the SAME
+ * cycleId resumes exactly where it left off via the existing per-member
+ * claim/skip logic, so hitting this repeatedly is safe and never causes
+ * duplicate work. Conservative relative to Cloud Run's commonly-used
+ * default request timeout (300s) — see the Cloud Scheduler setup
+ * recommendation for pairing this with a short retry interval so a large
+ * population still converges to fully processed within the same day.
+ */
+export const PRODUCTION_CYCLE_TIME_BUDGET_MS = 4 * 60 * 1000;
+
 export const DEFAULT_CYCLE_CONFIG = {
   maxMembersPerRun: 50,
   maxCandidatesPerMember: 200,
@@ -24,6 +40,32 @@ export function addMonths(date: Date, months: number): Date {
   const next = new Date(date.getTime());
   next.setMonth(next.getMonth() + months);
   return next;
+}
+
+/**
+ * Deterministic cycleId for the automatic monthly production run, derived
+ * from the CALENDAR month in Europe/Madrid — deliberately independent of
+ * any member's Stripe billing/renewal date (see README "Monthly matching
+ * engine vs. billing renewal — never conflate the two"). Computed via
+ * Intl.DateTimeFormat rather than `date.getUTCMonth()`/`getMonth()` so the
+ * boundary is correct in Madrid local time (CET/CEST) even though the
+ * server itself runs in UTC — a naive UTC-based check would flip a day
+ * early or late around the month boundary depending on the time of year's
+ * DST offset. Every call within the same Madrid calendar month returns
+ * the same id, which is what makes re-triggering the scheduled endpoint
+ * (a retry, or an accidental duplicate trigger) a safe no-op/resume
+ * rather than a second cycle for the same month — see runMatchingCycle's
+ * own "a cycleId already `completed` is a pure no-op" guarantee.
+ */
+export function monthlyProductionCycleId(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Madrid",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((p) => p.type === "year")?.value;
+  const month = parts.find((p) => p.type === "month")?.value;
+  return `monthly-${year}-${month}`;
 }
 
 /** Canonical, order-independent id for a pair — the same doc regardless of who proposed to whom. */

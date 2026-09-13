@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
+import { adminDb } from "@/lib/firebase/admin";
 import { BrevoConfigError, BrevoRequestError, upsertBrevoContact } from "@/lib/brevo";
 import type { InvitationPayload } from "@/lib/types";
 import { validateInvitation } from "@/lib/validation";
@@ -39,32 +41,47 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, errors }, { status: 400 });
   }
 
+  /**
+   * Firestore is written FIRST and is the system of record for this
+   * submission — including the timestamped evidence of the age
+   * confirmation and communications consent the person just gave.
+   * Previously this route had no persistence of its own at all: the
+   * ENTIRE submission existed only as a Brevo API call, so a temporarily
+   * misconfigured or unreachable Brevo (or an unrecognized attribute)
+   * meant the request was lost with no record anywhere and no recovery
+   * path. Now, a Brevo failure below is a sync problem to fix, not a lost
+   * submission — this document is what makes the invitation request
+   * durable regardless of Brevo's state (see the September/October 2026
+   * operational audit's P0 findings).
+   */
+  const docRef = adminDb.collection("invitationRequests").doc();
+  await docRef.set({
+    ...payload,
+    createdAt: FieldValue.serverTimestamp(),
+    brevoSyncStatus: "pending",
+    brevoSyncedAt: null,
+    brevoSyncError: null,
+  });
+
+  // Brevo is best-effort from here: it must never turn a captured
+  // submission into a technical failure the person sees (see the
+  // Brevo-failure-behavior requirement in the same audit). Any failure is
+  // recorded on the document for admin visibility/manual retry instead of
+  // surfaced to the user.
   try {
     await upsertBrevoContact(payload);
+    await docRef.update({ brevoSyncStatus: "synced", brevoSyncedAt: FieldValue.serverTimestamp() });
   } catch (error) {
-    if (error instanceof BrevoConfigError) {
-      console.error("Invitation submission failed: Brevo is not configured.");
-      return NextResponse.json(
-        { ok: false, error: "not_configured" },
-        { status: 503 },
-      );
-    }
-
-    if (error instanceof BrevoRequestError) {
-      console.error(
-        `Invitation submission failed: Brevo responded with status ${error.status}.`,
-      );
-      return NextResponse.json(
-        { ok: false, error: "upstream_error" },
-        { status: 502 },
-      );
-    }
-
-    console.error("Invitation submission failed: unexpected error.");
-    return NextResponse.json(
-      { ok: false, error: "unknown_error" },
-      { status: 500 },
-    );
+    const message =
+      error instanceof BrevoConfigError
+        ? "not_configured"
+        : error instanceof BrevoRequestError
+          ? `upstream_error(${error.status})`
+          : "unknown_error";
+    console.error(`Invitation submission ${docRef.id}: Brevo sync failed (${message})`, error);
+    await docRef
+      .update({ brevoSyncStatus: "failed", brevoSyncError: message })
+      .catch(() => {});
   }
 
   return NextResponse.json({ ok: true });

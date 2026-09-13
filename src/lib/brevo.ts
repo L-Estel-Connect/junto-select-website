@@ -1,5 +1,6 @@
 import "server-only";
 import type { InvitationPayload } from "./types";
+import { buildBrevoContactPayload } from "./brevoPayload";
 
 const BREVO_CONTACTS_URL = "https://api.brevo.com/v3/contacts";
 
@@ -14,19 +15,17 @@ export class BrevoRequestError extends Error {
   }
 }
 
+export { buildBrevoContactPayload } from "./brevoPayload";
+export type { BrevoContactPayload } from "./brevoPayload";
+
 /**
- * Sends an invitation request to Brevo as a contact.
- *
- * IMPORTANT — placeholder configuration:
- * The attribute keys below (NOMBRE, GENERO, PROFESION, TELEFONO,
- * EDAD_35_MAS, SOBRE_TI, CONSENTIMIENTO_COMUNICACIONES,
- * CONSENTIMIENTO_FECHA) are placeholders. They must exist as Contact
- * Attributes in the Brevo account (Contacts > Settings > Contact
- * attributes) with matching internal names and compatible types before
- * submissions will be accepted — Brevo rejects attributes it doesn't
- * recognize. See README.md "Brevo configuration required" for the full
- * list and recommended types. BREVO_LIST_ID is optional; when unset the
- * contact is still created/updated in Brevo, just not attached to a list.
+ * Sends an invitation request to Brevo as a contact — see
+ * `brevoPayload.ts` for the attribute-mapping rationale (why only
+ * NOMBRE/GENERO/PROFESION/TELEFONO are sent, and why consent/age/bio data
+ * deliberately isn't). `BREVO_LIST_ID` is required to attach the contact
+ * to your existing list; without it the contact is still created/updated
+ * in Brevo, just not attached to any list — see README "Brevo
+ * configuration required".
  */
 export async function upsertBrevoContact(input: InvitationPayload) {
   const apiKey = process.env.BREVO_API_KEY;
@@ -38,24 +37,6 @@ export async function upsertBrevoContact(input: InvitationPayload) {
     ? Number(process.env.BREVO_LIST_ID)
     : undefined;
 
-  const attributes: Record<string, string | boolean> = {
-    NOMBRE: input.nombre.trim(),
-    GENERO: input.genero === "mujer" ? "Mujer" : "Hombre",
-    EDAD_35_MAS: input.confirmaEdad,
-    CONSENTIMIENTO_COMUNICACIONES: input.aceptaComunicaciones,
-    CONSENTIMIENTO_FECHA: new Date().toISOString(),
-  };
-
-  if (input.profesion.trim()) {
-    attributes.PROFESION = input.profesion.trim();
-  }
-  if (input.telefono.trim()) {
-    attributes.TELEFONO = input.telefono.trim();
-  }
-  if (input.sobreTi.trim()) {
-    attributes.SOBRE_TI = input.sobreTi.trim();
-  }
-
   const response = await fetch(BREVO_CONTACTS_URL, {
     method: "POST",
     headers: {
@@ -63,12 +44,7 @@ export async function upsertBrevoContact(input: InvitationPayload) {
       Accept: "application/json",
       "api-key": apiKey,
     },
-    body: JSON.stringify({
-      email: input.email.trim(),
-      updateEnabled: true,
-      attributes,
-      ...(listId ? { listIds: [listId] } : {}),
-    }),
+    body: JSON.stringify(buildBrevoContactPayload(input, listId)),
   });
 
   if (!response.ok) {

@@ -132,29 +132,54 @@ browser.
 1. Set `BREVO_API_KEY` in your deployment environment (see
    `.env.example`). Without it the route returns a `503` and the form shows
    a graceful error — this is expected until the key is configured.
-2. Optionally set `BREVO_LIST_ID` to attach new contacts to a specific
-   Brevo list. Without it, contacts are still created/updated in Brevo,
-   just without a list.
-3. **Create these Contact Attributes in Brevo** (Contacts → Settings →
-   Contact attributes) before going live — the API rejects attributes it
-   doesn't recognize:
+   **Not currently set in `apphosting.yaml`** — the invitation form is
+   deployed but cannot reach Brevo until this secret exists (see the
+   October 2026 operational audit report for the exact `firebase
+   apphosting:secrets:set` command).
+2. Set `BREVO_LIST_ID` to your EXISTING Brevo list's numeric id (Contacts →
+   Lists) to attach new contacts to it. Also not currently set — without
+   it, contacts are still created/updated in Brevo, just without a list.
+   Never invent or create a new list here; this must be the account
+   owner's real, already-existing list id.
+3. **Attribute mapping is deliberately narrow** (`src/lib/brevoPayload.ts`,
+   pure/unit-tested): only `NOMBRE`, `GENERO`, `PROFESION` (only if
+   filled), `TELEFONO` (only if filled). `GENERO` reuses an EXISTING Brevo
+   attribute — the account owner confirmed its values are exactly `Mujer`
+   / `Hombre`, which is exactly what the homepage form's radio values map
+   to. `NOMBRE`/`PROFESION`/`TELEFONO` are assumed-common CRM field names
+   but **not independently verified** — confirm they exist in Brevo
+   (Contacts → Settings → Contact attributes) with these exact internal
+   names before relying on them being populated; if Brevo's API rejects
+   unrecognized attribute keys outright (behavior not verified against a
+   real account from this environment), an unrecognized name here would
+   fail the whole sync — which is now safe either way, since Firestore
+   (`invitationRequests/{id}`, below) is what actually captures the
+   submission, not Brevo.
+4. Age-confirmation and communications-consent data, and the free-text
+   "Cuéntanos sobre ti" bio, are **NOT sent to Brevo** — they were never
+   confirmed to be existing Brevo attributes, and the account owner asked
+   not to have new attributes created speculatively. The durable,
+   timestamped record of that consent lives in Firestore instead (next
+   section).
+5. The route uses `updateEnabled: true` with `email` as the sole identity
+   key, so a repeat submission from the same address updates the existing
+   Brevo contact rather than creating a duplicate.
 
-   | Attribute (as sent) | Suggested Brevo type | Source field |
-   |---|---|---|
-   | `NOMBRE` | Text | Nombre |
-   | `GENERO` | Text (or Category: `Mujer` / `Hombre`) | Soy |
-   | `PROFESION` | Text | Profesión / Cargo (only sent if filled) |
-   | `TELEFONO` | Text | Teléfono (only sent if filled; kept as free text rather than Brevo's built-in SMS/phone attribute, which requires strict E.164 formatting) |
-   | `SOBRE_TI` | Multiline text (needs to hold up to 600 characters) | Cuéntanos sobre ti (only sent if filled) |
-   | `EDAD_35_MAS` | Boolean | Age confirmation checkbox |
-   | `CONSENTIMIENTO_COMUNICACIONES` | Boolean | Consent checkbox |
-   | `CONSENTIMIENTO_FECHA` | Date/text (ISO datetime) | Recorded automatically, for consent-proof purposes |
+### Firestore is the system of record, Brevo is best-effort
 
-   These names are placeholders chosen to be self-explanatory — rename them
-   in `src/lib/brevo.ts` to match your Brevo account if you'd rather reuse
-   existing attributes.
-4. The route uses `updateEnabled: true`, so a repeat submission from the
-   same email updates the existing Brevo contact rather than erroring.
+`POST /api/invitation` writes an `invitationRequests/{id}` Firestore
+document (Admin SDK, no client read/write path — falls to the default-deny
+rule) **before** attempting the Brevo sync, and that write is what the
+route's success response actually depends on. The Brevo call happens
+after, and its outcome is recorded on the same document
+(`brevoSyncStatus`: `"pending" | "synced" | "failed"`, plus
+`brevoSyncError` when failed) rather than being allowed to affect the
+response the person sees — a Brevo outage, a missing `BREVO_API_KEY`, or a
+rejected attribute all fail the SAME way from the user's point of view
+(a normal success), because the submission itself was already captured
+independently. This replaces the original design, where the entire
+submission existed only as a Brevo API call and a Brevo failure meant the
+person's request was lost with no record anywhere.
 
 ## Junto Select Introduction (`/introduction` → `/member`)
 
@@ -443,10 +468,11 @@ dealbreakers/preferences:
 
 `src/lib/matching/` — the deterministic, reciprocal matching engine and
 its supporting duplicate-account and account-linking infrastructure.
-Everything here is server-only (Admin SDK), triggered manually via
-`/api/admin/matching/*` routes (see below) — there is no automatic
-scheduler wired up yet, and no UI consumes any of this yet beyond the
-still-placeholder "Mis propuestas" page.
+Everything here is server-only (Admin SDK); no UI consumes any of this yet
+beyond the still-placeholder "Mis propuestas" page. Manual, ad hoc runs
+still go through `/api/admin/matching/*` (below); the automatic monthly
+run has its own dedicated endpoint — see "Automatic monthly scheduling"
+further down, added in the October 2026 operational audit.
 
 **Algorithm** (`hardFilters.ts`, `scoring.ts`, `engine.ts`), strictly in
 this order, never reordered or overridden by anything downstream:
@@ -666,12 +692,78 @@ active Pass cooldown, or permanently `blocked` (a human/safety action via
 **nothing** to `proposals`/`pairHistory`/`invitations`), `allowlist`
 (real writes, only for `config.allowlistPersonIds`), `limited_live` (real
 writes, capped by `maxMembersPerRun`, no allowlist), `production` (the
-full `active_search` pool). **Nothing schedules `production`
-automatically** — there is no Cloud Scheduler job, cron, or App Hosting
-equivalent wired up. Activating real monthly automation later means
-creating a Cloud Scheduler job that calls `/api/admin/matching/run-cycle`
-with `mode: "production"` on a monthly cadence — a Console/`gcloud`
-action outside this codebase, deliberately not done.
+full `active_search` pool, uncapped — see below).
+
+### Automatic monthly scheduling
+
+`POST /api/admin/matching/run-monthly-cycle` (same `MATCHING_ADMIN_SECRET`
+auth as every other admin matching route — zero new IAM/infra needed to
+call it) is the scheduler-facing entry point, added in the October 2026
+operational audit. It derives a `monthly-YYYY-MM` cycleId from the CURRENT
+CALENDAR MONTH in **Europe/Madrid** (`monthlyProductionCycleId` in
+`config.ts`, computed via `Intl.DateTimeFormat` rather than the server's
+own UTC clock, so the boundary is correct even though App Hosting runs in
+UTC) and calls `runMatchingCycle(cycleId, "production")`. This is
+DELIBERATELY independent of any member's Stripe billing/renewal date —
+see "Billing renewal vs. matching cycle" below.
+
+Calling this endpoint more than once within the same Madrid calendar
+month — a Cloud Scheduler retry, or a human triggering it by hand — always
+resolves to the same cycleId, and `runMatchingCycle` already treats a
+`completed` cycle as a pure no-op and a partially-run one as safely
+resumable (per-member `claimMemberRun` + deterministic proposal ids), so
+this can never create a second monthly allowance for the same member.
+
+**The 50-member cap fix**: `production` mode's `selectRecipients`
+(`engine.ts`) no longer slices to `maxMembersPerRun` — every other mode
+(`dry_run`/`allowlist`/`limited_live`) keeps that safety valve unchanged.
+A `production` cycle instead loops over its full recipient list inside a
+wall-clock time budget (`PRODUCTION_CYCLE_TIME_BUDGET_MS`, 4 minutes,
+`config.ts`); if the budget is hit before the list is exhausted, the cycle
+is left `running` (not `completed`) and the next scheduled invocation of
+the SAME cycleId resumes it, skipping everyone already processed. This is
+what makes the monthly run scale to hundreds/thousands of members without
+either a blind unbounded cap or new batching infrastructure.
+
+**Still required, outside this codebase** (Console/`gcloud`, deliberately
+not done here): a Cloud Scheduler job that calls this endpoint. Recommended
+minimal setup — a single job at `0 5 1 * *` in `Europe/Madrid`, HTTP
+target, `x-admin-secret` header sourced from the same `MATCHING_ADMIN_SECRET`
+Secret Manager secret already used by the other matching routes:
+
+```bash
+gcloud scheduler jobs create http junto-select-monthly-matching \
+  --location=europe-west1 \
+  --schedule="0 5 1 * *" \
+  --time-zone="Europe/Madrid" \
+  --uri="https://<your-app-hosting-domain>/api/admin/matching/run-monthly-cycle" \
+  --http-method=POST \
+  --headers="x-admin-secret=<the MATCHING_ADMIN_SECRET value>" \
+  --attempt-deadline=1800s
+```
+
+For a large eligible population that needs more than one pass to finish
+within a single day, add a second, short-interval job (e.g. every 15
+minutes for the first few hours after the 1st) hitting the same endpoint
+— idempotent by construction, so extra calls before the cycle completes
+are harmless no-ops/resumptions. An OIDC-authenticated Cloud Scheduler job
+(verifying a Google-signed identity token instead of a header secret) is
+a more robust alternative if a secret value living in the Scheduler job's
+own configuration is not an acceptable tradeoff — this requires additional
+IAM setup (a dedicated invoker service account) not done here.
+
+### Billing renewal vs. matching cycle — never conflated
+
+Two independent systems, on purpose: (1) the monthly matching cycle above,
+gated purely by the Madrid calendar month; (2) a member's Stripe
+subscription renewal, on whatever date they originally checked out. A
+member who buys a 3-month membership on 15 October is `active_search`
+immediately (webhook-driven) and is eligible for the October cycle
+whenever it next runs, then the November cycle on/after 1 November, then
+December on/after 1 December — regardless of the fact that their Stripe
+renewal happens around 15 January. A renewal-reminder email (see "Missing
+operational automations" in the audit report) is tied to that Stripe date,
+never to the calendar-month cycle, and vice versa.
 
 **What's NOT built** (by explicit scope, not oversight): the
 member-facing "Mis propuestas" UI for actually seeing a proposal/

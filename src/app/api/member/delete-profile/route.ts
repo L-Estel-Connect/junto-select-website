@@ -45,9 +45,19 @@ export async function POST(request: Request) {
   if (billing?.stripeSubscriptionId && isCancelableSubscriptionStatus(billing.status)) {
     try {
       const stripe = getStripe();
-      await stripe.subscriptions.cancel(billing.stripeSubscriptionId);
+      // `subscriptions.cancel` (no `cancel_at_period_end`) cancels
+      // IMMEDIATELY — deliberately never the period-end behavior used by
+      // ordinary "Cancelar suscripción" — because the account is about to
+      // be permanently deleted, not just stop renewing. The returned
+      // object's own `status` is checked, not just that the call didn't
+      // throw: that's the actual confirmation that Stripe has stopped the
+      // subscription before anything is deleted below.
+      const canceled = await stripe.subscriptions.cancel(billing.stripeSubscriptionId);
+      if (canceled.status !== "canceled") {
+        throw new Error(`Stripe reported unexpected status "${canceled.status}" after cancel`);
+      }
     } catch (error) {
-      console.error(`delete-profile: failed to cancel subscription for uid ${uid}`, error);
+      console.error(`delete-profile: failed to confirm subscription cancellation for uid ${uid}`, error);
       return NextResponse.json(
         { ok: false, error: "subscription_cancel_failed" },
         { status: 502 },
