@@ -43,6 +43,10 @@ const DISCLOSURES = [
   "Al confirmar el pago aceptas nuestros Términos y condiciones y nuestra Política de privacidad.",
 ];
 
+function chargeFrequencyLabel(durationMonths: number): string {
+  return durationMonths === 1 ? "cada mes" : `cada ${durationMonths} meses`;
+}
+
 function PlanCard({
   planKey,
   selected,
@@ -69,8 +73,12 @@ function PlanCard({
           </span>
         )}
       </div>
-      <p className="mt-2 font-serif text-[26px] leading-none text-ink">{plan.priceEuros} €</p>
-      <p className="mt-1 text-[13px] text-ink-soft">Equivale a {plan.perMonthEuros} €/mes · {plan.billingCopy}</p>
+      <p className="mt-2 font-serif text-[26px] leading-none text-ink">
+        {plan.priceEuros} € {chargeFrequencyLabel(plan.durationMonths)}
+      </p>
+      {plan.durationMonths > 1 && (
+        <p className="mt-1 text-[13px] text-ink-soft">Equivale a {plan.perMonthEuros} €/mes</p>
+      )}
     </button>
   );
 }
@@ -88,6 +96,9 @@ function ActiveMembership({
 }) {
   const plan = billing.planKey ? PLAN_DISPLAY[billing.planKey] : null;
   const renewalDate = formatDate(billing.currentPeriodEnd);
+  // Three explicit states — never a single generic "Activa" label that
+  // hides whether renewal is actually scheduled to happen.
+  const estado = billing.cancelAtPeriodEnd && renewalDate ? `Activa hasta ${renewalDate}` : "Activa";
 
   return (
     <>
@@ -100,23 +111,25 @@ function ActiveMembership({
 
       <div className="mt-10 border-t border-hairline">
         <div className="flex items-center justify-between border-b border-hairline py-4">
-          <span className="text-[15px] text-ink">Plan actual</span>
-          <span className="text-[13px] text-ink-soft">{plan?.label ?? "Membresía activa"}</span>
+          <span className="text-[15px] text-ink">Plan</span>
+          <span className="text-[13px] text-ink-soft">{plan?.label ?? "—"}</span>
         </div>
-        {renewalDate && (
+        <div className="flex items-center justify-between border-b border-hairline py-4">
+          <span className="text-[15px] text-ink">Estado</span>
+          <span className="text-[13px] text-ink-soft">{estado}</span>
+        </div>
+        {renewalDate && !billing.cancelAtPeriodEnd && (
           <div className="flex items-center justify-between border-b border-hairline py-4">
-            <span className="text-[15px] text-ink">
-              {billing.cancelAtPeriodEnd ? "Finaliza el" : "Próxima renovación"}
-            </span>
+            <span className="text-[15px] text-ink">Próxima renovación</span>
             <span className="text-[13px] text-ink-soft">{renewalDate}</span>
           </div>
         )}
       </div>
 
-      {billing.cancelAtPeriodEnd && (
+      {billing.cancelAtPeriodEnd && renewalDate && (
         <p className="mt-4 text-[13px] leading-relaxed text-ink-soft">
-          Has cancelado tu renovación automática. Tu membresía seguirá activa hasta la fecha indicada
-          arriba y después pasará a perfil pasivo.
+          Tu membresía seguirá activa hasta el {renewalDate}. Después, tu perfil volverá automáticamente
+          al modo pasivo.
         </p>
       )}
 
@@ -174,6 +187,7 @@ export default function PlanSection({ uid }: { uid: string }) {
 
   const [selectedPlan, setSelectedPlan] = useState<PlanKey>("three_month");
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [immediateServiceRequested, setImmediateServiceRequested] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [manageError, setManageError] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -195,11 +209,16 @@ export default function PlanSection({ uid }: { uid: string }) {
       setCheckoutError("Debes aceptar los términos y condiciones para continuar.");
       return;
     }
+    if (!immediateServiceRequested) {
+      setCheckoutError("Debes confirmar el inicio inmediato del servicio para continuar.");
+      return;
+    }
     setSubmitting(true);
     try {
       const url = await authedFetch("/api/billing/create-checkout-session", {
         planKey: selectedPlan,
         termsAccepted: true,
+        immediateServiceRequested: true,
       });
       window.location.href = url;
     } catch {
@@ -259,7 +278,7 @@ export default function PlanSection({ uid }: { uid: string }) {
 
           <div className="mt-10 border-t border-hairline">
             <div className="flex items-center justify-between border-b border-hairline py-4">
-              <span className="text-[15px] text-ink">Plan actual</span>
+              <span className="text-[15px] text-ink">Estado</span>
               <span className="text-[13px] text-ink-soft">Perfil pasivo</span>
             </div>
           </div>
@@ -304,11 +323,35 @@ export default function PlanSection({ uid }: { uid: string }) {
             </span>
           </label>
 
+          <label className="mt-4 flex items-start gap-3 text-[13px] leading-relaxed text-ink">
+            <input
+              type="checkbox"
+              checked={immediateServiceRequested}
+              onChange={(e) => setImmediateServiceRequested(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0"
+            />
+            <span>
+              Solicito expresamente que la prestación de mi membresía y búsqueda activa comience
+              inmediatamente, antes de que finalice el plazo legal de desistimiento de 14 días. Entiendo
+              que, si desisto después de que el servicio haya comenzado, podré tener que abonar un
+              importe proporcional al servicio ya prestado, conforme a los{" "}
+              <a href="/terminos" target="_blank" className="underline decoration-hairline underline-offset-4">
+                Términos y condiciones
+              </a>
+              .
+            </span>
+          </label>
+
+          <div className="mt-6 flex items-center justify-between border-t border-hairline pt-4 text-[14px]">
+            <span className="text-ink">Total a pagar ahora</span>
+            <span className="font-medium text-ink">{PLAN_DISPLAY[selectedPlan].priceEuros} €</span>
+          </div>
+
           <button
             type="button"
             onClick={handleCheckout}
-            disabled={submitting || !termsAccepted}
-            className="mt-6 w-full rounded-full bg-ink px-9 py-4 text-center text-[13px] font-medium uppercase tracking-[0.18em] text-white transition-opacity disabled:opacity-40"
+            disabled={submitting || !termsAccepted || !immediateServiceRequested}
+            className="mt-4 w-full rounded-full bg-ink px-9 py-4 text-center text-[13px] font-medium uppercase tracking-[0.18em] text-white transition-opacity disabled:opacity-40"
           >
             {submitting ? "Redirigiendo a Stripe…" : `Continuar al pago — ${PLAN_DISPLAY[selectedPlan].priceEuros} €`}
           </button>
