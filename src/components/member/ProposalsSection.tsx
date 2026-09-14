@@ -6,18 +6,36 @@ import { useMemberProfile } from "./useMemberProfile";
 import { useBilling } from "@/lib/billing/useBilling";
 import { isEntitledStatus } from "@/lib/billing/types";
 import { primaryButtonClasses } from "@/lib/styles";
+import { memberFetchJson } from "@/lib/member/memberFetch";
+import { useMemberQuery } from "@/lib/member/useMemberQuery";
+import type { MemberInvitationView, MemberProposalView } from "@/lib/matching/memberLifecycleTypes";
+import InvitationCard from "./InvitationCard";
+import ProposalCard from "./ProposalCard";
+
+const ACTIONABLE_INVITATION_STAGES: MemberInvitationView["stage"][] = ["invited", "viewed"];
+const ACTIONABLE_PROPOSAL_STAGES: MemberProposalView["stage"][] = ["proposed", "viewed"];
 
 /**
- * The empty state depends on real membership/search status (billing/{uid},
- * webhook-driven) — never a generic "nothing here yet" regardless of
- * whether the person is passive or an already-paying active searcher.
- * There is still no real proposals *list* UI (the matching engine's
- * proposal documents aren't rendered anywhere yet) — this only replaces
- * what the single empty state says, per membership status.
+ * The real "Mis propuestas" experience: whatever currently needs this
+ * member's attention (someone interested in them, or a curated selection
+ * for them), shown FIRST regardless of membership status — see the
+ * product principle "Do not make membership/payment the dominant element
+ * when there is a human action waiting." Only once nothing is actionable
+ * does this fall back to the original billing-status-driven "estamos
+ * buscando por ti" / "activa tu búsqueda" messaging.
  */
 export default function ProposalsSection({ uid }: { uid: string }) {
   const { ready, error, refresh } = useMemberProfile(uid);
   const { billing, loading: billingLoading, error: billingError } = useBilling(uid);
+
+  const invitationsQuery = useMemberQuery(
+    () => memberFetchJson<{ invitations: MemberInvitationView[] }>("/api/member/invitations"),
+    [uid],
+  );
+  const proposalsQuery = useMemberQuery(
+    () => memberFetchJson<{ proposals: MemberProposalView[] }>("/api/member/proposals"),
+    [uid],
+  );
 
   if (!ready) {
     if (error) return <IntroductionError message={error} onRetry={() => void refresh()} />;
@@ -28,7 +46,39 @@ export default function ProposalsSection({ uid }: { uid: string }) {
     return <IntroductionLoading />;
   }
 
+  const lifecycleLoading =
+    (!invitationsQuery.data && !invitationsQuery.error) || (!proposalsQuery.data && !proposalsQuery.error);
+  if (lifecycleLoading) {
+    return <IntroductionLoading />;
+  }
+  if (invitationsQuery.error || proposalsQuery.error) {
+    return (
+      <IntroductionError
+        message={invitationsQuery.error ?? proposalsQuery.error ?? "No hemos podido cargar tus propuestas."}
+        onRetry={() => {
+          invitationsQuery.reload();
+          proposalsQuery.reload();
+        }}
+      />
+    );
+  }
+
+  const invitations = invitationsQuery.data?.invitations ?? [];
+  const proposals = proposalsQuery.data?.proposals ?? [];
+
+  const invitationsWaiting = invitations.filter((i) => ACTIONABLE_INVITATION_STAGES.includes(i.stage));
+  const proposalsActionable = proposals.filter((p) => ACTIONABLE_PROPOSAL_STAGES.includes(p.stage));
+  const proposalsWaiting = proposals.filter((p) => p.stage === "member_interested");
+
+  const hasSomethingToShow =
+    invitationsWaiting.length > 0 || proposalsActionable.length > 0 || proposalsWaiting.length > 0;
+
   const entitled = isEntitledStatus(billing.status);
+
+  function reloadAll() {
+    invitationsQuery.reload();
+    proposalsQuery.reload();
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-[560px] flex-col px-6 py-14 sm:px-0">
@@ -36,7 +86,19 @@ export default function ProposalsSection({ uid }: { uid: string }) {
         Mis propuestas
       </h1>
 
-      {entitled ? (
+      {hasSomethingToShow ? (
+        <div className="mt-10 space-y-6">
+          {invitationsWaiting.map((invitation) => (
+            <InvitationCard key={invitation.id} invitation={invitation} onDecided={reloadAll} />
+          ))}
+          {proposalsActionable.map((proposal) => (
+            <ProposalCard key={proposal.id} proposal={proposal} onDecided={reloadAll} />
+          ))}
+          {proposalsWaiting.map((proposal) => (
+            <ProposalCard key={proposal.id} proposal={proposal} onDecided={reloadAll} />
+          ))}
+        </div>
+      ) : entitled ? (
         <div className="mt-14 flex min-h-[30svh] flex-col items-center justify-center text-center">
           <p className="text-[16px] text-ink">Estamos buscando por ti</p>
           <p className="mt-2 max-w-[42ch] text-[15px] leading-relaxed text-ink-soft">

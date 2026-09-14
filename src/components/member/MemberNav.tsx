@@ -5,6 +5,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Wordmark from "@/components/Wordmark";
 import { signOutUser } from "@/lib/firebase/auth";
+import { memberFetchJson } from "@/lib/member/memberFetch";
+import { useMemberQuery } from "@/lib/member/useMemberQuery";
+import { useMemberUid } from "./MemberContext";
+import type { MemberLifecycleSummary } from "@/lib/matching/memberLifecycleTypes";
 
 const NAV_ITEMS = [
   { href: "/member", label: "Inicio" },
@@ -15,6 +19,11 @@ const NAV_ITEMS = [
   { href: "/member/plan", label: "Mi plan" },
   { href: "/member/settings", label: "Ajustes" },
 ];
+
+/** A small filled dot — "something here needs your attention," never a count that could feel gamified. */
+function AttentionDot() {
+  return <span aria-hidden className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-rose-dark align-middle" />;
+}
 
 const SECONDARY_ITEMS = [
   { href: "/privacidad", label: "Privacidad" },
@@ -39,6 +48,21 @@ function HamburgerIcon() {
 export default function MemberNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const uid = useMemberUid();
+  const summaryQuery = useMemberQuery(
+    () => memberFetchJson<{ summary: MemberLifecycleSummary }>("/api/member/lifecycle-summary"),
+    [uid],
+  );
+  const summary = summaryQuery.data?.summary;
+  const proposalsAttention =
+    (summary?.proposalsWaitingForDecision ?? 0) + (summary?.invitationsWaitingForDecision ?? 0) > 0;
+  const connectionsAttention = (summary?.mutualIntroductionsCount ?? 0) > 0;
+
+  function attentionFor(href: string): boolean {
+    if (href === "/member/proposals") return proposalsAttention;
+    if (href === "/member/connections") return connectionsAttention;
+    return false;
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -68,6 +92,7 @@ export default function MemberNav() {
               }`}
             >
               {item.label}
+              {attentionFor(item.href) && <AttentionDot />}
             </Link>
           ))}
           <button
@@ -122,6 +147,7 @@ export default function MemberNav() {
                   }`}
                 >
                   {item.label}
+                  {attentionFor(item.href) && <AttentionDot />}
                 </Link>
               ))}
             </nav>
