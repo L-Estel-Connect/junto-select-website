@@ -40,7 +40,15 @@ export interface MemberLifecycleSummary {
   mutualIntroductionsCount: number;
 }
 
-export type MemberDecisionError = "not_found" | "not_your_proposal" | "cannot_decide";
+/**
+ * `no_longer_compatible`: this "interested" decision was refused because
+ * a fresh reciprocal hard-filter check (see pairHistory.ts
+ * stillReciprocallyCompatible) found the pair no longer passes — never
+ * carries which field changed or whose dealbreaker it was; see
+ * memberDecisionErrorLabel for the single neutral, privacy-safe message
+ * shown for it.
+ */
+export type MemberDecisionError = "not_found" | "not_your_proposal" | "cannot_decide" | "no_longer_compatible";
 
 export type MemberDecisionResult =
   | { ok: true; alreadyRecorded: boolean }

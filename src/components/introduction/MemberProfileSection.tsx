@@ -7,6 +7,7 @@ import { finalizeOnboarding } from "@/lib/introduction/profile";
 import { useSharedProfile } from "@/lib/introduction/profileCache";
 import {
   getPrerequisiteRedirect,
+  isAboutMeComplete,
   isPhotosComplete,
   isPreferencesComplete,
   isPresentationComplete,
@@ -63,7 +64,13 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
   }
 
   const sections: SectionInfo[] = [
-    { label: "Sobre ti", complete: true, href: "/member/profile/about" },
+    // Previously hardcoded `true` — this section is now editable after
+    // finalization (see AboutMeEditSection.tsx) and CAN become incomplete
+    // again (e.g. hasChildren flipped to true but birth years not yet
+    // answered), so this must reflect the same authoritative check the
+    // matching engine itself uses, not an assumption that "Sobre ti" is
+    // always done once the person is finalized.
+    { label: "Sobre ti", complete: isAboutMeComplete(profile), href: "/member/profile/about" },
     {
       label: "Lo que buscas",
       complete: isPreferencesComplete(profile.dealbreakers),

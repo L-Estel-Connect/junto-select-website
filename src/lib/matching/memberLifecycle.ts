@@ -83,6 +83,7 @@ export async function decideProposalForMember(
 
   try {
     const result = await recordMemberDecision(proposalId, decision, passType);
+    if (result.blockedIncompatible) return { ok: false, error: "no_longer_compatible" };
     return { ok: true, alreadyRecorded: result.alreadyRecorded };
   } catch {
     // recordMemberDecision throws only when asked to record the OPPOSITE
@@ -133,6 +134,7 @@ export async function decideInvitationForMember(
 
   try {
     const result = await recordCandidateDecision(invitationId, decision, passType);
+    if (result.blockedIncompatible) return { ok: false, error: "no_longer_compatible" };
     return { ok: true, alreadyRecorded: result.alreadyRecorded };
   } catch {
     return { ok: false, error: "cannot_decide" };

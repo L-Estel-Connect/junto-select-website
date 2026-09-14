@@ -161,12 +161,27 @@ export type PassType = "no_me_interesa" | "ahora_no";
  * reciprocal invitation this creates is itself accepted. `expired` is
  * reserved for a future TTL/expiry job — nothing sets it yet.
  */
+/**
+ * `no_longer_compatible`: the recipient said "interested", but a fresh
+ * reciprocal hard-filter check against BOTH current profiles (not the
+ * score/preferences snapshotted at proposal creation) found the pair no
+ * longer passes — e.g. one side edited a self attribute (own children,
+ * future-children intent, smoking) after the proposal was created. This
+ * is a distinct, honest reason from `expired` (reserved for a future
+ * time-based TTL job) and from `member_passed` (an actual human "no") —
+ * conflating any of these would make funnel analytics ("why did this
+ * proposal never become an introduction") impossible to read correctly,
+ * the same reasoning HardFilterFailureReason/PairHistoryExclusionReason
+ * already apply elsewhere in this file. Terminal: never re-evaluated or
+ * retried automatically — a genuinely new proposal is a fresh cycle.
+ */
 export type ProposalStage =
   | "proposed"
   | "viewed"
   | "member_interested"
   | "member_passed"
   | "mutual_interested"
+  | "no_longer_compatible"
   | "expired";
 
 /**
@@ -231,12 +246,14 @@ export interface ProposalDocument {
  * create twice). `invited` -> (optional) `viewed` -> `candidate_interested`
  * | `candidate_passed` -> (if interested) `mutual_interested`.
  */
+/** See ProposalStage's `no_longer_compatible` doc comment — same meaning, same reciprocal hard-filter re-check, applied at the invitation (candidate) decision instead. */
 export type InvitationStage =
   | "invited"
   | "viewed"
   | "candidate_interested"
   | "candidate_passed"
   | "mutual_interested"
+  | "no_longer_compatible"
   | "expired";
 
 export interface InvitationDocument {

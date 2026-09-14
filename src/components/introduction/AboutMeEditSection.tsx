@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { aboutMeSteps, type StepId } from "@/lib/introduction/aboutMeFields";
+import { computeProfileStatus } from "@/lib/introduction/completion";
 import { updateProfileFields } from "@/lib/introduction/profile";
 import { applyFieldsToProfile, computeStepFields } from "./OnboardingWizard";
 import { useSharedProfile } from "@/lib/introduction/profileCache";
@@ -103,6 +104,7 @@ export default function AboutMeEditSection({ uid }: { uid: string }) {
   );
 
   async function handleAnswer(stepId: StepId, value: unknown) {
+    if (!profile) return;
     const step = aboutMeSteps.find((s) => s.id === stepId)!;
     setError(null);
     setSaving(true);
@@ -120,8 +122,19 @@ export default function AboutMeEditSection({ uid }: { uid: string }) {
       ) {
         fields["visible.childrenBirthYears"] = null;
       }
-      await updateProfileFields(uid, fields);
-      mutate((prev) => applyFieldsToProfile(prev, fields));
+      // A self-attribute edit can make a profile that was matching-eligible
+      // stop being so (e.g. hasChildren flipped to true but birth years
+      // aren't answered yet) — or the reverse, once completed. Recompute
+      // and persist meta.profileStatus on every save here, exactly like
+      // preferences.ts/photos.ts/presentation.ts already do for their own
+      // sections; loadEligiblePool (engine.ts) filters by this STORED
+      // field, never by recomputing isAboutMeComplete itself, so leaving
+      // it stale would silently keep an incomplete profile eligible (or
+      // keep a now-complete one excluded).
+      const updatedProfile = applyFieldsToProfile(profile, fields);
+      const profileStatus = computeProfileStatus(updatedProfile);
+      await updateProfileFields(uid, fields, { profileStatus });
+      mutate(() => ({ ...updatedProfile, meta: { ...updatedProfile.meta, profileStatus } }));
       setExpandedId(null);
     } catch {
       setError("No hemos podido guardar tu respuesta. Inténtalo de nuevo.");

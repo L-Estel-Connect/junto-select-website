@@ -2,7 +2,9 @@ import "server-only";
 import { FieldValue, Timestamp, type Transaction } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { addMonths, PASS_COOLDOWN_MONTHS, pairKey } from "./config";
+import { passesHardFilters } from "./hardFilters";
 import { queueOutboundEmail } from "@/lib/notifications/outboundEmails";
+import { withProfileDefaults, type ProfileDocument } from "@/lib/introduction/types";
 import type {
   InvitationDocument,
   PairHistoryDocument,
@@ -11,6 +13,37 @@ import type {
   PassType,
   ProposalDocument,
 } from "./types";
+
+async function loadProfileInTransaction(tx: Transaction, uid: string): Promise<ProfileDocument | null> {
+  const snap = await tx.get(adminDb.doc(`profiles/${uid}`));
+  if (!snap.exists) return null;
+  return withProfileDefaults(uid, snap.data() as Partial<ProfileDocument>);
+}
+
+/**
+ * Decision-time hard-filter revalidation (see README/audit "Stale
+ * proposal revalidation"): before an "interested" decision progresses a
+ * proposal/invitation toward an introduction, this re-loads BOTH
+ * profiles FRESH from Firestore (never the score/profile snapshot
+ * captured when the proposal was created) and normalizes legacy values
+ * exactly as every other read path does (`withProfileDefaults`), then
+ * runs the CURRENT reciprocal hard filters — the same deterministic
+ * check used at proposal-creation time, nothing new. Only hard filters
+ * matter here, on purpose: a soft preference drifting (e.g. a
+ * `prefiero_que_no` scoring signal, or the score itself) is never a
+ * reason to block two people who are both actively saying yes right now
+ * — only a genuine hard dealbreaker mismatch is. A missing profile
+ * (account deleted since the proposal was made) fails closed, the same
+ * "unknown is never compatible" rule hardFilters.ts already applies to
+ * every other unknown case. Reads happen inside the SAME transaction as
+ * the decision being recorded, before any write, so there is no race
+ * between this check and the write it gates.
+ */
+async function stillReciprocallyCompatible(tx: Transaction, uidA: string, uidB: string): Promise<boolean> {
+  const [a, b] = await Promise.all([loadProfileInTransaction(tx, uidA), loadProfileInTransaction(tx, uidB)]);
+  if (!a || !b) return false;
+  return passesHardFilters(a, b);
+}
 
 function pairHistoryRef(personIdA: string, personIdB: string) {
   return adminDb.doc(`pairHistory/${pairKey(personIdA, personIdB)}`);
@@ -184,7 +217,7 @@ export async function recordMemberDecision(
   proposalId: string,
   decision: "interested" | "passed",
   passType: PassType | null,
-): Promise<{ alreadyRecorded: boolean }> {
+): Promise<{ alreadyRecorded: boolean; blockedIncompatible?: boolean }> {
   const proposalRef = adminDb.doc(`proposals/${proposalId}`);
   const invitationRef = adminDb.doc(`invitations/${proposalId}`);
 
@@ -200,8 +233,20 @@ export async function recordMemberDecision(
     // member having said "interested", so a repeated/duplicate "interested"
     // call here must stay idempotent even after the match already went
     // mutual, exactly like recordCandidateDecision's own equivalent check.
-    if (proposal.stage === targetStage || (decision === "interested" && proposal.stage === "mutual_interested")) {
-      return { alreadyRecorded: true, invitationCreatedForUid: null as string | null };
+    // A proposal already marked `no_longer_compatible` (see
+    // stillReciprocallyCompatible below) is likewise a terminal outcome of
+    // a PRIOR "interested" decision — repeating that decision must return
+    // the same outcome, not throw as if it were a fresh conflicting one.
+    if (
+      proposal.stage === targetStage ||
+      (decision === "interested" && proposal.stage === "mutual_interested") ||
+      (decision === "interested" && proposal.stage === "no_longer_compatible")
+    ) {
+      return {
+        alreadyRecorded: true,
+        invitationCreatedForUid: null as string | null,
+        blockedIncompatible: proposal.stage === "no_longer_compatible",
+      };
     }
     if (proposal.stage !== "proposed" && proposal.stage !== "viewed") {
       throw new Error(`proposal ${proposalId} already decided (${proposal.stage})`);
@@ -212,6 +257,26 @@ export async function recordMemberDecision(
     // below needs it) so the write(s) that follow are never interleaved
     // with a read.
     const invitationSnap = decision === "interested" ? await tx.get(invitationRef) : null;
+
+    // Decision-time hard-filter revalidation: an "interested" decision is
+    // the one that progresses this pair toward an introduction, so it's
+    // the one point where a stale proposal (created when both sides
+    // passed the reciprocal hard filters, but one side has since edited a
+    // self attribute) must not be allowed through — see
+    // stillReciprocallyCompatible's own doc comment. A "passed" decision
+    // never progresses anything, so it is deliberately never revalidated.
+    if (decision === "interested") {
+      const compatible = await stillReciprocallyCompatible(tx, proposal.recipientUid, proposal.candidateUid);
+      if (!compatible) {
+        const now = FieldValue.serverTimestamp();
+        tx.update(proposalRef, {
+          stage: "no_longer_compatible",
+          decidedAt: now,
+          updatedAt: now,
+        });
+        return { alreadyRecorded: false, invitationCreatedForUid: null, blockedIncompatible: true };
+      }
+    }
 
     const now = FieldValue.serverTimestamp();
     tx.update(proposalRef, {
@@ -275,7 +340,7 @@ export async function recordMemberDecision(
     });
   }
 
-  return { alreadyRecorded: result.alreadyRecorded };
+  return { alreadyRecorded: result.alreadyRecorded, blockedIncompatible: result.blockedIncompatible };
 }
 
 /**
@@ -288,7 +353,7 @@ export async function recordCandidateDecision(
   invitationId: string,
   decision: "interested" | "passed",
   passType: PassType | null,
-): Promise<{ alreadyRecorded: boolean }> {
+): Promise<{ alreadyRecorded: boolean; blockedIncompatible?: boolean }> {
   const invitationRef = adminDb.doc(`invitations/${invitationId}`);
   const proposalRef = adminDb.doc(`proposals/${invitationId}`); // same id as the source proposal
   const introductionRef = adminDb.doc(`introductions/${invitationId}`);
@@ -299,8 +364,18 @@ export async function recordCandidateDecision(
     const invitation = invitationSnap.data() as InvitationDocument;
 
     const targetStage = decision === "interested" ? "candidate_interested" : "candidate_passed";
-    if (invitation.stage === targetStage || invitation.stage === "mutual_interested") {
-      return { alreadyRecorded: true, introductionCreatedForUids: null as [string, string] | null };
+    // Same idempotency treatment as recordMemberDecision above for a
+    // previously-blocked "interested" decision — see its comment.
+    if (
+      invitation.stage === targetStage ||
+      invitation.stage === "mutual_interested" ||
+      (decision === "interested" && invitation.stage === "no_longer_compatible")
+    ) {
+      return {
+        alreadyRecorded: true,
+        introductionCreatedForUids: null as [string, string] | null,
+        blockedIncompatible: invitation.stage === "no_longer_compatible",
+      };
     }
     if (invitation.stage !== "invited" && invitation.stage !== "viewed") {
       throw new Error(`invitation ${invitationId} already decided (${invitation.stage})`);
@@ -332,6 +407,24 @@ export async function recordCandidateDecision(
     if (!proposalSnap.exists) throw new Error(`proposal ${invitationId} not found for invitation`);
     const proposal = proposalSnap.data() as ProposalDocument;
     const introductionSnap = await tx.get(introductionRef);
+
+    // Decision-time hard-filter revalidation — same rule and same reason
+    // as recordMemberDecision above, applied at the point BOTH sides have
+    // now said Interested and a mutual introduction is about to be
+    // created. Only the invitation (this stage's own document) is marked
+    // `no_longer_compatible`; the proposal is left exactly as
+    // `member_interested`, which remains a true statement about what the
+    // original member did — the incompatibility was only discovered here,
+    // at the candidate's decision.
+    const compatible = await stillReciprocallyCompatible(tx, invitation.inviterUid, invitation.recipientUid);
+    if (!compatible) {
+      tx.update(invitationRef, {
+        stage: "no_longer_compatible",
+        decidedAt: now,
+        updatedAt: now,
+      });
+      return { alreadyRecorded: false, introductionCreatedForUids: null, blockedIncompatible: true };
+    }
 
     tx.update(invitationRef, {
       stage: "mutual_interested",
@@ -383,7 +476,7 @@ export async function recordCandidateDecision(
     }
   }
 
-  return { alreadyRecorded: result.alreadyRecorded };
+  return { alreadyRecorded: result.alreadyRecorded, blockedIncompatible: result.blockedIncompatible };
 }
 
 /**
