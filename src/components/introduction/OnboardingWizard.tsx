@@ -27,6 +27,41 @@ function getByPath(obj: unknown, path: string): unknown {
 }
 
 /**
+ * Applies a `saveStepAnswer`-style `{"section.field": value}` map onto a
+ * shallow clone of the cached profile, so the LOCAL cache reflects what
+ * was just written to Firestore immediately — not only after some later
+ * full refetch. Every path used anywhere in this wizard is exactly two
+ * segments (`visible.*` / `private.*` — see FieldPath in aboutMeFields.ts),
+ * so this only ever needs to merge one level deep.
+ *
+ * Root-cause fix: handleAnswer previously only patched `meta` fields into
+ * the cache (onboardingStepIndex, then aboutMeComplete), never the actual
+ * answered field. That was invisible for a normal mid-flow step, since the
+ * wizard immediately moves on to a DIFFERENT question. It broke two things
+ * that both depend on the cache already reflecting the JUST-saved answer:
+ * (1) the last step in `aboutMeSteps` (whichever one that is) — completing
+ * it never advanced past it or redirected, because `isAboutMeComplete`
+ * re-checked the still-stale cached copy and kept seeing that field as
+ * unanswered; (2) the childrenAges auto-skip effect a few steps later,
+ * which reads the cached `hasChildren` and — still seeing the stale `null`
+ * from before the children step's own save — treated every "yes, I have
+ * children" answer as unanswered and silently skipped straight past the
+ * birth-year question.
+ */
+export function applyFieldsToProfile(
+  profile: ProfileDocument,
+  fields: Record<string, unknown>,
+): ProfileDocument {
+  let next = profile;
+  for (const [path, value] of Object.entries(fields)) {
+    const [section, key] = path.split(".");
+    if (section !== "visible" && section !== "private" && section !== "meta") continue;
+    next = { ...next, [section]: { ...next[section], [key]: value } };
+  }
+  return next;
+}
+
+/**
  * Whether `step` already has a real answer on `profile` — the per-step
  * building block for `firstUnansweredStepIndex` below. Mirrors the
  * per-field checks in completion.ts's `isAboutMeComplete` (the
@@ -34,7 +69,7 @@ function getByPath(obj: unknown, path: string): unknown {
  * `getNextOnboardingRoute`), rather than re-deriving its own notion of
  * "answered".
  */
-function isStepAnswered(profile: ProfileDocument, step: AboutMeStep): boolean {
+export function isStepAnswered(profile: ProfileDocument, step: AboutMeStep): boolean {
   if (step.type === "children") return profile.visible.hasChildren !== null;
   if (step.type === "childrenAges") {
     if (profile.visible.hasChildren !== true) return true; // doesn't apply
@@ -64,9 +99,42 @@ function isStepAnswered(profile: ProfileDocument, step: AboutMeStep): boolean {
  * at the actual first gap fixes it by asking the one missing question
  * instead of looping.
  */
-function firstUnansweredStepIndex(profile: ProfileDocument): number {
+export function firstUnansweredStepIndex(profile: ProfileDocument): number {
   const index = aboutMeSteps.findIndex((step) => !isStepAnswered(profile, step));
   return index === -1 ? aboutMeSteps.length : index;
+}
+
+/**
+ * Maps one step's raw answer `value` (as produced by StepQuestion/its
+ * per-type input components) to the `{"section.field": value}` map
+ * `saveStepAnswer` writes to Firestore and `applyFieldsToProfile` mirrors
+ * into the local cache. Pure and exported so the exact field-mapping this
+ * wizard relies on can be tested directly, without rendering the wizard.
+ */
+export function computeStepFields(
+  step: AboutMeStep,
+  value: unknown,
+): Record<string, unknown> {
+  if (step.type === "children") {
+    const childrenValue = value as { hasChildren: boolean; childrenCount: number | null };
+    return {
+      "visible.hasChildren": childrenValue.hasChildren,
+      "visible.childrenCount": childrenValue.childrenCount,
+    };
+  }
+  if (step.type === "childrenAges") {
+    // Ages are what the person entered (simplest for them); what gets
+    // stored is birth year, so this can never go stale — see
+    // ProfileDocument.visible.childrenBirthYears.
+    const ages = value as number[] | null;
+    if (!ages) return { "visible.childrenBirthYears": null };
+    const currentYear = new Date().getFullYear();
+    return { "visible.childrenBirthYears": ages.map((age) => currentYear - age) };
+  }
+  if (step.id === "birthDate") {
+    return { [step.path]: Timestamp.fromDate(new Date(`${value as string}T00:00:00`)) };
+  }
+  return { [step.path]: value };
 }
 
 export default function OnboardingWizard({ uid }: { uid: string }) {
@@ -213,44 +281,14 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
 
     const nextIndex = stepIndex + 1;
 
-    const fields: Record<string, unknown> =
-      currentStep.type === "children"
-        ? (() => {
-            const childrenValue = value as {
-              hasChildren: boolean;
-              childrenCount: number | null;
-            };
-            return {
-              "visible.hasChildren": childrenValue.hasChildren,
-              "visible.childrenCount": childrenValue.childrenCount,
-            };
-          })()
-        : currentStep.type === "childrenAges"
-          ? (() => {
-              // Ages are what the person entered (simplest for them); what
-              // gets stored is birth year, so this can never go stale — see
-              // ProfileDocument.visible.childrenBirthYears.
-              const ages = value as number[] | null;
-              if (!ages) return { "visible.childrenBirthYears": null };
-              const currentYear = new Date().getFullYear();
-              return {
-                "visible.childrenBirthYears": ages.map((age) => currentYear - age),
-              };
-            })()
-          : currentStep.id === "birthDate"
-            ? {
-                [currentStep.path]: Timestamp.fromDate(
-                  new Date(`${value as string}T00:00:00`),
-                ),
-              }
-            : { [currentStep.path]: value };
+    const fields = computeStepFields(currentStep, value);
 
     try {
       await saveStepAnswer(uid, fields, nextIndex);
-      mutate((prev) => ({
-        ...prev,
-        meta: { ...prev.meta, onboardingStepIndex: nextIndex },
-      }));
+      mutate((prev) => {
+        const updated = applyFieldsToProfile(prev, fields);
+        return { ...updated, meta: { ...updated.meta, onboardingStepIndex: nextIndex } };
+      });
 
       if (nextIndex >= totalSteps) {
         await markAboutMeComplete(uid);
