@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireFirebaseUser } from "@/lib/firebase/serverAuth";
 import { getStripe } from "@/lib/stripe/client";
+import { getAppBaseUrl } from "@/lib/config/appBaseUrl";
 import type { BillingDocument } from "@/lib/billing/types";
 
 export const runtime = "nodejs";
@@ -33,10 +34,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "billing_not_configured" }, { status: 503 });
   }
 
-  const origin = new URL(request.url).origin;
+  let appBaseUrl: string;
+  try {
+    appBaseUrl = getAppBaseUrl();
+  } catch (error) {
+    console.error("create-portal-session: APP_BASE_URL misconfigured", error);
+    return NextResponse.json({ ok: false, error: "app_url_not_configured" }, { status: 503 });
+  }
+
   const portalSession = await stripe.billingPortal.sessions.create({
     customer: billing.stripeCustomerId,
-    return_url: `${origin}/member/plan`,
+    return_url: `${appBaseUrl}/member/plan`,
   });
 
   return NextResponse.json({ ok: true, url: portalSession.url });

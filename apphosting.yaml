@@ -25,6 +25,24 @@ runConfig:
 # These are public/non-secret client config values — safe to commit as
 # plain `value`, not `secret`.
 env:
+  # Junto Select's own public browser origin — see
+  # src/lib/config/appBaseUrl.ts for why every server-side redirect back
+  # into this app (Stripe Checkout/Portal return URLs) and every public
+  # SEO surface (metadataBase, canonical, Open Graph url, robots.txt's
+  # sitemap reference, sitemap.xml) reads this instead of deriving it
+  # from the incoming request, which is unreliable behind App Hosting's
+  # Cloud Run proxy (the confirmed cause of the "0.0.0.0" Customer Portal
+  # bug). BUILD availability is required too: the root layout's metadata
+  # and robots.ts/sitemap.ts are statically generated at `next build`
+  # time, not per-request. Update this ONE value (only) when the custom
+  # domain (juntoselect.com) goes live — no source file should need
+  # editing for that move.
+  - variable: APP_BASE_URL
+    value: "https://junto-select-website--select-dev-508407.europe-west4.hosted.app"
+    availability:
+      - BUILD
+      - RUNTIME
+
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
     value: "AIzaSyBs2apjAHLDld2OhBtJvy21RSBN31tYhaY"
     availability:

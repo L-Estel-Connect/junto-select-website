@@ -20,6 +20,7 @@ import {
 import { scorePair, SCORING_VERSION, type ScoreResult } from "./scoring";
 import { MANUAL_SUGGESTION_CYCLE_ID, manualProposalId } from "./config";
 import type { PairHistoryExclusionReason } from "./types";
+import { queueOutboundEmail } from "@/lib/notifications/outboundEmails";
 
 /**
  * "Founder / manual suggestion" — the exceptional path described in the
@@ -278,5 +279,12 @@ export async function createManualSuggestion(
   });
 
   if (!created) return { ok: false, error: "already_suggested" };
+
+  // Best-effort notification only — never allowed to affect the manual
+  // suggestion's own success/failure.
+  queueOutboundEmail({ type: "new_proposal", uid: params.recipientUid, email: null, data: {} }).catch((error) => {
+    console.error(`createManualSuggestion: failed to queue new_proposal email for uid ${params.recipientUid}`, error);
+  });
+
   return { ok: true, proposalId: id, score: result };
 }

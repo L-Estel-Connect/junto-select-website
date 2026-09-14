@@ -186,18 +186,15 @@ firebase apphosting:secrets:set BREVO_API_KEY --project select-dev-508407
 firebase apphosting:secrets:grantaccess BREVO_API_KEY --project select-dev-508407 --backend <backend-id>
 ```
 
-### Transactional email queue (not sending anything yet)
+### Transactional email queue + delivery
 
 `src/lib/notifications/outboundEmails.ts` — a generic, provider-agnostic
 `outboundEmails` Firestore collection that call sites write to when
-something worth emailing about happens. No consumer/sender exists yet
-(needs Brevo credentials, a sender identity, and templates the account
-owner hasn't provided — see the operational audit report for the
-CRITICAL/RECOMMENDED/OPTIONAL classification of which emails are worth
-building at all). Three call sites queue an entry today:
+something worth emailing about happens. Six call sites queue an entry
+today:
 
 - **`invoice.payment_failed`** (`/api/billing/webhook`) — queues
-  `type: "payment_failed"` with just `uid` (the future sender resolves the
+  `type: "payment_failed"` with just `uid` (the sender resolves the
   email from Firebase Auth at send time, not eagerly here).
 - **Account deletion** (`/api/member/delete-profile`) — queues
   `type: "account_deleted"` with the email captured INLINE, before
@@ -226,6 +223,61 @@ building at all). Three call sites queue an entry today:
     --headers="x-admin-secret=<the MATCHING_ADMIN_SECRET value>" \
     --attempt-deadline=60s
   ```
+
+- **A new proposal** (`matching/engine.ts`, `matching/manualSuggestion.ts`)
+  — queues `type: "new_proposal"` for the recipient once a proposal
+  (algorithmic or admin_manual) is actually created.
+- **An invitation** (`matching/pairHistory.ts`'s `recordMemberDecision`)
+  — queues `type: "invitation_received"` for the candidate once the
+  free, no-membership-required invitation is created.
+- **A mutual introduction** (`matching/pairHistory.ts`'s
+  `recordCandidateDecision`) — queues `type: "mutual_introduction"` for
+  BOTH parties once the introduction is created. None of these three
+  carry any profile detail in `data` — the email is deliberately generic
+  ("something happened, log in to see it"), matching the product's
+  no-private-data-in-email requirement.
+
+**Delivery** (`src/lib/notifications/sendOutboundEmails.ts` +
+`POST /api/admin/notifications/send-outbound-emails`, same
+`MATCHING_ADMIN_SECRET` auth as every other scheduler route) drains this
+queue via Brevo's transactional send API (`/v3/smtp/email` —
+`src/lib/notifications/brevoTransactional.ts`), a completely separate
+Brevo endpoint from the public invitation form's `/v3/contacts`
+integration: a transactional send here can never add anyone to
+`BREVO_LIST_ID` or any other marketing list. Idempotent and
+crash-recoverable per queued document (claim-then-send, with a 10-minute
+stale-claim reclaim — the same pattern the matching engine's memberRun
+claims use), so calling it as often as you like is safe.
+
+**Still required, outside this codebase, before any of this actually
+sends anything**: a verified Brevo sender identity. Set:
+
+```bash
+firebase apphosting:secrets:set BREVO_SENDER_EMAIL --project select-dev-508407
+firebase apphosting:secrets:set BREVO_SENDER_NAME --project select-dev-508407
+firebase apphosting:secrets:grantaccess BREVO_SENDER_EMAIL --project select-dev-508407 --backend <backend-id>
+firebase apphosting:secrets:grantaccess BREVO_SENDER_NAME --project select-dev-508407 --backend <backend-id>
+```
+
+`BREVO_SENDER_EMAIL` must be an address Brevo has actually verified for
+transactional sending on this account (Brevo dashboard → Senders &
+IP) — an unverified address fails every send. Until both are set,
+`send-outbound-emails` returns `503 email_sender_not_configured` and
+touches no queue document at all (never a partial/misleading "N emails
+failed"). Also deploy the new `outboundEmails` composite index
+(`firebase deploy --only firestore:indexes`) before enabling the
+schedule below:
+
+```bash
+gcloud scheduler jobs create http junto-select-send-outbound-emails \
+  --location=europe-west1 \
+  --schedule="*/15 * * * *" \
+  --time-zone="Europe/Madrid" \
+  --uri="https://<your-app-hosting-domain>/api/admin/notifications/send-outbound-emails" \
+  --http-method=POST \
+  --headers="x-admin-secret=<the MATCHING_ADMIN_SECRET value>" \
+  --attempt-deadline=120s
+```
 
 ## Junto Select Introduction (`/introduction` → `/member`)
 

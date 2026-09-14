@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Fraunces } from "next/font/google";
+import { getAppBaseUrl } from "@/lib/config/appBaseUrl";
 import "./globals.css";
 
 const inter = Inter({
@@ -16,7 +17,10 @@ const fraunces = Fraunces({
   display: "swap",
 });
 
-const siteUrl = "https://juntoselect.com";
+// Environment-aware on purpose — see src/lib/config/appBaseUrl.ts. Moving
+// to the juntoselect.com custom domain means changing APP_BASE_URL only;
+// this file (and robots.ts/sitemap.ts) never needs editing for that move.
+const siteUrl = getAppBaseUrl();
 const title = "Junto Select — Encuentros privados para solteros en Madrid";
 const description =
   "Junto Select organiza encuentros privados y cuidadosamente seleccionados para solteros y solteras 40+ en Madrid. Sin apps, sin eventos masivos: una lista de invitados seleccionada y espacios con encanto.";

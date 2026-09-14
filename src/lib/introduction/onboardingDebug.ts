@@ -30,6 +30,10 @@ let startTime: number | null = null;
 const listeners = new Set<() => void>();
 
 export function isDebugMode(): boolean {
+  // Dev-tooling only — inert in any built app (staging or production),
+  // regardless of the `?debug=1` query param, since there's no separate
+  // staging/production distinction available here to gate on instead.
+  if (process.env.NODE_ENV !== "development") return false;
   if (typeof window === "undefined") return false;
   try {
     return new URLSearchParams(window.location.search).get("debug") === "1";

@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { requireFirebaseUser } from "@/lib/firebase/serverAuth";
 import { getStripe } from "@/lib/stripe/client";
 import { getStripePriceId } from "@/lib/stripe/plans";
+import { getAppBaseUrl } from "@/lib/config/appBaseUrl";
 import { isPlanKey, type PlanKey } from "@/lib/billing/plans";
 import type { BillingDocument } from "@/lib/billing/types";
 
@@ -84,6 +85,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "billing_not_configured" }, { status: 503 });
   }
 
+  let appBaseUrl: string;
+  try {
+    appBaseUrl = getAppBaseUrl();
+  } catch (error) {
+    console.error("create-checkout-session: APP_BASE_URL misconfigured", error);
+    return NextResponse.json({ ok: false, error: "app_url_not_configured" }, { status: 503 });
+  }
+
   // Reuse the existing Stripe Customer for this uid if one was already
   // created by a prior checkout attempt; otherwise create one now, tagged
   // with the Firebase uid so the webhook can always resolve events back to
@@ -121,14 +130,12 @@ export async function POST(request: Request) {
     { merge: true },
   );
 
-  const origin = new URL(request.url).origin;
-
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
     line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${origin}/member/plan?checkout=success`,
-    cancel_url: `${origin}/member/plan?checkout=cancel`,
+    success_url: `${appBaseUrl}/member/plan?checkout=success`,
+    cancel_url: `${appBaseUrl}/member/plan?checkout=cancel`,
     client_reference_id: uid,
     subscription_data: {
       metadata: { firebaseUid: uid, planKey },

@@ -9,6 +9,7 @@ import { evaluateHardFilters } from "./hardFilters";
 import { scorePair, SCORING_VERSION } from "./scoring";
 import type { ScoreResult } from "./scoring";
 import { getPairEligibility, markPairPendingInTransaction } from "./pairHistory";
+import { queueOutboundEmail } from "@/lib/notifications/outboundEmails";
 import {
   DEFAULT_CYCLE_CONFIG,
   MAX_PROPOSALS_PER_MEMBER,
@@ -176,7 +177,7 @@ async function writeProposalIfRoom(
   const proposalRef = adminDb.doc(`proposals/${id}`);
   const memberRunRef = adminDb.doc(`matchingCycles/${cycleId}/memberRuns/${recipient.personId}`);
 
-  return adminDb.runTransaction(async (tx) => {
+  const created = await adminDb.runTransaction(async (tx) => {
     const [proposalSnap, memberRunSnap] = await Promise.all([
       tx.get(proposalRef),
       tx.get(memberRunRef),
@@ -219,6 +220,17 @@ async function writeProposalIfRoom(
     markPairPendingInTransaction(tx, recipient.personId, candidate.personId, cycleId);
     return true;
   });
+
+  if (created) {
+    // Best-effort notification only — never allowed to affect matching
+    // outcomes; a queueing failure here must never look like a failed
+    // cycle run.
+    queueOutboundEmail({ type: "new_proposal", uid: recipient.uid, email: null, data: {} }).catch((error) => {
+      console.error(`writeProposalIfRoom: failed to queue new_proposal email for uid ${recipient.uid}`, error);
+    });
+  }
+
+  return created;
 }
 
 function incrementReason<T extends string>(bucket: Partial<Record<T, number>>, reason: T): void {

@@ -7,6 +7,14 @@
         { "fieldPath": "meta.searchStatus", "order": "ASCENDING" },
         { "fieldPath": "meta.nextMatchingDueAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "outboundEmails",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "attemptedAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

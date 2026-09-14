@@ -2,6 +2,7 @@ import "server-only";
 import { FieldValue, Timestamp, type Transaction } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { addMonths, PASS_COOLDOWN_MONTHS, pairKey } from "./config";
+import { queueOutboundEmail } from "@/lib/notifications/outboundEmails";
 import type {
   InvitationDocument,
   PairHistoryDocument,
@@ -187,7 +188,7 @@ export async function recordMemberDecision(
   const proposalRef = adminDb.doc(`proposals/${proposalId}`);
   const invitationRef = adminDb.doc(`invitations/${proposalId}`);
 
-  return adminDb.runTransaction(async (tx) => {
+  const result = await adminDb.runTransaction(async (tx) => {
     const proposalSnap = await tx.get(proposalRef);
     if (!proposalSnap.exists) throw new Error(`proposal ${proposalId} not found`);
     const proposal = proposalSnap.data() as ProposalDocument;
@@ -200,7 +201,7 @@ export async function recordMemberDecision(
     // call here must stay idempotent even after the match already went
     // mutual, exactly like recordCandidateDecision's own equivalent check.
     if (proposal.stage === targetStage || (decision === "interested" && proposal.stage === "mutual_interested")) {
-      return { alreadyRecorded: true };
+      return { alreadyRecorded: true, invitationCreatedForUid: null as string | null };
     }
     if (proposal.stage !== "proposed" && proposal.stage !== "viewed") {
       throw new Error(`proposal ${proposalId} already decided (${proposal.stage})`);
@@ -227,12 +228,13 @@ export async function recordMemberDecision(
         cooldownUntil: passCooldown(),
         blockedReason: null,
       });
-      return { alreadyRecorded: false };
+      return { alreadyRecorded: false, invitationCreatedForUid: null };
     }
 
     // "interested" -> create (or no-op if it already exists) the free,
     // no-payment-required invitation for the original candidate.
-    if (!invitationSnap?.exists) {
+    const invitationCreated = !invitationSnap?.exists;
+    if (invitationCreated) {
       tx.set(invitationRef, {
         proposalId,
         cycleId: proposal.cycleId,
@@ -261,8 +263,19 @@ export async function recordMemberDecision(
       blockedReason: null,
     });
 
-    return { alreadyRecorded: false };
+    return { alreadyRecorded: false, invitationCreatedForUid: invitationCreated ? proposal.candidateUid : null };
   });
+
+  if (result.invitationCreatedForUid) {
+    // Best-effort notification only — never allowed to affect this
+    // decision's own success/failure.
+    const candidateUid = result.invitationCreatedForUid;
+    queueOutboundEmail({ type: "invitation_received", uid: candidateUid, email: null, data: {} }).catch((error) => {
+      console.error(`recordMemberDecision: failed to queue invitation_received email for uid ${candidateUid}`, error);
+    });
+  }
+
+  return { alreadyRecorded: result.alreadyRecorded };
 }
 
 /**
@@ -280,14 +293,14 @@ export async function recordCandidateDecision(
   const proposalRef = adminDb.doc(`proposals/${invitationId}`); // same id as the source proposal
   const introductionRef = adminDb.doc(`introductions/${invitationId}`);
 
-  return adminDb.runTransaction(async (tx) => {
+  const result = await adminDb.runTransaction(async (tx) => {
     const invitationSnap = await tx.get(invitationRef);
     if (!invitationSnap.exists) throw new Error(`invitation ${invitationId} not found`);
     const invitation = invitationSnap.data() as InvitationDocument;
 
     const targetStage = decision === "interested" ? "candidate_interested" : "candidate_passed";
     if (invitation.stage === targetStage || invitation.stage === "mutual_interested") {
-      return { alreadyRecorded: true };
+      return { alreadyRecorded: true, introductionCreatedForUids: null as [string, string] | null };
     }
     if (invitation.stage !== "invited" && invitation.stage !== "viewed") {
       throw new Error(`invitation ${invitationId} already decided (${invitation.stage})`);
@@ -308,7 +321,7 @@ export async function recordCandidateDecision(
         cooldownUntil: passCooldown(),
         blockedReason: null,
       });
-      return { alreadyRecorded: false };
+      return { alreadyRecorded: false, introductionCreatedForUids: null };
     }
 
     // "interested" -> mutual. Flip both proposal and invitation to
@@ -331,7 +344,8 @@ export async function recordCandidateDecision(
       updatedAt: now,
     });
 
-    if (!introductionSnap.exists) {
+    const introductionCreated = !introductionSnap.exists;
+    if (introductionCreated) {
       tx.set(introductionRef, {
         proposalId: invitationId,
         cycleId: invitation.cycleId,
@@ -351,8 +365,25 @@ export async function recordCandidateDecision(
       blockedReason: null,
     });
 
-    return { alreadyRecorded: false };
+    return {
+      alreadyRecorded: false,
+      introductionCreatedForUids: introductionCreated
+        ? ([proposal.recipientUid, proposal.candidateUid] as [string, string])
+        : null,
+    };
   });
+
+  if (result.introductionCreatedForUids) {
+    // Best-effort notification only — never allowed to affect this
+    // decision's own success/failure. Both original parties are told.
+    for (const uid of result.introductionCreatedForUids) {
+      queueOutboundEmail({ type: "mutual_introduction", uid, email: null, data: {} }).catch((error) => {
+        console.error(`recordCandidateDecision: failed to queue mutual_introduction email for uid ${uid}`, error);
+      });
+    }
+  }
+
+  return { alreadyRecorded: result.alreadyRecorded };
 }
 
 /**
