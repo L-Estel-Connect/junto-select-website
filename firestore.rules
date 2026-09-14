@@ -63,15 +63,29 @@ service cloud.firestore {
     // onboarding flow never does, and locking `create` too would need
     // touching the same profile-creation path this change doesn't.
     //
-    // Uses `.get(key, default)`, NOT plain dot access, for the four new
-    // fields specifically: unlike `searchStatus` (always present since
-    // profile creation), a profile that has never had a paid subscription
-    // genuinely has no `matchingAnchorAt` etc. at all — plain dot access
-    // on a missing map key is a rules EVALUATION ERROR, which denies the
-    // whole update, not just these fields — that would have broken every
-    // ordinary onboarding write for anyone without these fields yet.
+    // Uses `.get(key, default)`, NOT plain dot access, for ALL FIVE fields,
+    // `searchStatus` included. `searchStatus` was originally assumed
+    // "always present since profile creation" and read with plain dot
+    // access — but any profile document created before this field existed
+    // in the schema (see git history: it predates the matching engine
+    // entirely) genuinely has no `meta.searchStatus` key, and a client
+    // partial-update (`updateDoc`) to ANY other field on such a document
+    // never backfills it, since nothing but the original create call ever
+    // wrote it. Plain dot access on that missing key is a rules EVALUATION
+    // ERROR, which denies the WHOLE update — with no useful message beyond
+    // a generic permission-denied — breaking every subsequent edit to that
+    // profile (onboarding, preferences, photos, presentation, and the
+    // "Sobre ti" self-edit section alike) forever. Confirmed via the
+    // emulator suite: a seeded profile missing this key is rejected with
+    // "Property searchStatus is undefined on object" for every update,
+    // however innocuous. `.get(key, 'passive')` defaults to the same value
+    // `getOrCreateProfile`/`withProfileDefaults` already treat as this
+    // field's canonical default, so a legitimate write is never newly
+    // permitted to actually CHANGE `searchStatus` — a document already
+    // missing the key stays missing it (both sides read the same default,
+    // so the equality check still holds); this only stops the crash.
     function matchingStateUnchanged() {
-      return request.resource.data.meta.searchStatus == resource.data.meta.searchStatus
+      return request.resource.data.meta.get('searchStatus', 'passive') == resource.data.meta.get('searchStatus', 'passive')
         && request.resource.data.meta.get('matchingAnchorAt', null) == resource.data.meta.get('matchingAnchorAt', null)
         && request.resource.data.meta.get('matchingSubscriptionId', null) == resource.data.meta.get('matchingSubscriptionId', null)
         && request.resource.data.meta.get('matchingPeriodsProcessed', null) == resource.data.meta.get('matchingPeriodsProcessed', null)

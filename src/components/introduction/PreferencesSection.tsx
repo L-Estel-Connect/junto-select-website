@@ -228,8 +228,8 @@ export default function PreferencesSection({ uid }: { uid: string }) {
             <BooleanField
               value={dealbreakers.partnerYoungChildrenMatters}
               onChange={(v) => updateDealbreakers({ partnerYoungChildrenMatters: v })}
-              yesLabel="Sí"
-              noLabel="No"
+              yesLabel="Sí, me importaría"
+              noLabel="No, no me importaría"
             />
           </FieldRow>
 
