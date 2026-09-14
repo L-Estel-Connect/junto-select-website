@@ -28,6 +28,12 @@ interface ScanSummary {
   errors: number;
 }
 
+interface HealthIssue {
+  uid: string;
+  firstName: string;
+  missingFields: string[];
+}
+
 const STATUS_TONE: Record<string, "positive" | "warning" | "negative" | "muted"> = {
   completed: "positive",
   running: "warning",
@@ -45,6 +51,8 @@ export default function MatchingCyclesPage() {
   const [error, setError] = useState<string | null>(null);
   const [scans, setScans] = useState<ScanSummary[] | null>(null);
   const [scansError, setScansError] = useState<string | null>(null);
+  const [healthIssues, setHealthIssues] = useState<HealthIssue[] | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
 
   useEffect(() => {
     adminFetchJson<{ items: CycleSummary[] }>("/api/admin/dashboard/matching/cycles")
@@ -53,11 +61,40 @@ export default function MatchingCyclesPage() {
     adminFetchJson<{ items: ScanSummary[] }>("/api/admin/dashboard/matching/scans")
       .then((res) => setScans(res.items))
       .catch((e) => setScansError(e.message));
+    adminFetchJson<{ issues: HealthIssue[] }>("/api/admin/dashboard/matching/health")
+      .then((res) => setHealthIssues(res.issues))
+      .catch((e) => setHealthError(e.message));
   }, []);
 
   return (
     <div className="max-w-5xl">
       <h1 className="font-serif text-[26px] text-ink">Ciclos de matching</h1>
+
+      {/* Silent when healthy (no issues) or still loading/erroring on this
+          secondary check — never noise on top of the two tables below,
+          which already cover the primary "is matching running" question. */}
+      {!healthError && healthIssues && healthIssues.length > 0 && (
+        <div className="mt-6 rounded-xl border border-[#c9a15a] bg-[#fbf3e2] px-4 py-3 text-[13px] text-ink">
+          <p className="font-medium">
+            {healthIssues.length} miembro{healthIssues.length === 1 ? "" : "s"} activo
+            {healthIssues.length === 1 ? "" : "s"} sin datos de programación de matching
+          </p>
+          <p className="mt-1 text-ink-soft">
+            Estos miembros tienen membresía activa pero les falta{" "}
+            <code>matchingAnchorAt</code> o <code>nextMatchingDueAt</code>, por lo que el escaneo
+            automático nunca los selecciona — no volverán a recibir presentaciones hasta que se
+            revise manualmente (posible re-sincronización desde Stripe).
+          </p>
+          <ul className="mt-2 list-disc space-y-0.5 pl-5">
+            {healthIssues.map((issue) => (
+              <li key={issue.uid}>
+                {issue.firstName || issue.uid} ({issue.uid}) — falta:{" "}
+                {issue.missingFields.join(", ")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <h2 className="mt-10 font-serif text-[19px] text-ink">
         Escaneos automáticos (matching por aniversario de membresía)
