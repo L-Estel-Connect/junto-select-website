@@ -1,6 +1,4 @@
-import { hasChildUnderAge } from "@/lib/introduction/age";
 import type { ProfileDocument } from "@/lib/introduction/types";
-import { YOUNG_CHILD_AGE_THRESHOLD } from "./hardFilters";
 
 /**
  * Deterministic, versioned, fully explainable weighted scoring — no opaque
@@ -16,10 +14,14 @@ import { YOUNG_CHILD_AGE_THRESHOLD } from "./hardFilters";
  * `scoringVersion` is recorded on every proposal so weights (and, as
  * happened here, the formula itself) can be recalibrated later from real
  * Interested/Pass/mutual outcomes without losing the ability to see what
- * version produced a historical proposal.
+ * version produced a historical proposal. V4 removes the short-lived
+ * `childrenPreferenceFit` dimension (V3): the product model was simplified
+ * to a single hard under-15 dealbreaker with no soft children-related
+ * scoring signal at all — see hardFilters.ts acceptsYoungChildren and the
+ * children-model simplification this followed.
  */
 
-export const SCORING_VERSION = 3;
+export const SCORING_VERSION = 4;
 
 type DimensionName =
   | "activityFit"
@@ -27,8 +29,7 @@ type DimensionName =
   | "drinkingFit"
   | "heightFit"
   | "languageOverlap"
-  | "educationAlignment"
-  | "childrenPreferenceFit";
+  | "educationAlignment";
 
 /**
  * Weights are relative-importance judgments, not empirically validated —
@@ -38,7 +39,7 @@ type DimensionName =
  * city field, a same-city bonus rewarded nearly everyone equally without
  * helping ranking.
  */
-const WEIGHTS_V3: Record<DimensionName, number> = {
+const WEIGHTS_V4: Record<DimensionName, number> = {
   activityFit: 20,
   relationshipIntentionAlignment: 20,
   drinkingFit: 15,
@@ -50,19 +51,9 @@ const WEIGHTS_V3: Record<DimensionName, number> = {
   // smallest change that stops it dominating the score the way its
   // former weight of 15 (equal to language) did.
   educationAlignment: 5,
-  // Deliberately the smallest weight in the table (matching
-  // educationAlignment) — a "prefiero_que_no" children/young-children
-  // acceptance is an explicit SOFT preference by product decision (see
-  // hardFilters.ts acceptsChildren/acceptsYoungChildren and the semantics
-  // audit this followed): it must never exclude a candidate on its own,
-  // only nudge ranking down a little when it's actually in friction with
-  // the other person's real situation. No existing weight was reused
-  // as-is because none of them represent a friction-only signal; this is
-  // the smallest new weight consistent with the rest of the table.
-  childrenPreferenceFit: 5,
 };
 
-const TOTAL_WEIGHT_V3 = Object.values(WEIGHTS_V3).reduce((a, b) => a + b, 0);
+const TOTAL_WEIGHT_V4 = Object.values(WEIGHTS_V4).reduce((a, b) => a + b, 0);
 
 /**
  * A pair needs at least this fraction of the total possible weight to be
@@ -194,47 +185,6 @@ function relationshipIntentionAlignment(a: ProfileDocument, b: ProfileDocument):
 }
 
 /**
- * Soft ranking signal for the `prefiero_que_no` children/young-children
- * acceptance tier — the ONLY place that tier has any effect at all, since
- * hardFilters.ts's acceptsChildren/acceptsYoungChildren treat it exactly
- * like `no_me_importa` (a hard-filter pass). Only ever evaluated per
- * direction when the person's stated acceptance is actually
- * `prefiero_que_no` AND the other side's relevant self-report is known —
- * a `no_me_importa` or `no_acepto` acceptance never reaches this function
- * with a check pushed for it, so this dimension is simply not evaluable
- * (excluded, never scored as a match or a mismatch) for the common case
- * where the preference doesn't apply. `no_acepto` never reaches scoring
- * for a mismatched pair at all, since that pair already failed the hard
- * filter — see hardFilters.ts.
- */
-function childrenPreferenceFit(a: ProfileDocument, b: ProfileDocument): DimensionResult {
-  const checks: boolean[] = [];
-
-  function addChecksFor(
-    preference: ProfileDocument["dealbreakers"],
-    other: ProfileDocument["visible"],
-  ) {
-    if (preference.partnerHasChildrenOk === "prefiero_que_no" && other.hasChildren !== null) {
-      checks.push(other.hasChildren === false);
-    }
-    if (
-      preference.partnerHasYoungChildrenOk === "prefiero_que_no" &&
-      other.hasChildren === true &&
-      other.childrenBirthYears &&
-      other.childrenBirthYears.length > 0
-    ) {
-      checks.push(!hasChildUnderAge(other.childrenBirthYears, YOUNG_CHILD_AGE_THRESHOLD));
-    }
-  }
-
-  addChecksFor(a.dealbreakers, b.visible);
-  addChecksFor(b.dealbreakers, a.visible);
-
-  if (checks.length === 0) return NOT_EVALUABLE;
-  return { evaluable: true, fit: checks.filter(Boolean).length / checks.length };
-}
-
-/**
  * Returns a 0-100 compatibility score plus the full per-dimension
  * breakdown (for internal persistence/analysis — see README "Scoring V2"
  * and analytics.ts). Dimensions with no evaluable signal for this pair
@@ -245,6 +195,10 @@ function childrenPreferenceFit(a: ProfileDocument, b: ProfileDocument): Dimensio
  * what stops a single evaluable dimension (e.g. only language overlap)
  * from producing a manufactured high score for an otherwise-blank pair —
  * see the worked examples in README.
+ *
+ * Deliberately no children-related dimension: children matching is a
+ * single hard dealbreaker (hardFilters.ts acceptsYoungChildren) with no
+ * soft/scored component at all — see the children-model simplification.
  */
 export function scorePair(a: ProfileDocument, b: ProfileDocument): ScoreResult {
   const results: Record<DimensionName, DimensionResult> = {
@@ -259,11 +213,10 @@ export function scorePair(a: ProfileDocument, b: ProfileDocument): ScoreResult {
     heightFit: heightFit(a, b),
     languageOverlap: languageOverlap(a, b),
     educationAlignment: educationAlignment(a, b),
-    childrenPreferenceFit: childrenPreferenceFit(a, b),
   };
 
-  const breakdown: ScoreDimensionBreakdown[] = (Object.keys(WEIGHTS_V3) as DimensionName[]).map((dimension) => {
-    const weight = WEIGHTS_V3[dimension];
+  const breakdown: ScoreDimensionBreakdown[] = (Object.keys(WEIGHTS_V4) as DimensionName[]).map((dimension) => {
+    const weight = WEIGHTS_V4[dimension];
     const result = results[dimension];
     return {
       dimension,
@@ -278,7 +231,7 @@ export function scorePair(a: ProfileDocument, b: ProfileDocument): ScoreResult {
   const raw = breakdown.reduce((sum, d) => sum + d.contribution, 0);
 
   const fitQuality = evaluableWeight === 0 ? 0 : raw / evaluableWeight;
-  const coverage = evaluableWeight / TOTAL_WEIGHT_V3;
+  const coverage = evaluableWeight / TOTAL_WEIGHT_V4;
   const confidence = Math.min(1, coverage / MIN_COVERAGE_FOR_FULL_CONFIDENCE);
   const score = evaluableWeight === 0 ? 0 : Math.round(fitQuality * confidence * 100);
 

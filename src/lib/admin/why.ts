@@ -26,7 +26,6 @@ const DIMENSION_NAMES: Record<ScoreDimensionBreakdown["dimension"], string> = {
   heightFit: "Altura",
   languageOverlap: "Idiomas en común",
   educationAlignment: "Formación",
-  childrenPreferenceFit: "Preferencia sobre hijos de la otra persona",
 };
 
 export type WhyTier = "good" | "partial" | "weak" | "mismatch" | "not_evaluated";

@@ -45,16 +45,6 @@ const FUTURE_CHILDREN_PREFERENCE_LABELS: Record<string, string> = {
   indiferente: "Me da igual",
 };
 
-// Mirrors CHILDREN_ACCEPTANCE_OPTIONS in PreferencesSection.tsx exactly.
-// Only `no_acepto` is a hard dealbreaker (see hardFilters.ts
-// acceptsChildren/acceptsYoungChildren) — `prefiero_que_no` is a soft
-// scoring preference and must never read as an exclusion in the admin view.
-const CHILDREN_ACCEPTANCE_LABELS: Record<string, string> = {
-  no_me_importa: "No me importa",
-  prefiero_que_no: "Prefiero que no, pero podría considerarlo",
-  no_acepto: "No podría aceptarlo",
-};
-
 function lookup(map: Record<string, string>, value: string | null): string {
   if (value === null) return "No especificado";
   return map[value] ?? value;
@@ -87,8 +77,12 @@ export function futureChildrenIntentionLabel(value: string | null): string {
 export function futureChildrenPreferenceLabel(value: string | null): string {
   return lookup(FUTURE_CHILDREN_PREFERENCE_LABELS, value);
 }
-export function childrenAcceptanceLabel(value: string | null): string {
-  return lookup(CHILDREN_ACCEPTANCE_LABELS, value);
+// Plain Sí/No/No especificado — the simplified model's only children
+// question is a single boolean (partnerYoungChildrenMatters), so no
+// lookup table is needed.
+export function youngChildrenMattersLabel(value: boolean | null): string {
+  if (value === null) return "No especificado";
+  return value ? "Sí" : "No";
 }
 export function languageLabel(value: string): string {
   return LANGUAGE_LABELS[value] ?? value;
@@ -103,8 +97,7 @@ export const HARD_FILTER_REASON_LABELS: Record<string, string> = {
   distance: "Distancia / ciudad",
   relationship_intention: "Tipo de relación aceptado",
   smoking: "Aceptación de fumador",
-  children: "Aceptación de hijos",
-  young_children: "Aceptación de hijos menores de 15",
+  young_children: "Hijos menores de 15",
   future_children: "Compatibilidad de hijos futuros",
 };
 

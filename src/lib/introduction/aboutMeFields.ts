@@ -105,7 +105,7 @@ export type AboutMeStep =
  *  - childrenAges, wantsFutureChildren, marketAvailability -> added later
  *    (see README "Children / future children" and "Madrid-only scope")
  *    specifically so the matching engine can enforce the
- *    partnerHasYoungChildrenOk / partnerWantsFutureChildren dealbreakers
+ *    partnerYoungChildrenMatters / partnerWantsFutureChildren dealbreakers
  *    reciprocally, and so V1's Madrid-only pool restriction has real data
  *    to gate on. Deliberately appended at the end of this array — see the
  *    comment just above those steps for why.

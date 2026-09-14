@@ -2,17 +2,30 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { aboutMeSteps, type StepId } from "@/lib/introduction/aboutMeFields";
+import { aboutMeSteps, type AboutMeStep, type StepId } from "@/lib/introduction/aboutMeFields";
 import { computeProfileStatus } from "@/lib/introduction/completion";
 import { updateProfileFields } from "@/lib/introduction/profile";
 import { applyFieldsToProfile, computeStepFields } from "./OnboardingWizard";
 import { useSharedProfile } from "@/lib/introduction/profileCache";
 import type { ProfileDocument } from "@/lib/introduction/types";
-import StepQuestion from "./StepQuestion";
+import { primaryButtonClasses } from "@/lib/styles";
 import { IntroductionError, IntroductionLoading } from "./RequireIntroductionAuth";
 
 const linkClasses =
   "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
+
+const inputClasses =
+  "w-full rounded-md border border-hairline bg-paper px-4 py-3 text-[15px] text-ink placeholder:text-ink-soft/80 transition-colors focus:border-rose-dark focus:outline-none";
+
+const cardOptionClasses = (checked: boolean) =>
+  `w-full cursor-pointer rounded-md border px-5 py-4 text-left text-[15px] transition-colors ${
+    checked ? "border-rose-dark bg-rose-tint text-ink" : "border-hairline text-ink hover:border-rose"
+  }`;
+
+const chipClasses = (checked: boolean) =>
+  `rounded-full border px-5 py-3 text-[15px] transition-colors ${
+    checked ? "border-rose-dark bg-rose-tint text-ink" : "border-hairline text-ink hover:border-rose"
+  }`;
 
 /**
  * Self-attribute fields a member can correct after onboarding — the
@@ -86,9 +99,222 @@ function summarize(profile: ProfileDocument, id: StepId): string {
   }
 }
 
+type ChildrenDraft = { hasChildren: boolean | null; childrenCount: number | null };
+
+/** The DRAFT for `childrenAges` is the ages themselves (nulls where unfilled) — converted to birth years only at save time, same as onboarding's own ChildrenAgesInput. */
+function initialDraftFor(step: AboutMeStep, profile: ProfileDocument): unknown {
+  if (step.type === "children") {
+    return { hasChildren: profile.visible.hasChildren, childrenCount: profile.visible.childrenCount } satisfies ChildrenDraft;
+  }
+  if (step.type === "childrenAges") {
+    const count = profile.visible.childrenCount ?? 0;
+    const currentYear = new Date().getFullYear();
+    const years = profile.visible.childrenBirthYears ?? [];
+    return Array.from({ length: count }, (_, i) => (years[i] !== undefined ? currentYear - years[i] : null));
+  }
+  return getByPath(profile, step.path);
+}
+
+/** Whether `draft` is a saveable answer for `step` — mirrors the validation each onboarding input already enforces via its own Continuar button. */
+function isDraftValid(step: AboutMeStep, draft: unknown): boolean {
+  switch (step.type) {
+    case "text":
+      return typeof draft === "string" && draft.trim().length > 0;
+    case "number":
+      if (!step.required) return true; // heightCm: null ("Prefiero no decirlo") is valid
+      return typeof draft === "number" && Number.isFinite(draft) && draft >= step.min && draft <= step.max;
+    case "select":
+      return typeof draft === "string" && draft.length > 0;
+    case "chips":
+      return Array.isArray(draft) && draft.length > 0;
+    case "children": {
+      const d = draft as ChildrenDraft;
+      if (d.hasChildren === null) return false;
+      if (d.hasChildren === true && d.childrenCount === null) return false;
+      return true;
+    }
+    case "childrenAges": {
+      const ages = draft as Array<number | null>;
+      return ages.every((a) => a !== null && Number.isFinite(a) && a >= 0 && a <= 90);
+    }
+    default:
+      return true;
+  }
+}
+
+function FieldEditor({
+  step,
+  draft,
+  setDraft,
+}: {
+  step: AboutMeStep;
+  draft: unknown;
+  setDraft: (next: unknown) => void;
+}) {
+  switch (step.type) {
+    case "text":
+      return (
+        <input
+          type="text"
+          autoFocus
+          maxLength={step.maxLength}
+          placeholder={step.placeholder}
+          value={typeof draft === "string" ? draft : ""}
+          onChange={(e) => setDraft(e.target.value)}
+          className={inputClasses}
+        />
+      );
+    case "number":
+      return (
+        <div>
+          <input
+            type="number"
+            inputMode="numeric"
+            autoFocus
+            min={step.min}
+            max={step.max}
+            placeholder={step.placeholder}
+            value={typeof draft === "number" ? draft : ""}
+            onChange={(e) => setDraft(e.target.value === "" ? null : Number(e.target.value))}
+            className={inputClasses}
+          />
+          {!step.required && (
+            <button
+              type="button"
+              onClick={() => setDraft(null)}
+              className="mt-3 text-sm text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink"
+            >
+              {step.skippableLabel}
+            </button>
+          )}
+        </div>
+      );
+    case "select":
+      return (
+        <div className="space-y-3">
+          {step.options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setDraft(option.value)}
+              className={cardOptionClasses(draft === option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      );
+    case "chips": {
+      const selected = Array.isArray(draft) ? (draft as string[]) : [];
+      return (
+        <div className="flex flex-wrap gap-2.5">
+          {step.options.map((option) => {
+            const checked = selected.includes(option.value);
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() =>
+                  setDraft(checked ? selected.filter((v) => v !== option.value) : [...selected, option.value])
+                }
+                className={chipClasses(checked)}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+    case "children": {
+      const d = draft as ChildrenDraft;
+      return (
+        <div>
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => setDraft({ hasChildren: true, childrenCount: d.childrenCount } satisfies ChildrenDraft)}
+              className={cardOptionClasses(d.hasChildren === true)}
+            >
+              Sí
+            </button>
+            <button
+              type="button"
+              onClick={() => setDraft({ hasChildren: false, childrenCount: null } satisfies ChildrenDraft)}
+              className={cardOptionClasses(d.hasChildren === false)}
+            >
+              No
+            </button>
+          </div>
+          {d.hasChildren === true && (
+            <div className="mt-6">
+              <p className="mb-3 text-[15px] text-ink-soft">¿Cuántos?</p>
+              <div className="flex gap-2.5">
+                {[1, 2, 3].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setDraft({ hasChildren: true, childrenCount: n } satisfies ChildrenDraft)}
+                    className={`flex-1 rounded-full border px-4 py-3 text-[15px] transition-colors ${
+                      d.childrenCount === n
+                        ? "border-rose-dark bg-rose-tint text-ink"
+                        : "border-hairline text-ink hover:border-rose"
+                    }`}
+                  >
+                    {n === 3 ? "3+" : n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+    case "childrenAges": {
+      const ages = draft as Array<number | null>;
+      return (
+        <div className="space-y-4">
+          {ages.map((age, i) => (
+            <div key={i}>
+              <p className="mb-2 text-[14px] text-ink-soft">Hijo/a {i + 1}</p>
+              <input
+                type="number"
+                inputMode="numeric"
+                autoFocus={i === 0}
+                min={0}
+                max={90}
+                value={age ?? ""}
+                onChange={(e) => {
+                  const next = [...ages];
+                  next[i] = e.target.value.trim() === "" ? null : Number(e.target.value);
+                  setDraft(next);
+                }}
+                className={inputClasses}
+              />
+            </div>
+          ))}
+        </div>
+      );
+    }
+    default:
+      return null;
+  }
+}
+
 export default function AboutMeEditSection({ uid }: { uid: string }) {
   const { profile, error: profileError, refresh: refreshProfile, mutate } = useSharedProfile(uid);
   const [expandedId, setExpandedId] = useState<StepId | null>(null);
+  // The value the user is currently choosing/typing for `expandedId` —
+  // deliberately separate from `profile`, which stays whatever was last
+  // successfully SAVED. This is the fix for the reported bug: the
+  // previous version rendered the "selected" option directly from the
+  // cached profile and saved on every click with no confirm step, so a
+  // slow or failed write had nothing of the user's own to fall back to —
+  // the visible selection simply reverted with no way to tell what
+  // happened or retry. Now a click only ever updates this local draft;
+  // Firestore is touched only when the user presses "Guardar", and a
+  // failed save leaves this draft exactly as the user left it.
+  const [draft, setDraft] = useState<unknown>(undefined);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,23 +329,34 @@ export default function AboutMeEditSection({ uid }: { uid: string }) {
     (id) => id !== "childrenAges" || profile.visible.hasChildren === true,
   );
 
-  async function handleAnswer(stepId: StepId, value: unknown) {
+  function handleEdit(id: StepId) {
     if (!profile) return;
-    const step = aboutMeSteps.find((s) => s.id === stepId)!;
+    const step = aboutMeSteps.find((s) => s.id === id)!;
+    setError(null);
+    setDraft(initialDraftFor(step, profile));
+    setExpandedId(id);
+  }
+
+  function handleCancel() {
+    setError(null);
+    setExpandedId(null);
+    setDraft(undefined);
+  }
+
+  async function handleSave() {
+    if (!profile || !expandedId) return;
+    const step = aboutMeSteps.find((s) => s.id === expandedId)!;
     setError(null);
     setSaving(true);
     try {
-      const fields = computeStepFields(step, value);
+      const fields = computeStepFields(step, draft);
       // Stale-data hygiene: if this edit just turned "¿Tienes hijos?" to
       // No, any previously stored birth years no longer describe anyone —
       // clear them rather than leaving inapplicable data behind (they'd
       // otherwise be invisible in this UI, since the row is hidden
       // whenever hasChildren isn't true, but would still linger in
       // Firestore untouched).
-      if (
-        stepId === "children" &&
-        (value as { hasChildren: boolean }).hasChildren === false
-      ) {
+      if (expandedId === "children" && (draft as ChildrenDraft).hasChildren === false) {
         fields["visible.childrenBirthYears"] = null;
       }
       // A self-attribute edit can make a profile that was matching-eligible
@@ -136,7 +373,12 @@ export default function AboutMeEditSection({ uid }: { uid: string }) {
       await updateProfileFields(uid, fields, { profileStatus });
       mutate(() => ({ ...updatedProfile, meta: { ...updatedProfile.meta, profileStatus } }));
       setExpandedId(null);
+      setDraft(undefined);
     } catch {
+      // Deliberately does NOT touch `draft` or `expandedId` — the user's
+      // chosen-but-unsaved value stays visible and selected exactly as
+      // they left it, and the error renders right next to Guardar so
+      // retrying is a single obvious click, not a guess.
       setError("No hemos podido guardar tu respuesta. Inténtalo de nuevo.");
     } finally {
       setSaving(false);
@@ -153,14 +395,8 @@ export default function AboutMeEditSection({ uid }: { uid: string }) {
         Sobre ti
       </h1>
       <p className="mt-2 max-w-[52ch] text-[15px] leading-relaxed text-ink-soft">
-        Tus respuestas se guardan automáticamente en cuanto las confirmas.
+        Elige un valor y confirma con Guardar para actualizarlo.
       </p>
-
-      {error && (
-        <p role="alert" className="mt-4 text-sm text-[#8a3b3b]">
-          {error}
-        </p>
-      )}
 
       <div className="mt-8">
         {visibleFieldIds.map((id) => {
@@ -170,34 +406,41 @@ export default function AboutMeEditSection({ uid }: { uid: string }) {
             <div key={id} className="border-b border-hairline py-5 first:pt-0 last:border-b-0">
               {expanded ? (
                 <div>
-                  <StepQuestion
-                    step={step}
-                    value={
-                      step.type === "children"
-                        ? { hasChildren: profile.visible.hasChildren, childrenCount: profile.visible.childrenCount }
-                        : step.type === "childrenAges"
-                          ? {
-                              childrenCount: profile.visible.childrenCount,
-                              childrenBirthYears: profile.visible.childrenBirthYears,
-                            }
-                          : getByPath(profile, step.path)
-                    }
-                    saving={saving}
-                    onAnswer={(value) => void handleAnswer(id, value)}
-                  />
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => setExpandedId(null)}
-                    className="mt-4 text-sm text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink"
-                  >
-                    Cancelar
-                  </button>
+                  <p className="text-[16px] text-ink">{step.question}</p>
+                  {step.helper && <p className="mt-1 text-[13px] text-ink-soft">{step.helper}</p>}
+                  <div className="mt-4">
+                    <FieldEditor step={step} draft={draft} setDraft={setDraft} />
+                  </div>
+
+                  {error && (
+                    <p role="alert" className="mt-4 text-sm text-[#8a3b3b]">
+                      {error}
+                    </p>
+                  )}
+
+                  <div className="mt-6 flex flex-wrap items-center gap-4">
+                    <button
+                      type="button"
+                      disabled={saving || !isDraftValid(step, draft)}
+                      onClick={() => void handleSave()}
+                      className={primaryButtonClasses}
+                    >
+                      {saving ? "Guardando…" : "Guardar"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={handleCancel}
+                      className="text-sm text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <button
                   type="button"
-                  onClick={() => setExpandedId(id)}
+                  onClick={() => handleEdit(id)}
                   className="flex w-full items-center justify-between gap-4 text-left hover:opacity-70"
                 >
                   <span>

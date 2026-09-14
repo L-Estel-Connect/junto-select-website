@@ -83,7 +83,6 @@ export type HardFilterFailureReason =
   | "distance"
   | "relationship_intention"
   | "smoking"
-  | "children"
   | "young_children"
   | "future_children";
 

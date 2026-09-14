@@ -33,37 +33,49 @@ export type DistancePreference = "misma_ciudad" | "hasta_50km" | "sin_limite";
 export type FutureChildrenPreference = "si" | "no" | "indiferente";
 
 /**
- * Three-tier partner-requirement acceptance for "does the other person
- * already have children" / "would their children being under 15 be okay" —
- * replaces the earlier plain boolean, which could only express "must not
- * have children at all" and had no way to represent a genuine soft
- * preference. `no_me_importa` and `prefiero_que_no` are both compatible
- * with a hard-filter pass (see hardFilters.ts acceptsChildren/
- * acceptsYoungChildren) — `prefiero_que_no` only feeds a small negative
- * scoring signal (see scoring.ts childrenPreferenceFit) — and only
- * `no_acepto` is a genuine dealbreaker that excludes a candidate outright.
+ * Simplified partner requirement: does it matter to this person whether a
+ * candidate has a child under 15? `true` ("Sí") is a genuine hard
+ * dealbreaker — a candidate with a child under 15 is excluded outright
+ * (see hardFilters.ts acceptsYoungChildren). `false` ("No") means it never
+ * excludes anyone on this basis. There is deliberately no separate
+ * "has children at all" question or partner requirement anymore — a
+ * candidate whose children are all 15+ always passes (see the product
+ * simplification this replaced: an earlier 3-tier `ChildrenAcceptance`
+ * model, and before that a general "accepts a partner with children"
+ * dealbreaker, both removed as unnecessary complexity — see
+ * normalizeYoungChildrenMatters for how old data maps onto this).
  */
-export type ChildrenAcceptance = "no_me_importa" | "prefiero_que_no" | "no_acepto";
 
 /**
- * Backward-compatible read-side normalizer for partnerHasChildrenOk /
- * partnerHasYoungChildrenOk. Documents written before this 3-tier model
- * stored a plain boolean under these same field names: `true` (shown to
- * the person as "No me importaría") maps to `no_me_importa`; `false`
- * (shown as "Prefiero que no") maps to `prefiero_que_no` — deliberately
- * NEVER `no_acepto`, since no legacy user was ever shown, or agreed to, a
- * genuine hard-exclusion option, so none may be silently upgraded into
- * one. Documents written after this model already store one of the three
- * string values directly, which passes through unchanged. Anything else
- * (missing, malformed) normalizes to `null` (unanswered) — the same
- * "unknown" state a fail-closed hard filter already treats correctly.
+ * Backward-compatible read-side normalizer for the young-children partner
+ * requirement, now stored as `dealbreakers.partnerYoungChildrenMatters`.
+ * Reads BOTH the current field name and, when absent, the field name(s)
+ * used by earlier implementations, so old documents never crash and never
+ * silently disappear as "unanswered" when they do carry real prior intent:
+ *
+ * - Current format (`newValue`): already a plain boolean — used as-is.
+ * - Original pre-simplification format (`legacyValue` as a raw boolean,
+ *   under the old field name `partnerHasYoungChildrenOk`): `true` meant
+ *   "No me importaría" (accepts) -> now `false` (doesn't matter); `false`
+ *   meant "Prefiero que no" (an absolute reject at the time) -> now `true`
+ *   (matters) — this is the field's ORIGINAL meaning before any
+ *   experimentation, so reviving it isn't "stricter than previously
+ *   expressed," it's the most faithful available reading.
+ * - Short-lived 3-tier format (`legacyValue` as a string, same old field
+ *   name): `"no_acepto"` was an explicit hard dealbreaker -> `true`.
+ *   `"no_me_importa"` and `"prefiero_que_no"` were BOTH explicitly
+ *   non-hard-excluding under that model (only `no_acepto` ever excluded a
+ *   candidate) -> both map to `false`, so no profile is retroactively
+ *   made stricter than the most recent semantics it was actually shown.
+ * - Missing/malformed in both places -> `null` (unanswered), the same
+ *   fail-closed "unknown" state hard filters already treat correctly.
  */
-export function normalizeChildrenAcceptance(value: unknown): ChildrenAcceptance | null {
-  if (value === true) return "no_me_importa";
-  if (value === false) return "prefiero_que_no";
-  if (value === "no_me_importa" || value === "prefiero_que_no" || value === "no_acepto") {
-    return value;
-  }
+export function normalizeYoungChildrenMatters(newValue: unknown, legacyValue: unknown): boolean | null {
+  if (newValue === true || newValue === false) return newValue;
+  if (legacyValue === true) return false;
+  if (legacyValue === false) return true;
+  if (legacyValue === "no_acepto") return true;
+  if (legacyValue === "no_me_importa" || legacyValue === "prefiero_que_no") return false;
   return null;
 }
 
@@ -103,8 +115,12 @@ export interface Dealbreakers {
   maxDistance: DistancePreference | null;
   relationshipIntentionsAccepted: RelationshipIntention[];
   smokingAccepted: FrequencyLevel[];
-  partnerHasChildrenOk: ChildrenAcceptance | null;
-  partnerHasYoungChildrenOk: ChildrenAcceptance | null;
+  // Deliberately the ONLY children-related partner requirement — there is
+  // no general "accepts a partner with any children" question anymore
+  // (a candidate whose children are all 15+ always passes; see
+  // hardFilters.ts acceptsYoungChildren). See normalizeYoungChildrenMatters
+  // above for how legacy field names/values map onto this.
+  partnerYoungChildrenMatters: boolean | null;
   partnerWantsFutureChildren: FutureChildrenPreference | null;
 }
 
@@ -122,8 +138,7 @@ export const emptyDealbreakers: Dealbreakers = {
   maxDistance: null,
   relationshipIntentionsAccepted: [],
   smokingAccepted: [],
-  partnerHasChildrenOk: null,
-  partnerHasYoungChildrenOk: null,
+  partnerYoungChildrenMatters: null,
   partnerWantsFutureChildren: null,
 };
 
@@ -215,7 +230,7 @@ export interface AboutMeVisible {
   childrenCount: number | null;
   // One entry per child, birth YEAR only — never a full birth date, and
   // never a static "age" that would go stale. Whether any child is under
-  // a given age threshold (e.g. 15, for the partnerHasYoungChildrenOk
+  // a given age threshold (e.g. 15, for the partnerYoungChildrenMatters
   // dealbreaker) is always DERIVED from this at the moment it's needed
   // (see src/lib/introduction/age.ts) — there is no separate stored
   // "under 15" flag to ever fall out of sync with this data. Only
@@ -390,14 +405,18 @@ export function withProfileDefaults(
     dealbreakers: {
       ...emptyDealbreakers,
       ...data.dealbreakers,
-      // Backward compatibility: normalize legacy boolean values (or
-      // already-migrated string values) on every read — see
-      // normalizeChildrenAcceptance's own doc comment. This is the ONLY
+      // Backward compatibility: normalize every prior format (the
+      // original boolean, and the short-lived 3-tier string) into the
+      // current simple boolean on every read — see
+      // normalizeYoungChildrenMatters's own doc comment. This is the ONLY
       // place the matching engine's raw Firestore reads need to change to
-      // safely understand both formats; hardFilters.ts/scoring.ts only
-      // ever see the normalized 3-tier value.
-      partnerHasChildrenOk: normalizeChildrenAcceptance(data.dealbreakers?.partnerHasChildrenOk),
-      partnerHasYoungChildrenOk: normalizeChildrenAcceptance(data.dealbreakers?.partnerHasYoungChildrenOk),
+      // safely understand all three formats; hardFilters.ts only ever
+      // sees the normalized current value. The old field name is read via
+      // a loose cast since it no longer exists on Dealbreakers.
+      partnerYoungChildrenMatters: normalizeYoungChildrenMatters(
+        (data.dealbreakers as Record<string, unknown> | undefined)?.partnerYoungChildrenMatters,
+        (data.dealbreakers as Record<string, unknown> | undefined)?.partnerHasYoungChildrenOk,
+      ),
     },
     preferences: { ...emptyPreferences, ...data.preferences },
     presentation: {

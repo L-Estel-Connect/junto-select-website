@@ -10,7 +10,6 @@ import PhotoThumb from "@/components/admin/PhotoThumb";
 import MemberSuggestPanel from "@/components/admin/MemberSuggestPanel";
 import {
   activityLabel,
-  childrenAcceptanceLabel,
   distanceLabel,
   educationLabel,
   frequencyLabel,
@@ -19,6 +18,7 @@ import {
   genderLabel,
   languageList,
   relationshipIntentionLabel,
+  youngChildrenMattersLabel,
   HARD_FILTER_REASON_LABELS,
   PAIR_HISTORY_REASON_LABELS,
 } from "@/lib/admin/labels";
@@ -193,16 +193,8 @@ export default function MemberDetailPage({ params }: { params: Promise<{ uid: st
               />
               <Field label="Fumador aceptado" value={profile.dealbreakers.smokingAccepted.map(frequencyLabel).join(", ")} />
               <Field
-                label="¿Acepta pareja con hijos?"
-                value={childrenAcceptanceLabel(profile.dealbreakers.partnerHasChildrenOk)}
-              />
-              <Field
-                label="¿Acepta hijos menores de 15?"
-                value={
-                  profile.dealbreakers.partnerHasChildrenOk === "no_acepto"
-                    ? "No aplica — ya excluye cualquier hijo"
-                    : childrenAcceptanceLabel(profile.dealbreakers.partnerHasYoungChildrenOk)
-                }
+                label="¿Le importan hijos menores de 15 años?"
+                value={youngChildrenMattersLabel(profile.dealbreakers.partnerYoungChildrenMatters)}
               />
               <Field
                 label="¿Debe querer hijos futuros?"

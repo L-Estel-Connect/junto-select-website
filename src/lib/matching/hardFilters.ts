@@ -2,13 +2,8 @@ import { getAge, hasChildUnderAge } from "@/lib/introduction/age";
 import type { ProfileDocument } from "@/lib/introduction/types";
 import type { HardFilterFailureReason } from "./types";
 
-/**
- * A partner's children counting as "young" for the partnerHasYoungChildrenOk
- * dealbreaker. Exported so scoring.ts's childrenPreferenceFit can apply the
- * exact same threshold to the `prefiero_que_no` soft-preference signal,
- * rather than a second hardcoded "15" that could silently drift from this one.
- */
-export const YOUNG_CHILD_AGE_THRESHOLD = 15;
+/** A partner's children counting as "young" for the partnerYoungChildrenMatters dealbreaker. */
+const YOUNG_CHILD_AGE_THRESHOLD = 15;
 
 /**
  * Reciprocal hard filters — a pair is only ever eligible if BOTH people's
@@ -104,33 +99,21 @@ function acceptsSmoking(profile: ProfileDocument, other: ProfileDocument): boole
   return SMOKING_FREQUENCY_RANK[smoking] <= maxAcceptedRank;
 }
 
-// Explicit three-way handling on the OTHER person's data — this is the
-// fail-open an earlier audit found: `if (other.hasChildren !== true) return
-// true` treated `null` (unknown) the same as `false` (confirmed no
-// children), silently letting unknown data satisfy a hard requirement.
-// `null` (unknown) always fails closed; `false` (confirmed no children)
-// passes since the dealbreaker doesn't apply.
+// The ONLY children-related hard filter (see types.ts
+// `partnerYoungChildrenMatters`'s doc comment for the product history —
+// there is deliberately no general "accepts a partner with any children"
+// question or dealbreaker anymore; a candidate whose children are all
+// 15+ always passes this check).
 //
-// When it DOES apply (other has children), the RECIPIENT's own stated
-// acceptance is now a genuine 3-tier value (see ChildrenAcceptance in
-// types.ts): only the explicit `no_acepto` tier is a hard dealbreaker.
-// `no_me_importa` and `prefiero_que_no` both pass the hard filter —
-// `prefiero_que_no` ("I'd prefer not, but I'm open to it") is a real,
-// natural-language SOFT preference, not an absolute exclusion, and is
-// scored instead (see scoring.ts childrenPreferenceFit). A `null`
-// acceptance (dealbreaker never answered) still fails closed, same as
-// before.
-function acceptsChildren(profile: ProfileDocument, other: ProfileDocument): boolean {
-  if (other.visible.hasChildren === null) return false;
-  if (other.visible.hasChildren === false) return true;
-  const acceptance = profile.dealbreakers.partnerHasChildrenOk;
-  return acceptance === "no_me_importa" || acceptance === "prefiero_que_no";
-}
-
-// Same explicit three-way handling on the other person's data as
-// acceptsChildren above, and the same 3-tier acceptance semantics on the
-// recipient's side — only `no_acepto` hard-excludes; `prefiero_que_no` is
-// a soft scoring signal, not a dealbreaker.
+// Explicit three-way handling on the OTHER person's data: `null`
+// (unknown hasChildren) always fails closed; `false` (confirmed no
+// children) passes since the dealbreaker can never bind; `true` requires
+// looking at their actual birth years. Unknown birth years (missing/empty
+// array) also fail closed rather than being treated as "no young child."
+// When there genuinely is a child under 15, the recipient's own stated
+// requirement decides: `true` ("Sí, me importa") hard-excludes; `false`
+// ("No, no me importa") never does; `null` (never answered) fails closed,
+// the same "unknown dealbreaker" convention used everywhere else here.
 function acceptsYoungChildren(profile: ProfileDocument, other: ProfileDocument): boolean {
   if (other.visible.hasChildren === null) return false;
   if (other.visible.hasChildren === false) return true;
@@ -138,8 +121,7 @@ function acceptsYoungChildren(profile: ProfileDocument, other: ProfileDocument):
   if (!birthYears || birthYears.length === 0) return false; // unknown -> never treated as compatible
   const hasYoungChild = hasChildUnderAge(birthYears, YOUNG_CHILD_AGE_THRESHOLD);
   if (!hasYoungChild) return true; // no young children, so this dealbreaker doesn't bind
-  const acceptance = profile.dealbreakers.partnerHasYoungChildrenOk;
-  return acceptance === "no_me_importa" || acceptance === "prefiero_que_no";
+  return profile.dealbreakers.partnerYoungChildrenMatters === false;
 }
 
 function acceptsFutureChildrenIntention(profile: ProfileDocument, other: ProfileDocument): boolean {
@@ -168,7 +150,6 @@ const CHECKS: Array<{
   { reason: "distance", accepts: (p, o) => acceptsDistance(p, o) },
   { reason: "relationship_intention", accepts: (p, o) => acceptsIntention(p, o) },
   { reason: "smoking", accepts: (p, o) => acceptsSmoking(p, o) },
-  { reason: "children", accepts: (p, o) => acceptsChildren(p, o) },
   { reason: "young_children", accepts: (p, o) => acceptsYoungChildren(p, o) },
   { reason: "future_children", accepts: (p, o) => acceptsFutureChildrenIntention(p, o) },
 ];

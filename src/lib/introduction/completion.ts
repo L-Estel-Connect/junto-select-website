@@ -88,17 +88,6 @@ export function isAboutMeComplete(profile: AboutMeCompletionInput): boolean {
  * scoring signals, not requirements.
  */
 export function isPreferencesComplete(dealbreakers: Dealbreakers): boolean {
-  // The under-15 question becomes moot once someone has already chosen
-  // "No podría aceptarlo" (no_acepto) to the general children question —
-  // a candidate with any children is already hard-excluded, so whether
-  // their children happen to be under 15 can never matter. The UI hides
-  // this question in that case (see PreferencesSection.tsx), so it must
-  // not be required here either, or such a profile could never reach
-  // "Lo que buscas: completado".
-  const youngChildrenAnswered =
-    dealbreakers.partnerHasChildrenOk === "no_acepto" ||
-    dealbreakers.partnerHasYoungChildrenOk !== null;
-
   return (
     dealbreakers.gendersSought.length > 0 &&
     dealbreakers.ageMin !== null &&
@@ -111,8 +100,7 @@ export function isPreferencesComplete(dealbreakers: Dealbreakers): boolean {
     dealbreakers.maxDistance !== null &&
     dealbreakers.relationshipIntentionsAccepted.length > 0 &&
     dealbreakers.smokingAccepted.length > 0 &&
-    dealbreakers.partnerHasChildrenOk !== null &&
-    youngChildrenAnswered &&
+    dealbreakers.partnerYoungChildrenMatters !== null &&
     dealbreakers.partnerWantsFutureChildren !== null
   );
 }

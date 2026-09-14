@@ -15,7 +15,7 @@ import {
   emptyDealbreakers,
   emptyPreferences,
   emptyPresentation,
-  normalizeChildrenAcceptance,
+  normalizeYoungChildrenMatters,
   type ProfileDocument,
 } from "./types";
 import { logDebugEvent } from "./onboardingDebug";
@@ -70,12 +70,14 @@ function withDefaults(uid: string, data: Partial<ProfileDocument>): ProfileDocum
       ...data.dealbreakers,
       // Same backward-compatible normalization as withProfileDefaults in
       // types.ts (the server-side/matching-engine read path) — see
-      // normalizeChildrenAcceptance's doc comment. Needed here too since
+      // normalizeYoungChildrenMatters's doc comment. Needed here too since
       // this is the client's own read path, e.g. PreferencesSection.tsx
-      // rendering a legacy profile's stored boolean as one of the three
-      // new option chips.
-      partnerHasChildrenOk: normalizeChildrenAcceptance(data.dealbreakers?.partnerHasChildrenOk),
-      partnerHasYoungChildrenOk: normalizeChildrenAcceptance(data.dealbreakers?.partnerHasYoungChildrenOk),
+      // rendering a legacy profile's stored value as the current boolean
+      // question.
+      partnerYoungChildrenMatters: normalizeYoungChildrenMatters(
+        (data.dealbreakers as Record<string, unknown> | undefined)?.partnerYoungChildrenMatters,
+        (data.dealbreakers as Record<string, unknown> | undefined)?.partnerHasYoungChildrenOk,
+      ),
     },
     preferences: { ...emptyPreferences, ...data.preferences },
     presentation: {
