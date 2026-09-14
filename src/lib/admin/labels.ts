@@ -90,6 +90,53 @@ export const HARD_FILTER_REASON_LABELS: Record<string, string> = {
   future_children: "Compatibilidad de hijos futuros",
 };
 
+/**
+ * `evaluateHardFiltersDetailed` (hardFilters.ts) reports every failing
+ * check in BOTH reciprocal directions — a person can fail the same reason
+ * from either side (e.g. neither's own smoking-acceptance dealbreaker
+ * includes the other's actual smoking level), which is two genuinely
+ * independent, real facts, not a duplicate. `HARD_FILTER_REASON_LABELS`
+ * alone can't distinguish them (same reason -> same label), which is what
+ * made two real, distinct reciprocal failures look like an inexplicable
+ * repeated bullet in the admin "Sugerir alguien" panel. This names WHOSE
+ * requirement wasn't met by WHOM, so two same-reason entries always read
+ * as the two distinct facts they are.
+ */
+export function hardFilterFailureLabel(
+  failure: { reason: string; direction: "a_rejects_b" | "b_rejects_a" },
+  recipientName: string,
+  candidateName: string,
+): string {
+  const reasonLabel = HARD_FILTER_REASON_LABELS[failure.reason] ?? failure.reason;
+  const doesNotMeet = failure.direction === "a_rejects_b" ? candidateName : recipientName;
+  const requirementOf = failure.direction === "a_rejects_b" ? recipientName : candidateName;
+  return `${reasonLabel}: ${doesNotMeet} no cumple el requisito de ${requirementOf}`;
+}
+
+/**
+ * Error codes returned by POST .../suggest (createManualSuggestion) when a
+ * server-side safety re-check fails — shown to the admin instead of the raw
+ * code so they understand WHY a suggestion they previewed as sendable was
+ * refused (the preview list can go stale between load and click, e.g.
+ * another admin suggesting the same pair first).
+ */
+export const MANUAL_SUGGESTION_ERROR_LABELS: Record<string, string> = {
+  recipient_not_found: "No se encuentra el perfil de la persona destinataria.",
+  candidate_not_found: "No se encuentra el perfil de la persona sugerida.",
+  same_person: "No se puede sugerir a la misma persona.",
+  already_suggested: "Ya se sugirió esta pareja anteriormente.",
+  recipient_not_eligible: "La persona destinataria ya no cumple los requisitos para el emparejamiento.",
+  candidate_not_eligible: "La persona sugerida ya no cumple los requisitos para el emparejamiento.",
+  hard_filter_failed: "Esta pareja ya no cumple los requisitos imprescindibles.",
+  pair_not_eligible: "Esta pareja no está disponible (bloqueada, en espera o ya conectada).",
+  candidateUid_required: "Falta seleccionar a quién sugerir.",
+  invalid_json: "No se ha podido procesar la solicitud.",
+};
+
+export function manualSuggestionErrorLabel(code: string): string {
+  return MANUAL_SUGGESTION_ERROR_LABELS[code] ?? "No se ha podido crear la sugerencia.";
+}
+
 export const PAIR_HISTORY_REASON_LABELS: Record<string, string> = {
   pending_or_invited: "Ya existe una propuesta o invitación en curso",
   cooldown: "En periodo de espera tras un 'Pasar' (6 meses)",

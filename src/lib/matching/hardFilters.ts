@@ -73,11 +73,30 @@ function acceptsIntention(profile: ProfileDocument, other: ProfileDocument): boo
   );
 }
 
+// smokingAccepted is ordinal, not a flat allowlist: the three FrequencyLevel
+// values form a scale (no < socialmente < habitualmente) from most to least
+// conservative, and picking a tier is understood as "I'm fine with this or
+// anything more conservative" — e.g. someone who accepts "socialmente" is
+// necessarily fine with a partner who doesn't smoke at all ("no"). Without
+// this, a person who selects "socialmente" only (the natural choice for
+// "I'm okay with occasional smoking") would reciprocally reject a
+// non-smoking partner, which is never the intended requirement. An empty
+// smokingAccepted (no tier ever selected) still fails closed, same as before.
+const SMOKING_FREQUENCY_RANK: Record<NonNullable<ProfileDocument["visible"]["smoking"]>, number> = {
+  no: 0,
+  socialmente: 1,
+  habitualmente: 2,
+};
+
 // other's smoking === null (unknown) -> false: never treated as an
 // accepted smoking level.
 function acceptsSmoking(profile: ProfileDocument, other: ProfileDocument): boolean {
   const smoking = other.visible.smoking;
-  return smoking !== null && profile.dealbreakers.smokingAccepted.includes(smoking);
+  if (smoking === null) return false;
+  const accepted = profile.dealbreakers.smokingAccepted;
+  if (accepted.length === 0) return false;
+  const maxAcceptedRank = Math.max(...accepted.map((level) => SMOKING_FREQUENCY_RANK[level]));
+  return SMOKING_FREQUENCY_RANK[smoking] <= maxAcceptedRank;
 }
 
 // Explicit three-way handling — this is the one fail-open the audit

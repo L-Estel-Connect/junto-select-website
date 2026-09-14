@@ -5,7 +5,7 @@ import { adminFetch, adminFetchJson } from "@/lib/admin/adminFetch";
 import { useAdminQuery } from "@/lib/admin/useAdminQuery";
 import PhotoThumb from "./PhotoThumb";
 import Badge from "./Badge";
-import { genderLabel, HARD_FILTER_REASON_LABELS, PAIR_HISTORY_REASON_LABELS } from "@/lib/admin/labels";
+import { genderLabel, hardFilterFailureLabel, manualSuggestionErrorLabel, PAIR_HISTORY_REASON_LABELS } from "@/lib/admin/labels";
 
 interface HardFilterFailure {
   reason: string;
@@ -70,7 +70,7 @@ export default function MemberSuggestPanel({
         body: JSON.stringify({ candidateUid: selected.uid, note: note.trim() || null }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "No se ha podido crear la sugerencia.");
+      if (!res.ok || !data.ok) throw new Error(manualSuggestionErrorLabel(data.error));
       onCreated();
     } catch (err) {
       setSendError(err instanceof Error ? err.message : "No se ha podido crear la sugerencia.");
@@ -127,10 +127,16 @@ export default function MemberSuggestPanel({
                   </div>
 
                   {c.hardFilterFailures.length > 0 && (
-                    <p className="mt-2 text-[12px] text-[#8a3b3b]">
-                      No compatible con los requisitos imprescindibles:{" "}
-                      {c.hardFilterFailures.map((f) => HARD_FILTER_REASON_LABELS[f.reason] ?? f.reason).join(", ")}
-                    </p>
+                    <div className="mt-2 text-[12px] text-[#8a3b3b]">
+                      <p>No compatible con los requisitos imprescindibles:</p>
+                      <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                        {c.hardFilterFailures.map((f, i) => (
+                          <li key={`${f.reason}-${f.direction}-${i}`}>
+                            {hardFilterFailureLabel(f, recipientName, c.firstName)}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                   {c.hardFilterFailures.length === 0 && c.pairHistoryReason && (
                     <p className="mt-2 text-[12px] text-[#8a3b3b]">
