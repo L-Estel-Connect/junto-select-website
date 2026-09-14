@@ -34,10 +34,25 @@ const DISTANCE_LABELS: Record<string, string> = {
   sin_limite: "Sin límite",
 };
 
+// Explicit statements, not yes/no answers — mirrors the member-facing
+// option wording in PreferencesSection.tsx exactly, so the admin view can
+// never look more ambiguous than what the member actually saw and chose
+// (see semantics audit: a "¿Debe...? No" framing risked being misread as
+// "not required" instead of the intended "must not want children").
 const FUTURE_CHILDREN_PREFERENCE_LABELS: Record<string, string> = {
-  si: "Sí",
-  no: "No",
-  indiferente: "Le da igual",
+  si: "Debe querer tener hijos",
+  no: "No debe querer tener hijos",
+  indiferente: "Me da igual",
+};
+
+// Mirrors CHILDREN_ACCEPTANCE_OPTIONS in PreferencesSection.tsx exactly.
+// Only `no_acepto` is a hard dealbreaker (see hardFilters.ts
+// acceptsChildren/acceptsYoungChildren) — `prefiero_que_no` is a soft
+// scoring preference and must never read as an exclusion in the admin view.
+const CHILDREN_ACCEPTANCE_LABELS: Record<string, string> = {
+  no_me_importa: "No me importa",
+  prefiero_que_no: "Prefiero que no, pero podría considerarlo",
+  no_acepto: "No podría aceptarlo",
 };
 
 function lookup(map: Record<string, string>, value: string | null): string {
@@ -71,6 +86,9 @@ export function futureChildrenIntentionLabel(value: string | null): string {
 }
 export function futureChildrenPreferenceLabel(value: string | null): string {
   return lookup(FUTURE_CHILDREN_PREFERENCE_LABELS, value);
+}
+export function childrenAcceptanceLabel(value: string | null): string {
+  return lookup(CHILDREN_ACCEPTANCE_LABELS, value);
 }
 export function languageLabel(value: string): string {
   return LANGUAGE_LABELS[value] ?? value;

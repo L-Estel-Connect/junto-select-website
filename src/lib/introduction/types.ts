@@ -33,6 +33,41 @@ export type DistancePreference = "misma_ciudad" | "hasta_50km" | "sin_limite";
 export type FutureChildrenPreference = "si" | "no" | "indiferente";
 
 /**
+ * Three-tier partner-requirement acceptance for "does the other person
+ * already have children" / "would their children being under 15 be okay" —
+ * replaces the earlier plain boolean, which could only express "must not
+ * have children at all" and had no way to represent a genuine soft
+ * preference. `no_me_importa` and `prefiero_que_no` are both compatible
+ * with a hard-filter pass (see hardFilters.ts acceptsChildren/
+ * acceptsYoungChildren) — `prefiero_que_no` only feeds a small negative
+ * scoring signal (see scoring.ts childrenPreferenceFit) — and only
+ * `no_acepto` is a genuine dealbreaker that excludes a candidate outright.
+ */
+export type ChildrenAcceptance = "no_me_importa" | "prefiero_que_no" | "no_acepto";
+
+/**
+ * Backward-compatible read-side normalizer for partnerHasChildrenOk /
+ * partnerHasYoungChildrenOk. Documents written before this 3-tier model
+ * stored a plain boolean under these same field names: `true` (shown to
+ * the person as "No me importaría") maps to `no_me_importa`; `false`
+ * (shown as "Prefiero que no") maps to `prefiero_que_no` — deliberately
+ * NEVER `no_acepto`, since no legacy user was ever shown, or agreed to, a
+ * genuine hard-exclusion option, so none may be silently upgraded into
+ * one. Documents written after this model already store one of the three
+ * string values directly, which passes through unchanged. Anything else
+ * (missing, malformed) normalizes to `null` (unanswered) — the same
+ * "unknown" state a fail-closed hard filter already treats correctly.
+ */
+export function normalizeChildrenAcceptance(value: unknown): ChildrenAcceptance | null {
+  if (value === true) return "no_me_importa";
+  if (value === false) return "prefiero_que_no";
+  if (value === "no_me_importa" || value === "prefiero_que_no" || value === "no_acepto") {
+    return value;
+  }
+  return null;
+}
+
+/**
  * Self-reported intent, distinct from FutureChildrenPreference above (a
  * dealbreaker about a *partner's* answer) — "indiferente" doesn't make
  * sense as a description of one's own desire, so this is a separate type
@@ -68,8 +103,8 @@ export interface Dealbreakers {
   maxDistance: DistancePreference | null;
   relationshipIntentionsAccepted: RelationshipIntention[];
   smokingAccepted: FrequencyLevel[];
-  partnerHasChildrenOk: boolean | null;
-  partnerHasYoungChildrenOk: boolean | null;
+  partnerHasChildrenOk: ChildrenAcceptance | null;
+  partnerHasYoungChildrenOk: ChildrenAcceptance | null;
   partnerWantsFutureChildren: FutureChildrenPreference | null;
 }
 
@@ -352,7 +387,18 @@ export function withProfileDefaults(
     visible: { ...emptyAboutMeVisible, ...data.visible },
     private: { ...emptyAboutMePrivate, ...data.private },
     photos: data.photos ?? [],
-    dealbreakers: { ...emptyDealbreakers, ...data.dealbreakers },
+    dealbreakers: {
+      ...emptyDealbreakers,
+      ...data.dealbreakers,
+      // Backward compatibility: normalize legacy boolean values (or
+      // already-migrated string values) on every read — see
+      // normalizeChildrenAcceptance's own doc comment. This is the ONLY
+      // place the matching engine's raw Firestore reads need to change to
+      // safely understand both formats; hardFilters.ts/scoring.ts only
+      // ever see the normalized 3-tier value.
+      partnerHasChildrenOk: normalizeChildrenAcceptance(data.dealbreakers?.partnerHasChildrenOk),
+      partnerHasYoungChildrenOk: normalizeChildrenAcceptance(data.dealbreakers?.partnerHasYoungChildrenOk),
+    },
     preferences: { ...emptyPreferences, ...data.preferences },
     presentation: {
       ...emptyPresentation,

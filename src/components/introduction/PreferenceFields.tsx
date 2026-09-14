@@ -93,37 +93,6 @@ export function SingleChoiceField({
   );
 }
 
-export function BooleanField({
-  value,
-  onChange,
-  yesLabel = "Sí",
-  noLabel = "No",
-}: {
-  value: boolean | null;
-  onChange: (next: boolean) => void;
-  yesLabel?: string;
-  noLabel?: string;
-}) {
-  return (
-    <div className="flex gap-2.5">
-      <button
-        type="button"
-        onClick={() => onChange(true)}
-        className={chipClasses(value === true)}
-      >
-        {yesLabel}
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange(false)}
-        className={chipClasses(value === false)}
-      >
-        {noLabel}
-      </button>
-    </div>
-  );
-}
-
 export function NumberRangeField({
   min,
   max,

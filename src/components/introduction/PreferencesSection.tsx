@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  BooleanField,
   FieldRow,
   MultiChipField,
   NumberRangeField,
@@ -48,10 +47,25 @@ const FREQUENCY_OPTIONS = [
   { value: "habitualmente", label: "Habitualmente" },
 ];
 
+// Each option is a complete, unambiguous statement about the requirement
+// itself — deliberately not phrased as a yes/no answer to a "¿Debe...?"
+// question, where "No" could be misread as "not required" instead of the
+// intended "must not want children" (see semantics audit).
 const FUTURE_CHILDREN_OPTIONS = [
-  { value: "si", label: "Sí" },
-  { value: "no", label: "No" },
+  { value: "si", label: "Debe querer tener hijos" },
+  { value: "no", label: "No debe querer tener hijos" },
   { value: "indiferente", label: "Me da igual" },
+];
+
+// Three-tier acceptance for "the other person already has children" / "...
+// and those children are under 15" — `no_me_importa` and `prefiero_que_no`
+// both pass the hard filter (a `prefiero_que_no` preference only affects
+// scoring, never excludes a candidate); only `no_acepto` is a genuine
+// dealbreaker. See ChildrenAcceptance in types.ts and hardFilters.ts.
+const CHILDREN_ACCEPTANCE_OPTIONS = [
+  { value: "no_me_importa", label: "No me importa" },
+  { value: "prefiero_que_no", label: "Prefiero que no, pero podría considerarlo" },
+  { value: "no_acepto", label: "No podría aceptarlo" },
 ];
 
 const ACTIVITY_OPTIONS = [
@@ -213,29 +227,41 @@ export default function PreferencesSection({ uid }: { uid: string }) {
           </FieldRow>
 
           <FieldRow question="¿Te importaría que ya tuviera hijos?">
-            <BooleanField
+            <SingleChoiceField
+              options={CHILDREN_ACCEPTANCE_OPTIONS}
               value={dealbreakers.partnerHasChildrenOk}
-              onChange={(v) => updateDealbreakers({ partnerHasChildrenOk: v })}
-              yesLabel="No me importaría"
-              noLabel="Prefiero que no"
-            />
-          </FieldRow>
-
-          <FieldRow
-            question="¿Y si esos hijos fueran menores de 15 años?"
-            helper="Solo se tiene en cuenta si la otra persona tiene hijos."
-          >
-            <BooleanField
-              value={dealbreakers.partnerHasYoungChildrenOk}
               onChange={(v) =>
-                updateDealbreakers({ partnerHasYoungChildrenOk: v })
+                updateDealbreakers({
+                  partnerHasChildrenOk: v as Dealbreakers["partnerHasChildrenOk"],
+                  // "No podría aceptarlo" already excludes anyone with
+                  // children outright, so whether their children happen to
+                  // be under 15 can never matter — clearing it keeps stored
+                  // data from implying a now-meaningless answer still
+                  // applies. The row below is hidden in this case too.
+                  ...(v === "no_acepto" ? { partnerHasYoungChildrenOk: null } : {}),
+                })
               }
-              yesLabel="No me importaría"
-              noLabel="Prefiero que no"
             />
           </FieldRow>
 
-          <FieldRow question="¿Debe querer tener hijos en el futuro?">
+          {dealbreakers.partnerHasChildrenOk !== "no_acepto" && (
+            <FieldRow
+              question="¿Y si esos hijos fueran menores de 15 años?"
+              helper="Solo se tiene en cuenta si la otra persona tiene hijos."
+            >
+              <SingleChoiceField
+                options={CHILDREN_ACCEPTANCE_OPTIONS}
+                value={dealbreakers.partnerHasYoungChildrenOk}
+                onChange={(v) =>
+                  updateDealbreakers({
+                    partnerHasYoungChildrenOk: v as Dealbreakers["partnerHasYoungChildrenOk"],
+                  })
+                }
+              />
+            </FieldRow>
+          )}
+
+          <FieldRow question="Sobre tener hijos en el futuro, ¿qué necesitas de la otra persona?">
             <SingleChoiceField
               options={FUTURE_CHILDREN_OPTIONS}
               value={dealbreakers.partnerWantsFutureChildren}

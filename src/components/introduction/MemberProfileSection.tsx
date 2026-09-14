@@ -63,7 +63,7 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
   }
 
   const sections: SectionInfo[] = [
-    { label: "Sobre ti", complete: true, href: null },
+    { label: "Sobre ti", complete: true, href: "/member/profile/about" },
     {
       label: "Lo que buscas",
       complete: isPreferencesComplete(profile.dealbreakers),
