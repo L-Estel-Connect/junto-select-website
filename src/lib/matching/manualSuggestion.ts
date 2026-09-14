@@ -3,6 +3,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { getAge } from "@/lib/introduction/age";
 import type { ProfileDocument } from "@/lib/introduction/types";
+import { withProfileDefaults } from "@/lib/introduction/types";
 import { resolvePersonId } from "./identity";
 import { loadEligiblePool } from "./engine";
 import { isProfileInEligiblePool } from "./eligibility";
@@ -104,7 +105,7 @@ export async function searchManualCandidates(
 > {
   const recipientSnap = await adminDb.doc(`profiles/${recipientUid}`).get();
   if (!recipientSnap.exists) return { ok: false, error: "recipient_not_found" };
-  const recipientProfile = recipientSnap.data() as ProfileDocument;
+  const recipientProfile = withProfileDefaults(recipientUid, recipientSnap.data() as Partial<ProfileDocument>);
   const recipientPersonId = resolvePersonId(recipientUid, recipientProfile);
 
   const pool = await loadEligiblePool();
@@ -196,8 +197,8 @@ export async function createManualSuggestion(
   if (!recipientSnap.exists) return { ok: false, error: "recipient_not_found" };
   if (!candidateSnap.exists) return { ok: false, error: "candidate_not_found" };
 
-  const recipientProfile = recipientSnap.data() as ProfileDocument;
-  const candidateProfile = candidateSnap.data() as ProfileDocument;
+  const recipientProfile = withProfileDefaults(params.recipientUid, recipientSnap.data() as Partial<ProfileDocument>);
+  const candidateProfile = withProfileDefaults(params.candidateUid, candidateSnap.data() as Partial<ProfileDocument>);
   const recipientPersonId = resolvePersonId(params.recipientUid, recipientProfile);
   const candidatePersonId = resolvePersonId(params.candidateUid, candidateProfile);
 

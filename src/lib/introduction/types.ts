@@ -331,3 +331,54 @@ export const emptyAboutMePrivate: AboutMePrivate = {
   birthDate: null,
   incomeRange: null,
 };
+
+/**
+ * Backfills sub-objects/fields a raw Firestore document predates (added to
+ * the schema after that profile was first written) with their empty
+ * defaults, the same shallow-merge contract as the client-side onboarding
+ * read path (src/lib/introduction/profile.ts's withDefaults) — a legacy
+ * document simply never had `preferences`, say, so it gets `emptyPreferences`
+ * rather than `undefined`. Pure and framework-agnostic (no Firestore/client
+ * imports) so both the client onboarding path and server-side matching
+ * engine (which reads raw docs directly, not through getOrCreateProfile)
+ * can normalize a candidate/recipient the same way before any hard-filter
+ * or scoring code touches it — see engine.ts loadEligiblePool.
+ */
+export function withProfileDefaults(
+  uid: string,
+  data: Partial<ProfileDocument>,
+): ProfileDocument {
+  return {
+    visible: { ...emptyAboutMeVisible, ...data.visible },
+    private: { ...emptyAboutMePrivate, ...data.private },
+    photos: data.photos ?? [],
+    dealbreakers: { ...emptyDealbreakers, ...data.dealbreakers },
+    preferences: { ...emptyPreferences, ...data.preferences },
+    presentation: {
+      ...emptyPresentation,
+      ...data.presentation,
+      prompts: { ...emptyPresentation.prompts, ...data.presentation?.prompts },
+    },
+    contactPreferences: { ...emptyContactPreferences, ...data.contactPreferences },
+    meta: {
+      onboardingStepIndex: 0,
+      aboutMeComplete: false,
+      photosComplete: false,
+      preferencesComplete: false,
+      presentationComplete: false,
+      profileStatus: "draft",
+      onboardingFinalized: false,
+      personId: uid,
+      searchStatus: "passive",
+      duplicateStatus: "clear",
+      duplicateOf: null,
+      matchingAnchorAt: null,
+      matchingSubscriptionId: null,
+      matchingPeriodsProcessed: 0,
+      nextMatchingDueAt: null,
+      createdAt: null,
+      updatedAt: null,
+      ...data.meta,
+    },
+  };
+}

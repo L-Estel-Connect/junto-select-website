@@ -2,6 +2,7 @@ import "server-only";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import type { ProfileDocument } from "@/lib/introduction/types";
+import { withProfileDefaults } from "@/lib/introduction/types";
 import { resolvePersonId } from "./identity";
 import { isProfileInEligiblePool } from "./eligibility";
 import { evaluateHardFilters } from "./hardFilters";
@@ -67,7 +68,13 @@ export async function loadEligiblePool(): Promise<EligibleProfile[]> {
   const byPersonId = new Map<string, EligibleProfile>();
   for (const doc of snap.docs) {
     const uid = doc.id;
-    const profile = doc.data() as ProfileDocument;
+    // Legacy documents predating a schema field (preferences, matching
+    // anchors, etc.) are backfilled with safe empty defaults here — the
+    // ONLY normalization point for the engine's raw Firestore reads — so a
+    // single incomplete candidate can never throw and take down another
+    // recipient's entire matching run (see hardFilters.ts/scoring.ts, which
+    // both assume every sub-object is present).
+    const profile = withProfileDefaults(uid, doc.data() as Partial<ProfileDocument>);
     // profileStatus is already filtered by the query above; this also
     // covers duplicate exclusion and the Madrid-only pool gate — see
     // eligibility.ts (shared with manualSuggestion.ts, so both draw from
@@ -352,6 +359,7 @@ export async function runMatchingCycle(
   let proposalsCreated = 0;
   let recipientsCompleted = 0;
   let recipientsWithZeroProposals = 0;
+  let recipientsFailed = 0;
   let timeBudgetExceeded = false;
   const invocationStartedAt = Date.now();
 
@@ -382,6 +390,7 @@ export async function runMatchingCycle(
         .doc(`matchingCycles/${cycleId}/memberRuns/${recipient.personId}`)
         .update({ status: "failed", error: String(error) })
         .catch(() => {});
+      recipientsFailed += 1;
       // Continue with the rest of the cycle — one member's failure must
       // never block everyone else's proposals for this cycle.
     }
@@ -394,10 +403,19 @@ export async function runMatchingCycle(
   // makes a `production` cycle resumed across several scheduled
   // invocations report a running TOTAL rather than only its most recent
   // partial invocation's count.
-  if (timeBudgetExceeded) {
-    // Deliberately NOT marked "completed" — the next scheduled invocation
-    // of this same cycleId resumes it, skipping everyone already
-    // `completed` above via claimMemberRun.
+  if (timeBudgetExceeded || recipientsFailed > 0) {
+    // Deliberately NOT marked "completed" — the next invocation of this
+    // same cycleId (whether the next scheduled time budget continuation,
+    // or the due-scheduler retrying a member whose period never advanced
+    // because its memberRun didn't reach "completed") resumes it, skipping
+    // everyone already `completed` above and reclaiming anyone `failed`
+    // via claimMemberRun. A single-recipient cycle (member_period/allowlist
+    // due-scan mode) whose only recipient's run failed must NEVER be
+    // marked "completed" at this cycle level — that would freeze this
+    // cycleId as permanently done and this member's matching period would
+    // never actually be (re)computed, even though the due-scheduler keeps
+    // presenting it as due (see dueScheduler.ts, which only advances
+    // nextMatchingDueAt once the memberRun itself reaches "completed").
     await cycleRef.update({
       "stats.recipientsConsidered": recipients.length,
       "stats.recipientsCompleted": FieldValue.increment(recipientsCompleted),

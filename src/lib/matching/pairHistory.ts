@@ -193,7 +193,15 @@ export async function recordMemberDecision(
     const proposal = proposalSnap.data() as ProposalDocument;
 
     const targetStage = decision === "interested" ? "member_interested" : "member_passed";
-    if (proposal.stage === targetStage) return { alreadyRecorded: true };
+    // "mutual_interested" is stage progression BEYOND member_interested,
+    // reached once the candidate also says Interested (see
+    // recordCandidateDecision below) — it is never inconsistent with this
+    // member having said "interested", so a repeated/duplicate "interested"
+    // call here must stay idempotent even after the match already went
+    // mutual, exactly like recordCandidateDecision's own equivalent check.
+    if (proposal.stage === targetStage || (decision === "interested" && proposal.stage === "mutual_interested")) {
+      return { alreadyRecorded: true };
+    }
     if (proposal.stage !== "proposed" && proposal.stage !== "viewed") {
       throw new Error(`proposal ${proposalId} already decided (${proposal.stage})`);
     }
