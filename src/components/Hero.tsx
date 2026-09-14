@@ -49,7 +49,7 @@ export default function Hero() {
         </div>
 
         <a href="#invitacion" className={`${primaryButtonClasses} mt-2 self-start`}>
-          Solicitar invitación
+          Recibir invitaciones
         </a>
       </div>
 

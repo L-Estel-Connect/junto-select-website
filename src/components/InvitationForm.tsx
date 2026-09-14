@@ -69,10 +69,10 @@ export default function InvitationForm() {
         role="status"
         className="rounded-lg border border-hairline bg-white px-6 py-12 text-center sm:px-10"
       >
-        <p className="text-lg text-ink">Gracias. Hemos recibido tu solicitud.</p>
+        <p className="text-lg text-ink">Gracias. Ya formas parte de la lista de Junto Select.</p>
         <p className="mx-auto mt-3 max-w-[42ch] text-[15px] leading-relaxed text-ink-soft">
-          Te contactaremos cuando tengamos una invitación que pueda encajar
-          contigo.
+          Recibirás directamente por email las invitaciones a nuestros
+          próximos eventos.
         </p>
       </div>
     );
@@ -290,7 +290,7 @@ export default function InvitationForm() {
         disabled={isSubmitting}
         className={`${primaryButtonClasses} w-full`}
       >
-        {isSubmitting ? "Enviando…" : "Solicitar invitación"}
+        {isSubmitting ? "Enviando…" : "Recibir invitaciones"}
       </button>
     </form>
   );

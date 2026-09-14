@@ -47,7 +47,7 @@ export default function InvitationSection() {
   return (
     <Section id="invitacion" size="lg" className="py-16 sm:py-20">
       <p className={`${eyebrowClasses} mb-8`}>
-        Request an invitation · Solicitar invitación
+        Request an invitation · Recibir invitaciones
       </p>
 
       <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[5fr_6fr] lg:gap-16">
