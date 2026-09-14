@@ -1,6 +1,7 @@
 import "server-only";
 import { adminDb } from "@/lib/firebase/admin";
 import type { ProfileDocument } from "@/lib/introduction/types";
+import { withProfileDefaults } from "@/lib/introduction/types";
 import type {
   InvitationDocument,
   IntroductionDocument,
@@ -9,7 +10,7 @@ import type {
 } from "@/lib/matching/types";
 import { resolvePersonId } from "@/lib/matching/identity";
 import { loadPairHistoryMapFor } from "@/lib/matching/pairHistory";
-import { isProfileInEligiblePool } from "@/lib/matching/eligibility";
+import { explainIneligibility, isProfileInEligiblePool, type EligibilityDiagnosis } from "@/lib/matching/eligibility";
 import { getCurrentCycle } from "@/lib/admin/matchingCycles";
 import type { BillingDocument } from "@/lib/billing/types";
 import { ageOf, getProfileRow } from "./profiles";
@@ -112,6 +113,8 @@ export interface AdminProfileView {
   duplicateStatus: ProfileDocument["meta"]["duplicateStatus"];
   duplicateOf: string | null;
   eligibleForMatching: boolean;
+  /** Exact field-by-field reason this profile is/isn't in the matching pool right now, and whether the stored profileStatus is stale relative to it — see eligibility.ts explainIneligibility. */
+  eligibility: EligibilityDiagnosis;
   createdAt: string | null;
 }
 
@@ -150,6 +153,7 @@ function toAdminProfileView(uid: string, personId: string, profile: ProfileDocum
     duplicateOf: profile.meta.duplicateOf,
     eligibleForMatching:
       profile.meta.profileStatus === "active_for_matching" && isProfileInEligiblePool(profile),
+    eligibility: explainIneligibility(profile),
     createdAt: isoOrNull(profile.meta.createdAt),
   };
 }
@@ -257,7 +261,10 @@ export async function getMemberDetail(uid: string): Promise<MemberDetail | null>
     : [];
   const otherProfileByUid = new Map<string, ProfileDocument>();
   otherSnaps.forEach((s) => {
-    if (s.exists) otherProfileByUid.set(s.id, s.data() as ProfileDocument);
+    // Normalized the same way as every other raw profile read in this
+    // file (see profiles.ts) — otherwise a legacy doc genuinely missing
+    // `photos` would throw on `.photos[0]` below instead of reading as [].
+    if (s.exists) otherProfileByUid.set(s.id, withProfileDefaults(s.id, s.data() as Partial<ProfileDocument>));
   });
 
   const interactions: MatchingInteraction[] = [...proposalDocs.entries()]

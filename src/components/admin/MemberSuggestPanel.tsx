@@ -1,15 +1,42 @@
 "use client";
 
 import { useState } from "react";
-import { adminFetch, adminFetchJson } from "@/lib/admin/adminFetch";
+import { adminFetch } from "@/lib/admin/adminFetch";
 import { useAdminQuery } from "@/lib/admin/useAdminQuery";
 import PhotoThumb from "./PhotoThumb";
 import Badge from "./Badge";
-import { genderLabel, hardFilterFailureLabel, manualSuggestionErrorLabel, PAIR_HISTORY_REASON_LABELS } from "@/lib/admin/labels";
+import {
+  ABOUT_ME_FIELD_LABELS,
+  ELIGIBILITY_REASON_LABELS,
+  PREFERENCES_FIELD_LABELS,
+  genderLabel,
+  hardFilterFailureLabel,
+  manualSuggestionErrorLabel,
+  PAIR_HISTORY_REASON_LABELS,
+} from "@/lib/admin/labels";
+import { computeMatchWhy } from "@/lib/admin/why";
+import type { ScoreResult } from "@/lib/matching/scoring";
 
 interface HardFilterFailure {
   reason: string;
   direction: "a_rejects_b" | "b_rejects_a";
+}
+
+/** Mirrors eligibility.ts's EligibilityDiagnosis shape (server response, not re-imported to keep this component free of server-only modules). */
+interface EligibilityDiagnosis {
+  eligible: boolean;
+  reasons: string[];
+  profileStatus: {
+    storedStatus: string;
+    computedStatus: string;
+    stale: boolean;
+    sections: {
+      aboutMe: { complete: boolean; missingFields: string[] };
+      photos: { complete: boolean };
+      preferences: { complete: boolean; missingFields: string[] };
+      presentation: { complete: boolean };
+    };
+  };
 }
 
 interface CandidateResult {
@@ -24,8 +51,38 @@ interface CandidateResult {
   hardFilterFailures: HardFilterFailure[];
   pairHistoryReason: string | null;
   alreadySuggested: boolean;
-  score: { score: number } | null;
+  score: ScoreResult | null;
   canSuggest: boolean;
+}
+
+interface CandidatesResponse {
+  candidates: CandidateResult[];
+  /** Set (candidates always []) when the RECIPIENT themself isn't eligible — checked before any candidate is ever searched or scored. */
+  notEligible: EligibilityDiagnosis | null;
+}
+
+function eligibilityReasonLines(diagnosis: EligibilityDiagnosis): string[] {
+  const lines = diagnosis.reasons.map((r) => ELIGIBILITY_REASON_LABELS[r] ?? r);
+  if (diagnosis.reasons.includes("profile_status_not_active")) {
+    const { aboutMe, preferences } = diagnosis.profileStatus.sections;
+    if (!aboutMe.complete) {
+      lines.push(
+        `Sobre ti — falta: ${aboutMe.missingFields.map((f) => ABOUT_ME_FIELD_LABELS[f] ?? f).join(", ")}`,
+      );
+    }
+    if (!preferences.complete) {
+      lines.push(
+        `Lo que busca — falta: ${preferences.missingFields.map((f) => PREFERENCES_FIELD_LABELS[f] ?? f).join(", ")}`,
+      );
+    }
+    if (!diagnosis.profileStatus.sections.photos.complete) lines.push("Fotos — falta al menos una foto");
+    if (diagnosis.profileStatus.stale) {
+      lines.push(
+        "El estado guardado no coincide con los datos actuales del perfil (probablemente por un cambio de criterios posterior) — usa \"Recalcular estado\" en la ficha del miembro.",
+      );
+    }
+  }
+  return lines;
 }
 
 /**
@@ -51,14 +108,27 @@ export default function MemberSuggestPanel({
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
-  const { data, error } = useAdminQuery(() => {
+  const { data, error } = useAdminQuery<CandidatesResponse>(async () => {
     const params = new URLSearchParams();
     if (q.trim()) params.set("q", q.trim());
-    return adminFetchJson<{ candidates: CandidateResult[] }>(
-      `/api/admin/dashboard/members/${recipientUid}/suggest/candidates?${params}`,
-    );
+    const res = await adminFetch(`/api/admin/dashboard/members/${recipientUid}/suggest/candidates?${params}`);
+    const body = await res.json();
+    if (!res.ok || body.ok === false) {
+      // recipient_not_eligible is an EXPECTED, explainable outcome (see
+      // Admin Dashboard consistency audit) — folded into a normal
+      // resolved result (candidates: [], notEligible: <diagnosis>) so it
+      // renders as a clear explanation, not a generic fetch error like
+      // every other failure here still correctly does via
+      // manualSuggestionErrorLabel.
+      if (body.error === "recipient_not_eligible") {
+        return { candidates: [], notEligible: body.eligibility as EligibilityDiagnosis };
+      }
+      throw new Error(manualSuggestionErrorLabel(body.error));
+    }
+    return { candidates: body.candidates as CandidateResult[], notEligible: null };
   }, [recipientUid, q]);
   const candidates = data?.candidates ?? null;
+  const notEligible = data?.notEligible ?? null;
 
   async function handleSend() {
     if (!selected) return;
@@ -95,7 +165,21 @@ export default function MemberSuggestPanel({
           </button>
         </div>
 
-        {!selected ? (
+        {notEligible ? (
+          <div className="mt-4 rounded-xl border border-[#e3c8c8] bg-[#fbf3f3] p-4">
+            <p className="text-[14px] font-medium text-[#8a3b3b]">
+              {recipientName} ya no cumple los requisitos para el emparejamiento.
+            </p>
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-[13px] text-[#8a3b3b]">
+              {eligibilityReasonLines(notEligible).map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+            <p className="mt-2 text-[12px] text-ink-soft">
+              No se puede buscar ni sugerir a nadie hasta que esto se resuelva.
+            </p>
+          </div>
+        ) : !selected ? (
           <>
             <input
               autoFocus
@@ -164,7 +248,34 @@ export default function MemberSuggestPanel({
               Vas a sugerir a <span className="font-medium">{selected.firstName}</span> para{" "}
               <span className="font-medium">{recipientName}</span>.
             </p>
-            {selected.score && <p className="mt-1 text-[13px] text-ink-soft">Compatibilidad algorítmica: {selected.score.score} / 100</p>}
+            {selected.score && (
+              <div className="mt-2 rounded-lg border border-hairline bg-paper p-3">
+                <p className="text-[13px] font-medium text-ink">
+                  Compatibilidad algorítmica: {selected.score.score} / 100
+                </p>
+                <p className="mt-0.5 text-[11px] text-ink-soft">
+                  v{selected.score.scoringVersion} · cobertura {Math.round(selected.score.coverage * 100)}% ·
+                  confianza {computeMatchWhy(selected.score).confidenceLabel.toLowerCase()}
+                </p>
+                <ul className="mt-2 space-y-1 text-[12px] text-ink-soft">
+                  {computeMatchWhy(selected.score).lines.map((line) => (
+                    <li key={line.dimension} className="flex justify-between gap-3">
+                      <span>
+                        {line.symbol === "check" && "✓ "}
+                        {line.symbol === "warn" && "△ "}
+                        {line.symbol === "cross" && "✗ "}
+                        {line.symbol === "dash" && "— "}
+                        {line.text}
+                      </span>
+                      <span className="shrink-0 text-ink-soft/80">
+                        peso {line.weight}
+                        {line.fit !== null ? ` · contrib. ${line.contribution.toFixed(1)}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}

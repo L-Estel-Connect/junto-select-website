@@ -13,7 +13,14 @@ export async function GET(request: Request, context: { params: Promise<{ uid: st
 
   const result = await searchManualCandidates(uid, q);
   if (!result.ok) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: 404 });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: result.error,
+        eligibility: result.error === "recipient_not_eligible" ? result.eligibility : undefined,
+      },
+      { status: 404 },
+    );
   }
   return NextResponse.json({ ok: true, candidates: result.candidates });
 }

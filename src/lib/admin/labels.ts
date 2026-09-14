@@ -154,3 +154,55 @@ export const PAIR_HISTORY_REASON_LABELS: Record<string, string> = {
   blocked: "Pareja bloqueada",
   mutual: "Ya existe una introducción mutua",
 };
+
+/**
+ * `EligibilityFailureReason` (eligibility.ts explainIneligibility) — the
+ * top-level reasons a profile is excluded from the matching pool right
+ * now, in the same order `isProfileInEligiblePool` checks them.
+ */
+export const ELIGIBILITY_REASON_LABELS: Record<string, string> = {
+  profile_status_not_active: "Perfil incompleto (ver detalle más abajo)",
+  duplicate_suspected: "Cuenta duplicada — pendiente de revisión",
+  duplicate_confirmed: "Cuenta duplicada confirmada",
+  market_not_madrid: "Fuera del mercado de Madrid",
+  market_availability_missing_or_irregular: "Disponibilidad en Madrid no especificada o irregular",
+};
+
+/**
+ * `AboutMeFieldName` (completion.ts aboutMeMissingFields) — one label per
+ * field the "Sobre ti" completion check can report missing, so an admin
+ * can see EXACTLY which question a member hasn't answered rather than
+ * just "incomplete".
+ */
+export const ABOUT_ME_FIELD_LABELS: Record<string, string> = {
+  firstName: "Nombre",
+  gender: "Género",
+  birthDate: "Fecha de nacimiento",
+  city: "Ciudad",
+  profession: "Profesión",
+  educationLevel: "Formación",
+  incomeRange: "Rango de ingresos",
+  languages: "Idiomas",
+  hasChildren: "¿Tiene hijos?",
+  childrenCount: "Número de hijos",
+  childrenBirthYears: "Edad de los hijos",
+  wantsFutureChildren: "¿Quiere hijos en el futuro?",
+  relationshipIntention: "Tipo de relación buscada",
+  smoking: "Fuma",
+  drinking: "Bebe",
+  activityLevel: "Nivel de actividad física",
+  marketAvailability: "Relación con Madrid",
+};
+
+/** `PreferencesFieldName` (completion.ts preferencesMissingFields) — same purpose as ABOUT_ME_FIELD_LABELS, for "Lo que buscas". */
+export const PREFERENCES_FIELD_LABELS: Record<string, string> = {
+  gendersSought: "Género buscado",
+  ageMin: "Edad mínima",
+  ageMax: "Edad máxima",
+  ageRange: "Rango de edad inválido (mínimo mayor que máximo)",
+  maxDistance: "Distancia máxima",
+  relationshipIntentionsAccepted: "Tipo de relación aceptado",
+  smokingAccepted: "Fumador aceptado",
+  partnerYoungChildrenMatters: "¿Le importan hijos menores de 15 años?",
+  partnerWantsFutureChildren: "¿Debe querer hijos futuros?",
+};

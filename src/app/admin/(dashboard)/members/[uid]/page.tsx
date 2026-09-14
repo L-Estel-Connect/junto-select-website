@@ -2,7 +2,7 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { adminFetchJson } from "@/lib/admin/adminFetch";
+import { adminFetch, adminFetchJson } from "@/lib/admin/adminFetch";
 import { useAdminQuery } from "@/lib/admin/useAdminQuery";
 import { AdminError, AdminLoading } from "@/components/admin/States";
 import Badge from "@/components/admin/Badge";
@@ -19,6 +19,9 @@ import {
   languageList,
   relationshipIntentionLabel,
   youngChildrenMattersLabel,
+  ABOUT_ME_FIELD_LABELS,
+  ELIGIBILITY_REASON_LABELS,
+  PREFERENCES_FIELD_LABELS,
   HARD_FILTER_REASON_LABELS,
   PAIR_HISTORY_REASON_LABELS,
 } from "@/lib/admin/labels";
@@ -58,6 +61,8 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 export default function MemberDetailPage({ params }: { params: Promise<{ uid: string }> }) {
   const { uid } = use(params);
   const [showSuggest, setShowSuggest] = useState(false);
+  const [recomputing, setRecomputing] = useState(false);
+  const [recomputeMessage, setRecomputeMessage] = useState<string | null>(null);
 
   const { data, error, reload } = useAdminQuery(
     () => adminFetchJson<{ member: MemberDetail }>(`/api/admin/dashboard/members/${uid}`),
@@ -65,10 +70,31 @@ export default function MemberDetailPage({ params }: { params: Promise<{ uid: st
   );
   const member = data?.member ?? null;
 
+  async function handleRecompute() {
+    setRecomputing(true);
+    setRecomputeMessage(null);
+    try {
+      const res = await adminFetch(`/api/admin/dashboard/members/${uid}/recompute-status`, { method: "POST" });
+      const body = await res.json();
+      if (!res.ok || !body.ok) throw new Error("No se ha podido recalcular el estado.");
+      setRecomputeMessage(
+        body.changed
+          ? `Estado actualizado: ${body.previousStatus === "active_for_matching" ? "Perfil completo" : "Perfil incompleto"} → ${body.status === "active_for_matching" ? "Perfil completo" : "Perfil incompleto"}.`
+          : "El estado guardado ya coincidía con los datos actuales — no había nada que corregir.",
+      );
+      reload();
+    } catch (err) {
+      setRecomputeMessage(err instanceof Error ? err.message : "No se ha podido recalcular el estado.");
+    } finally {
+      setRecomputing(false);
+    }
+  }
+
   if (error) return <AdminError message={error} />;
   if (!member) return <AdminLoading />;
 
   const { profile, interactions, currentCycle } = member;
+  const { eligibility } = profile;
 
   return (
     <div className="max-w-4xl pb-16">
@@ -135,6 +161,62 @@ export default function MemberDetailPage({ params }: { params: Promise<{ uid: st
           cancelación o reembolso se gestiona en el Stripe Dashboard, nunca desde aquí.
         </p>
       </section>
+
+      {/* Elegibilidad para matching — el motivo exacto, no solo el resultado */}
+      {!eligibility.eligible && (
+        <section className="mt-10">
+          <SectionHeading>Elegibilidad para matching</SectionHeading>
+          <div className="mt-3 rounded-xl border border-[#e3c8c8] bg-[#fbf3f3] p-5">
+            <p className="text-[14px] font-medium text-[#8a3b3b]">No está en la bolsa de emparejamiento ahora mismo.</p>
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-[13px] text-[#8a3b3b]">
+              {eligibility.reasons.map((r) => (
+                <li key={r}>{ELIGIBILITY_REASON_LABELS[r] ?? r}</li>
+              ))}
+            </ul>
+            {eligibility.reasons.includes("profile_status_not_active") && (
+              <div className="mt-3 space-y-1 text-[13px] text-[#8a3b3b]">
+                {!eligibility.profileStatus.sections.aboutMe.complete && (
+                  <p>
+                    Sobre ti — falta:{" "}
+                    {eligibility.profileStatus.sections.aboutMe.missingFields
+                      .map((f) => ABOUT_ME_FIELD_LABELS[f] ?? f)
+                      .join(", ")}
+                  </p>
+                )}
+                {!eligibility.profileStatus.sections.photos.complete && <p>Fotos — falta al menos una foto</p>}
+                {!eligibility.profileStatus.sections.preferences.complete && (
+                  <p>
+                    Lo que busca — falta:{" "}
+                    {eligibility.profileStatus.sections.preferences.missingFields
+                      .map((f) => PREFERENCES_FIELD_LABELS[f] ?? f)
+                      .join(", ")}
+                  </p>
+                )}
+              </div>
+            )}
+            {eligibility.profileStatus.stale && (
+              <div className="mt-3 rounded-lg border border-[#e3c8c8] bg-white p-3">
+                <p className="text-[13px] text-ink">
+                  El estado guardado (
+                  {eligibility.profileStatus.storedStatus === "active_for_matching" ? "Perfil completo" : "Perfil incompleto"}
+                  ) no coincide con lo que los datos actuales del perfil indican ahora (
+                  {eligibility.profileStatus.computedStatus === "active_for_matching" ? "Perfil completo" : "Perfil incompleto"}
+                  ) — probablemente porque los criterios de completitud cambiaron después de la última vez que
+                  este perfil se guardó.
+                </p>
+                <button
+                  onClick={() => void handleRecompute()}
+                  disabled={recomputing}
+                  className="mt-2 rounded-full border border-ink px-3 py-1 text-[12px] font-medium text-ink hover:bg-ink hover:text-white disabled:opacity-60"
+                >
+                  {recomputing ? "Recalculando…" : "Recalcular estado"}
+                </button>
+                {recomputeMessage && <p className="mt-2 text-[12px] text-ink-soft">{recomputeMessage}</p>}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* A. Perfil */}
       <section className="mt-10">

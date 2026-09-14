@@ -6,7 +6,7 @@ import type { ProfileDocument } from "@/lib/introduction/types";
 import { withProfileDefaults } from "@/lib/introduction/types";
 import { resolvePersonId } from "./identity";
 import { loadEligiblePool } from "./engine";
-import { isProfileInEligiblePool } from "./eligibility";
+import { explainIneligibility, isProfileInEligiblePool, type EligibilityDiagnosis } from "./eligibility";
 import {
   evaluateHardFiltersDetailed,
   type HardFilterFailure,
@@ -102,12 +102,27 @@ export async function searchManualCandidates(
   query: string,
 ): Promise<
   | { ok: false; error: "recipient_not_found" }
+  | { ok: false; error: "recipient_not_eligible"; eligibility: EligibilityDiagnosis }
   | { ok: true; recipientPersonId: string; candidates: ManualCandidateResult[] }
 > {
   const recipientSnap = await adminDb.doc(`profiles/${recipientUid}`).get();
   if (!recipientSnap.exists) return { ok: false, error: "recipient_not_found" };
   const recipientProfile = withProfileDefaults(recipientUid, recipientSnap.data() as Partial<ProfileDocument>);
   const recipientPersonId = resolvePersonId(recipientUid, recipientProfile);
+
+  // Checked FIRST, before any candidate is ever searched or scored — see
+  // Admin Dashboard consistency audit: a search that showed a candidate
+  // with a normal-looking score, only for the later "confirm" step to
+  // reject the whole suggestion because the RECIPIENT (never checked here
+  // until now) wasn't eligible, was a real, reproduced inconsistency
+  // (createManualSuggestion below already re-validates this — this just
+  // stops the misleading preview from ever being shown in the first
+  // place). `eligibility` carries the exact field-level reason so the
+  // admin UI can explain it instead of just refusing silently.
+  const eligibility = explainIneligibility(recipientProfile);
+  if (!eligibility.eligible) {
+    return { ok: false, error: "recipient_not_eligible", eligibility };
+  }
 
   const pool = await loadEligiblePool();
   const trimmedQuery = query.trim().toLowerCase();

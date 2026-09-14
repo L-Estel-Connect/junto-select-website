@@ -2,6 +2,7 @@ import "server-only";
 import { adminDb } from "@/lib/firebase/admin";
 import { getAge } from "@/lib/introduction/age";
 import type { DuplicateStatus, Gender, ProfileDocument, ProfileStatus, SearchStatus } from "@/lib/introduction/types";
+import { withProfileDefaults } from "@/lib/introduction/types";
 import { resolvePersonId } from "@/lib/matching/identity";
 import { isProfileInEligiblePool } from "@/lib/matching/eligibility";
 
@@ -21,15 +22,31 @@ export interface ProfileRow {
   profile: ProfileDocument;
 }
 
+/**
+ * Every raw Firestore profile doc is normalized through `withProfileDefaults`
+ * here — the SAME normalization the matching engine (`loadEligiblePool`) and
+ * the client onboarding read path apply, so a legacy document (an old field
+ * name, a missing newer sub-object) can never look different — or, for the
+ * young-children dealbreaker specifically, look unanswered when it isn't —
+ * depending on which part of the app happens to be reading it. Consistency
+ * audit finding: this previously cast the raw doc directly, so the admin
+ * dashboard's OWN `dealbreakers`/`preferences` display (and nothing else,
+ * since `isProfileInEligiblePool`'s checks all happen to be null/undefined-
+ * safe by loose equality) could silently disagree with what a member
+ * actually sees and answered.
+ */
 export async function listAllProfiles(): Promise<ProfileRow[]> {
   const snap = await adminDb.collection("profiles").limit(5000).get();
-  return snap.docs.map((doc) => ({ uid: doc.id, profile: doc.data() as ProfileDocument }));
+  return snap.docs.map((doc) => ({
+    uid: doc.id,
+    profile: withProfileDefaults(doc.id, doc.data() as Partial<ProfileDocument>),
+  }));
 }
 
 export async function getProfileRow(uid: string): Promise<ProfileRow | null> {
   const snap = await adminDb.doc(`profiles/${uid}`).get();
   if (!snap.exists) return null;
-  return { uid, profile: snap.data() as ProfileDocument };
+  return { uid, profile: withProfileDefaults(uid, snap.data() as Partial<ProfileDocument>) };
 }
 
 export function ageOf(profile: ProfileDocument): number | null {
