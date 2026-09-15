@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { memberFetch } from "@/lib/member/memberFetch";
 import { memberDecisionErrorLabel } from "@/lib/member/errorLabels";
 import { eyebrowClasses, primaryButtonClasses } from "@/lib/styles";
@@ -50,34 +51,51 @@ export default function InvitationCard({
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "request_failed");
-      // Shown for a beat before the card disappears from the list on
-      // reload — without this, a member had no confirmation their
-      // response was even saved (see UX audit "invitation response
-      // confirmation"). onDecided() re-fetches the lists, which is what
-      // actually removes this card once its stage moves off "invited".
       setSending(null);
       setDecided(decision);
-      setTimeout(onDecided, 1800);
+      // "Pasar" has nothing further to act on, so it still auto-reloads
+      // the lists after a beat — without that, a member had no
+      // confirmation their response was even saved (see UX audit
+      // "invitation response confirmation"). "Interested" now shows a
+      // real "Ver conexión" CTA (mutual is guaranteed here — see the
+      // comment above) and must stay on screen for the member to use it,
+      // not get yanked out from under them by a background list reload.
+      if (decision === "passed") setTimeout(onDecided, 1800);
     } catch (err) {
       setError(memberDecisionErrorLabel(err instanceof Error ? err.message : "request_failed"));
       setSending(null);
     }
   }
 
-  if (decided) {
+  if (decided === "interested") {
+    // This card only ever exists because the inviter ALREADY said
+    // Interested (that's what creates the invitation in the first place —
+    // see recordMemberDecision) — so the candidate saying Interested here
+    // always means both sides just said yes, i.e. always a mutual
+    // introduction the instant this succeeds (decideInvitationForMember
+    // returns ok:false/no_longer_compatible on the one case where a fresh
+    // hard-filter recheck blocks it, so a successful "ok" here is never
+    // just "waiting to see"). Telling the candidate "we'll let you know if
+    // it's mutual" here would be false — it already is.
+    return (
+      <div className="rounded-2xl border border-hairline bg-white p-6">
+        <p className={eyebrowClasses}>¡Es mutuo!</p>
+        <p className="mt-3 text-[16px] text-ink">
+          Los dos habéis mostrado interés. Ya podéis poneros en contacto. Encontrarás sus datos en
+          Conexiones.
+        </p>
+        <Link href="/member/connections" className={`${primaryButtonClasses} mt-5 inline-flex`}>
+          Ver conexión
+        </Link>
+      </div>
+    );
+  }
+
+  if (decided === "passed") {
     return (
       <div className="rounded-2xl border border-hairline bg-white p-6">
         <p className={eyebrowClasses}>Respuesta registrada</p>
-        <p className="mt-3 text-[16px] text-ink">
-          {decided === "interested"
-            ? "Gracias. Hemos registrado tu interés."
-            : "Gracias. Hemos registrado tu respuesta."}
-        </p>
-        {decided === "interested" && (
-          <p className="mt-1 text-[14px] text-ink-soft">
-            Si el interés es mutuo, os pondremos en contacto.
-          </p>
-        )}
+        <p className="mt-3 text-[16px] text-ink">Gracias. Hemos registrado tu respuesta.</p>
       </div>
     );
   }
