@@ -43,6 +43,11 @@ const STAGE_LABELS: Record<string, string> = {
   member_passed: "Pasó el miembro",
   mutual_interested: "Mutuo",
   expired: "Expiró",
+  // A reciprocal hard-filter re-check at decision time refused an
+  // "interesado" that was no longer actually compatible (see
+  // ProposalStage's doc comment in matching/types.ts) — without this
+  // entry the raw enum string rendered untranslated in the badge.
+  no_longer_compatible: "Ya no compatible",
 };
 
 export default function ProposalsListPage() {

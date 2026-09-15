@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Section from "@/components/Section";
@@ -14,6 +14,20 @@ export default function IntroductionLandingPage() {
   const { user, loading, needsEmailForLink, linkError, confirmEmailForLink } =
     useAuth();
   const router = useRouter();
+
+  // Set only when RequireIntroductionAuth/MemberShell redirected here
+  // because a previously signed-in session lapsed mid-browse (see those
+  // files' `?session=expired` query param) — without this, an expired
+  // session bounced someone straight to this landing page with no
+  // explanation, which read as "did the site just break?" rather than an
+  // expected, normal expiry. Read the same hydration-safe way as
+  // PlanSection.tsx's `checkoutParam` (window.location isn't available
+  // during server rendering).
+  const [sessionExpired, setSessionExpired] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSessionExpired(new URLSearchParams(window.location.search).get("session") === "expired");
+  }, []);
 
   useEffect(() => {
     if (!loading && user) {
@@ -49,6 +63,12 @@ export default function IntroductionLandingPage() {
         Junto Select Introduction es un servicio privado de presentaciones
         seleccionadas. Crea tu perfil en unos minutos.
       </p>
+
+      {sessionExpired && (
+        <p className="max-w-[38ch] text-[13px] text-ink-soft">
+          Tu sesión ha caducado. Vuelve a iniciar sesión.
+        </p>
+      )}
 
       <div className="w-full max-w-[360px]">
         {needsEmailForLink ? (

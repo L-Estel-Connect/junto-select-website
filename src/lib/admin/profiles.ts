@@ -4,7 +4,7 @@ import { getAge } from "@/lib/introduction/age";
 import type { DuplicateStatus, Gender, ProfileDocument, ProfileStatus, SearchStatus } from "@/lib/introduction/types";
 import { withProfileDefaults } from "@/lib/introduction/types";
 import { resolvePersonId } from "@/lib/matching/identity";
-import { isProfileInEligiblePool } from "@/lib/matching/eligibility";
+import { explainIneligibility, isProfileInEligiblePool, type EligibilityFailureReason } from "@/lib/matching/eligibility";
 
 /**
  * V1-scale data access: a single bounded `.get()` on `profiles`, filtered
@@ -89,6 +89,14 @@ export interface MemberSummary {
   searchStatus: SearchStatus;
   /** Would actually be drawn into the matching pool right now (active_for_matching + Madrid + not duplicate-excluded). */
   eligibleForMatching: boolean;
+  /**
+   * The first reason (in `explainIneligibility`'s fixed check order) this
+   * profile is excluded right now — null when eligible. Lets the members
+   * LIST page show a concrete "why" without opening the detail page's
+   * full diagnosis, per the UX audit finding that the list only showed a
+   * binary Elegible/No elegible badge.
+   */
+  ineligibleReason: EligibilityFailureReason | null;
   duplicateStatus: DuplicateStatus;
   suspectedDuplicate: boolean;
   createdAt: string | null;
@@ -100,6 +108,8 @@ export function toMemberSummary(
   suspectedDuplicateUids: Set<string>,
 ): MemberSummary {
   const createdAt = profile.meta.createdAt as { toDate?: () => Date } | undefined;
+  const eligibleForMatching =
+    profile.meta.profileStatus === "active_for_matching" && isProfileInEligiblePool(profile);
   return {
     uid,
     personId: resolvePersonId(uid, profile),
@@ -110,8 +120,8 @@ export function toMemberSummary(
     photoPath: profile.photos[0] ?? null,
     profileStatus: profile.meta.profileStatus,
     searchStatus: profile.meta.searchStatus,
-    eligibleForMatching:
-      profile.meta.profileStatus === "active_for_matching" && isProfileInEligiblePool(profile),
+    eligibleForMatching,
+    ineligibleReason: eligibleForMatching ? null : (explainIneligibility(profile).reasons[0] ?? null),
     duplicateStatus: profile.meta.duplicateStatus,
     suspectedDuplicate: suspectedDuplicateUids.has(uid),
     createdAt: createdAt?.toDate ? createdAt.toDate().toISOString() : null,

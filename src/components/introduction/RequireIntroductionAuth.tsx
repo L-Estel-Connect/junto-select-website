@@ -78,8 +78,13 @@ export default function RequireIntroductionAuth({
   }, [loading]);
 
   useEffect(() => {
+    // The `?session=expired` param is read by the landing page to show a
+    // one-line explanation instead of silently bouncing someone back with
+    // no context (see introduction/page.tsx) — this guard only redirects
+    // here from a page that already required a signed-in user, so this is
+    // never a fresh, never-signed-in visit.
     if (!loading && !user) {
-      router.replace("/introduction");
+      router.replace("/introduction?session=expired");
     }
   }, [loading, user, router]);
 

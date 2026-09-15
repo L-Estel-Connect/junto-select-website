@@ -51,6 +51,7 @@ export default function ReviewPage() {
   const [personA, setPersonA] = useState<{ uid: string; firstName: string; city: string; photoPath: string | null } | null>(null);
   const [personB, setPersonB] = useState<{ uid: string; firstName: string; city: string; photoPath: string | null } | null>(null);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [unblockTarget, setUnblockTarget] = useState<BlockedRow | null>(null);
 
   function load() {
     adminFetchJson<{ duplicates: DuplicateRow[]; blocked: BlockedRow[] }>("/api/admin/dashboard/review")
@@ -85,6 +86,18 @@ export default function ReviewPage() {
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || "No se ha podido fusionar.");
     setMergeTarget(null);
+    load();
+  }
+
+  async function handleUnblockPair() {
+    if (!unblockTarget) return;
+    const res = await adminFetch("/api/admin/dashboard/review/unblock-pair", {
+      method: "POST",
+      body: JSON.stringify({ personIdLow: unblockTarget.personIdLow, personIdHigh: unblockTarget.personIdHigh }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || "No se ha podido desbloquear la pareja.");
+    setUnblockTarget(null);
     load();
   }
 
@@ -179,10 +192,18 @@ export default function ReviewPage() {
           <div className="mt-3 space-y-2">
             {blocked.map((b) => (
               <div key={`${b.personIdLow}_${b.personIdHigh}`} className="rounded-xl border border-hairline bg-white p-4">
-                <div className="flex items-center gap-4">
-                  <PersonMini person={b.personLow} />
-                  <span className="text-ink-soft">⛔</span>
-                  <PersonMini person={b.personHigh} />
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <PersonMini person={b.personLow} />
+                    <span className="text-ink-soft">⛔</span>
+                    <PersonMini person={b.personHigh} />
+                  </div>
+                  <button
+                    onClick={() => setUnblockTarget(b)}
+                    className="rounded-full border border-hairline px-4 py-1.5 text-[12px] font-medium text-ink-soft hover:text-ink"
+                  >
+                    Desbloquear
+                  </button>
                 </div>
                 {b.reason && <p className="mt-2 text-[13px] text-ink-soft">Motivo: {b.reason}</p>}
               </div>
@@ -229,6 +250,17 @@ export default function ReviewPage() {
           requireReason
           onConfirm={handleBlockPair}
           onClose={() => setShowBlockConfirm(false)}
+        />
+      )}
+
+      {unblockTarget && (
+        <ConfirmDialog
+          title="Desbloquear pareja"
+          description={`${unblockTarget.personLow.firstName} y ${unblockTarget.personHigh.firstName} volverán a poder ser propuestos entre sí, como si nunca hubieran sido bloqueados. Esto no afecta a ninguna otra pareja ni a propuestas o introducciones ya existentes.`}
+          confirmLabel="Desbloquear"
+          tone="danger"
+          onConfirm={handleUnblockPair}
+          onClose={() => setUnblockTarget(null)}
         />
       )}
     </div>

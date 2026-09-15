@@ -505,6 +505,32 @@ export async function recordInvitationViewed(invitationId: string): Promise<void
 }
 
 /**
+ * Reverses an accidental `blockPair()` — e.g. the wrong two names picked
+ * in the admin PersonPicker. `blockPair()` destructively overwrites
+ * whatever `state`/`passType`/`cooldownUntil` the pair had before being
+ * blocked (there is no separate "reason for exclusion" history kept
+ * alongside it), so there is no prior state to restore — the only safe,
+ * well-defined recovery is to delete this pair's `pairHistory` document
+ * entirely, making the pair immediately eligible again exactly as if
+ * they had never interacted (`classifyPairHistoryState(null)` — see
+ * above). This never touches any OTHER pair's history, and never touches
+ * `proposals`/`invitations`/`introductions` at all — those are separate
+ * documents this function never reads or writes. Refuses to act unless
+ * the pair is CURRENTLY `blocked`, so this can never be accidentally
+ * pointed at a pair mid-flow (`pending`/`invited`) or already `mutual`
+ * and silently erase that instead.
+ */
+export async function unblockPair(personIdA: string, personIdB: string): Promise<{ ok: boolean; error?: string }> {
+  const ref = pairHistoryRef(personIdA, personIdB);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: false, error: "pair_not_found" };
+  const history = snap.data() as PairHistoryDocument;
+  if (history.state !== "blocked") return { ok: false, error: "pair_not_blocked" };
+  await ref.delete();
+  return { ok: true };
+}
+
+/**
  * Permanent safety / do-not-match exclusion — a human/admin action, never
  * written by the matching engine itself. Overrides any other state.
  */

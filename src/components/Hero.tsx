@@ -31,7 +31,7 @@ export default function Hero() {
         <div className="max-w-[48ch] space-y-3 text-[15px] leading-relaxed text-ink-soft">
           <p>
             Junto Select crea encuentros cuidadosamente seleccionados para
-            solteros y solteras 40+ en Madrid.
+            solteros y solteras 35+ en Madrid.
           </p>
           <p>
             Sin deslizar perfiles. Sin eventos masivos. Sin conversaciones

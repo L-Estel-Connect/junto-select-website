@@ -28,6 +28,7 @@ export default function InvitationCard({
 }) {
   const [sending, setSending] = useState<"interested" | "passed" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [decided, setDecided] = useState<"interested" | "passed" | null>(null);
 
   if (!invitation.inviter) {
     return (
@@ -49,11 +50,36 @@ export default function InvitationCard({
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "request_failed");
-      onDecided();
+      // Shown for a beat before the card disappears from the list on
+      // reload — without this, a member had no confirmation their
+      // response was even saved (see UX audit "invitation response
+      // confirmation"). onDecided() re-fetches the lists, which is what
+      // actually removes this card once its stage moves off "invited".
+      setSending(null);
+      setDecided(decision);
+      setTimeout(onDecided, 1800);
     } catch (err) {
       setError(memberDecisionErrorLabel(err instanceof Error ? err.message : "request_failed"));
       setSending(null);
     }
+  }
+
+  if (decided) {
+    return (
+      <div className="rounded-2xl border border-hairline bg-white p-6">
+        <p className={eyebrowClasses}>Respuesta registrada</p>
+        <p className="mt-3 text-[16px] text-ink">
+          {decided === "interested"
+            ? "Gracias. Hemos registrado tu interés."
+            : "Gracias. Hemos registrado tu respuesta."}
+        </p>
+        {decided === "interested" && (
+          <p className="mt-1 text-[14px] text-ink-soft">
+            Si el interés es mutuo, os pondremos en contacto.
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (

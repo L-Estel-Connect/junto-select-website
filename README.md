@@ -129,13 +129,19 @@ The form posts to `POST /api/invitation`, which calls the Brevo Contacts
 API server-side (`src/lib/brevo.ts`) — the API key never reaches the
 browser.
 
-1. Set `BREVO_API_KEY` as a Secret Manager secret (`apphosting.yaml`
-   already declares the variable, pointing at the secret — see "Manual
-   setup" below for the exact commands). **The secret itself still needs
-   creating — not yet done.** Until it exists, every submission is still
-   durably captured in Firestore (`invitationRequests/{id}`, below) and
-   the user-facing request still succeeds; only the Brevo sync itself is
-   unavailable, recorded as `brevoSyncStatus: "failed"` on the document.
+1. `BREVO_API_KEY` must exist as a real Secret Manager secret value,
+   granted to this backend (`apphosting.yaml` already declares the
+   variable, pointing at the secret — see "Manual setup" below for the
+   exact commands). **This file's declaration only proves the app is
+   wired to read a secret by that name — it does not prove Secret
+   Manager holds a value for it, or that access was granted.** Verify
+   directly against the live project (`firebase apphosting:secrets:access
+   BREVO_API_KEY --project select-dev-508407`, or the Secret Manager /
+   App Hosting Console) before assuming either way. If the value or grant
+   is genuinely missing, every submission is still durably captured in
+   Firestore (`invitationRequests/{id}`, below) and the user-facing
+   request still succeeds; only the Brevo sync itself is unavailable,
+   recorded as `brevoSyncStatus: "failed"` on the document.
 2. `BREVO_LIST_ID` is set to `12` in `apphosting.yaml` — the account
    owner's confirmed EXISTING Brevo list. Never point this at a new or
    different list without the account owner explicitly saying so.
@@ -249,24 +255,43 @@ crash-recoverable per queued document (claim-then-send, with a 10-minute
 stale-claim reclaim — the same pattern the matching engine's memberRun
 claims use), so calling it as often as you like is safe.
 
-**Still required, outside this codebase, before any of this actually
-sends anything**: a verified Brevo sender identity. Set:
+**Required, outside this codebase, before any of this actually sends
+anything**: a verified Brevo sender identity and (separately) the
+`BREVO_API_KEY` secret itself actually holding a value in Secret Manager.
+
+The sender identity (`BREVO_SENDER_NAME` = `"Junto Select"`,
+`BREVO_SENDER_EMAIL` = `"contact@juntoselect.com"`) is configured directly
+in `apphosting.yaml` as plain values (not secrets — a sender name/address
+isn't sensitive) — no manual step is needed for these two on a fresh
+deploy of this file. `contact@juntoselect.com` on the `juntoselect.com`
+sending domain has already been verified/authenticated on the Brevo side
+(Brevo dashboard → Senders & IP); if that domain or address is ever
+changed, it must be re-verified on Brevo's side first, since an
+unverified sender fails every send regardless of app config.
+
+`BREVO_API_KEY` is a separate concern: `apphosting.yaml` only declares
+that the app reads a secret by that name — it does NOT prove Secret
+Manager actually holds a value for it on the live backend, or that the
+backend's service account has been granted access. That must be verified
+directly against the real GCP project (e.g. `firebase apphosting:secrets:access
+BREVO_API_KEY --project select-dev-508407`, or checking Secret Manager /
+the App Hosting backend's granted secrets in the Console) — CODE
+CONFIGURED (the app is wired to read it) is not the same thing as LIVE
+INFRASTRUCTURE VERIFIED (the value and access grant actually exist). If
+it turns out the value was never set, create and grant it with:
 
 ```bash
-firebase apphosting:secrets:set BREVO_SENDER_EMAIL --project select-dev-508407
-firebase apphosting:secrets:set BREVO_SENDER_NAME --project select-dev-508407
-firebase apphosting:secrets:grantaccess BREVO_SENDER_EMAIL --project select-dev-508407 --backend <backend-id>
-firebase apphosting:secrets:grantaccess BREVO_SENDER_NAME --project select-dev-508407 --backend <backend-id>
+firebase apphosting:secrets:set BREVO_API_KEY --project select-dev-508407
+firebase apphosting:secrets:grantaccess BREVO_API_KEY --project select-dev-508407 --backend <backend-id>
 ```
 
-`BREVO_SENDER_EMAIL` must be an address Brevo has actually verified for
-transactional sending on this account (Brevo dashboard → Senders &
-IP) — an unverified address fails every send. Until both are set,
-`send-outbound-emails` returns `503 email_sender_not_configured` and
-touches no queue document at all (never a partial/misleading "N emails
-failed"). Also deploy the new `outboundEmails` composite index
-(`firebase deploy --only firestore:indexes`) before enabling the
-schedule below:
+Until the sender identity resolves AND `BREVO_API_KEY` holds a real key,
+`send-outbound-emails` returns `503 email_sender_not_configured` (missing
+sender identity) or fails each send with a Brevo auth error (missing/bad
+API key), and touches no queue document destructively either way (never a
+partial/misleading "N emails failed"). Also deploy the new
+`outboundEmails` composite index (`firebase deploy --only
+firestore:indexes`) before enabling the schedule below:
 
 ```bash
 gcloud scheduler jobs create http junto-select-send-outbound-emails \

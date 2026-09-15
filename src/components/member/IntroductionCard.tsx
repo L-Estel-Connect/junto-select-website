@@ -41,7 +41,11 @@ export default function IntroductionCard({ introduction }: { introduction: Membe
       </div>
 
       <div className="mt-6 border-t border-hairline pt-6">
-        <p className="text-[15px] text-ink">Ya podéis poneros en contacto.</p>
+        <p className="text-[15px] text-ink">
+          Ya podéis poneros en contacto directamente. Junto Select no tiene chat interno, así que estos
+          son el modo de continuar — úsalos únicamente para esta introducción y con respeto a la
+          privacidad de {name}.
+        </p>
         {introduction.contacts.length > 0 ? (
           <ul className="mt-3 space-y-2">
             {introduction.contacts.map((contact) => (

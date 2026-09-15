@@ -10,7 +10,7 @@ const organizationJsonLd = {
   name: "Junto Select",
   url: "https://juntoselect.com",
   description:
-    "Junto Select organiza encuentros privados y cuidadosamente seleccionados para solteros y solteras 40+ en Madrid.",
+    "Junto Select organiza encuentros privados y cuidadosamente seleccionados para solteros y solteras 35+ en Madrid.",
   address: {
     "@type": "PostalAddress",
     addressLocality: "Madrid",

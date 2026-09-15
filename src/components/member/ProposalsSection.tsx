@@ -17,13 +17,13 @@ const ACTIONABLE_INVITATION_STAGES: MemberInvitationView["stage"][] = ["invited"
 const ACTIONABLE_PROPOSAL_STAGES: MemberProposalView["stage"][] = ["proposed", "viewed"];
 
 /**
- * The real "Mis propuestas" experience: whatever currently needs this
+ * The real "Mis selecciones" experience: whatever currently needs this
  * member's attention (someone interested in them, or a curated selection
  * for them), shown FIRST regardless of membership status — see the
  * product principle "Do not make membership/payment the dominant element
  * when there is a human action waiting." Only once nothing is actionable
  * does this fall back to the original billing-status-driven "estamos
- * buscando por ti" / "activa tu búsqueda" messaging.
+ * buscando por ti" / "hazte miembro" messaging.
  */
 export default function ProposalsSection({ uid }: { uid: string }) {
   const { profile, ready, error, refresh } = useMemberProfile(uid);
@@ -55,7 +55,7 @@ export default function ProposalsSection({ uid }: { uid: string }) {
   if (invitationsQuery.error || proposalsQuery.error) {
     return (
       <IntroductionError
-        message={invitationsQuery.error ?? proposalsQuery.error ?? "No hemos podido cargar tus propuestas."}
+        message={invitationsQuery.error ?? proposalsQuery.error ?? "No hemos podido cargar tus selecciones."}
         onRetry={() => {
           invitationsQuery.reload();
           proposalsQuery.reload();
@@ -84,7 +84,7 @@ export default function ProposalsSection({ uid }: { uid: string }) {
   return (
     <div className="mx-auto flex w-full max-w-[560px] flex-col px-6 py-14 sm:px-0">
       <h1 className="font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">
-        Mis propuestas
+        Mis selecciones
       </h1>
 
       {hasSomethingToShow ? (
@@ -114,9 +114,9 @@ export default function ProposalsSection({ uid }: { uid: string }) {
         <div className="mt-14 flex min-h-[30svh] flex-col items-center justify-center text-center">
           <p className="text-[16px] text-ink">Estamos buscando por ti</p>
           <p className="mt-2 max-w-[42ch] text-[15px] leading-relaxed text-ink-soft">
-            Tu búsqueda está activa. Solo te enviaremos perfiles cuando encontremos una compatibilidad
-            que cumpla nuestros criterios. Preferimos enviarte menos propuestas antes que bajar el nivel
-            de selección.
+            Junto Select está buscando por ti. Solo te enviaremos una selección cuando encontremos una
+            compatibilidad que cumpla nuestros criterios. Preferimos enviarte menos selecciones antes
+            que bajar el nivel de exigencia.
           </p>
         </div>
       ) : (
@@ -131,11 +131,11 @@ export default function ProposalsSection({ uid }: { uid: string }) {
           <div className="mt-10 rounded-2xl border border-hairline bg-white p-6 text-center">
             <p className="text-[15px] font-medium text-ink">¿Quieres que Junto Select busque por ti?</p>
             <p className="mt-2 text-[14px] leading-relaxed text-ink-soft">
-              Activa tu búsqueda para recibir hasta 3 perfiles cuidadosamente seleccionados al mes,
-              siempre que encontremos perfiles con suficiente compatibilidad.
+              Hazte miembro para recibir hasta 3 selecciones cuidadosas al mes, siempre que encontremos
+              perfiles con suficiente compatibilidad.
             </p>
             <Link href="/member/plan" className={`${primaryButtonClasses} mt-5 inline-flex`}>
-              Activar mi búsqueda
+              Hazte miembro
             </Link>
             <p className="mt-4 text-[12px] text-ink-soft">
               Además, como miembro tendrás ventajas y descuentos en nuestros eventos.

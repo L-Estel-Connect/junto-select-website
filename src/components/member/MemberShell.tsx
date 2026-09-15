@@ -35,8 +35,11 @@ export default function MemberShell({ children }: { children: ReactNode }) {
   }, [loading]);
 
   useEffect(() => {
+    // See RequireIntroductionAuth.tsx — same `?session=expired` signal so
+    // the landing page can explain why someone was sent back here instead
+    // of silently bouncing them with no context.
     if (!loading && !user) {
-      router.replace("/introduction");
+      router.replace("/introduction?session=expired");
     }
   }, [loading, user, router]);
 

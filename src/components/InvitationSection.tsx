@@ -7,7 +7,7 @@ function MembershipOffer() {
   return (
     <div className="mt-8 max-w-[46ch] border-t border-hairline pt-6">
       <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-ink-soft">
-        Membresía Junto Select
+        Introducciones privadas · Membresía Junto Select
       </p>
       <h3 className="mt-2 font-serif text-[19px] font-normal leading-snug text-ink sm:text-[20px]">
         ¿Prefieres que busquemos por ti?
@@ -46,8 +46,12 @@ function MembershipOffer() {
 export default function InvitationSection() {
   return (
     <Section id="invitacion" size="lg" className="py-16 sm:py-20">
-      <p className={`${eyebrowClasses} mb-8`}>
+      <p className={`${eyebrowClasses} mb-3`}>
         Request an invitation · Recibir invitaciones
+      </p>
+      <p className="mb-8 max-w-[52ch] text-[14px] leading-relaxed text-ink-soft">
+        Dos formas de conocer gente en Junto Select: nuestras veladas, o una
+        introducción privada a medida a través de la membresía.
       </p>
 
       <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[5fr_6fr] lg:gap-16">

@@ -104,7 +104,7 @@ export default function ContactSection({ uid }: { uid: string }) {
       </h1>
       <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
         Solo compartiremos estos datos cuando haya interés mutuo. Nunca
-        aparecen en tu perfil ni en tus propuestas.
+        aparecen en tu perfil ni en tus selecciones.
       </p>
 
       <div className="mt-8">

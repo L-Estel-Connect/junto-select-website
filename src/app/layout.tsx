@@ -23,7 +23,7 @@ const fraunces = Fraunces({
 const siteUrl = getAppBaseUrl();
 const title = "Junto Select — Encuentros privados para solteros en Madrid";
 const description =
-  "Junto Select organiza encuentros privados y cuidadosamente seleccionados para solteros y solteras 40+ en Madrid. Sin apps, sin eventos masivos: una lista de invitados seleccionada y espacios con encanto.";
+  "Junto Select organiza encuentros privados y cuidadosamente seleccionados para solteros y solteras 35+ en Madrid. Sin apps, sin eventos masivos: una lista de invitados seleccionada y espacios con encanto.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
     "singles events Madrid",
     "dating events Madrid",
     "curated dating Madrid",
-    "solteros 40+ Madrid",
+    "solteros 35+ Madrid",
   ],
   authors: [{ name: "Junto Select" }],
   alternates: {

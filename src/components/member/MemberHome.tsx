@@ -83,10 +83,10 @@ export default function MemberHome({ uid }: { uid: string }) {
         <div className="mt-8 rounded-2xl border border-rose bg-white p-6">
           <p className="text-[15px] font-medium text-ink">
             {summary!.invitationsWaitingForDecision > 0 && summary!.proposalsWaitingForDecision > 0
-              ? "Tienes una propuesta y alguien esperando tu respuesta."
+              ? "Tienes una selección y alguien esperando tu respuesta."
               : summary!.invitationsWaitingForDecision > 0
                 ? "Alguien está esperando tu respuesta."
-                : "Tienes una propuesta esperando tu respuesta."}
+                : "Tienes una selección esperando tu respuesta."}
           </p>
           <Link href="/member/proposals" className={`${primaryButtonClasses} mt-4 inline-flex`}>
             Ver ahora
@@ -105,7 +105,7 @@ export default function MemberHome({ uid }: { uid: string }) {
 
       <div className="mt-10 border-t border-hairline">
         <StatusRow label="Perfil" value="Completo" />
-        <StatusRow label="Búsqueda" value={searchLabel} />
+        <StatusRow label="Búsqueda de Junto Select" value={searchLabel} />
       </div>
 
       <div className="mt-8 flex flex-wrap items-center gap-6">
@@ -120,13 +120,13 @@ export default function MemberHome({ uid }: { uid: string }) {
       {!hasPending && (
         <div className="mt-14 border-t border-hairline pt-8">
           <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">
-            Tus propuestas
+            Tus selecciones
           </p>
           <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-            Cuando tengamos una propuesta para ti, o alguien se interese en conocerte, aparecerá aquí.
+            Cuando tengamos una selección para ti, o alguien se interese en conocerte, aparecerá aquí.
           </p>
           <Link href="/member/proposals" className={`mt-3 inline-block text-sm ${linkClasses}`}>
-            Ver mis propuestas
+            Ver mis selecciones
           </Link>
         </div>
       )}

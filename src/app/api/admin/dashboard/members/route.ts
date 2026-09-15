@@ -10,6 +10,7 @@ export type MemberFilter =
   | "active_search"
   | "passive"
   | "eligible"
+  | "ineligible"
   | "incomplete"
   | "sel0"
   | "sel1"
@@ -68,6 +69,9 @@ export async function GET(request: Request) {
       break;
     case "eligible":
       summaries = summaries.filter((m) => m.eligibleForMatching);
+      break;
+    case "ineligible":
+      summaries = summaries.filter((m) => !m.eligibleForMatching);
       break;
     case "incomplete":
       summaries = summaries.filter((m) => m.profileStatus !== "active_for_matching");

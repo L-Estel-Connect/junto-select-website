@@ -10,11 +10,16 @@ import { useMemberQuery } from "@/lib/member/useMemberQuery";
 import { useMemberUid } from "./MemberContext";
 import type { MemberLifecycleSummary } from "@/lib/matching/memberLifecycleTypes";
 
+// "Ver mi perfil" and "Editar mi perfil" used to be two separate nav rows
+// pointing at the same /member/profile route (the second just deep-linking
+// to its lower #editar-perfil section) — collapsed into one entry here so
+// the primary nav never shows two rows that open the same screen. The
+// #editar-perfil anchor itself is unchanged and still used by direct
+// in-page links elsewhere (MemberHome, ContactSection, SettingsSection).
 const NAV_ITEMS = [
   { href: "/member", label: "Inicio" },
-  { href: "/member/profile", label: "Ver mi perfil" },
-  { href: "/member/profile#editar-perfil", label: "Editar mi perfil" },
-  { href: "/member/proposals", label: "Mis propuestas" },
+  { href: "/member/profile", label: "Mi perfil" },
+  { href: "/member/proposals", label: "Mis selecciones" },
   { href: "/member/connections", label: "Conexiones" },
   { href: "/member/plan", label: "Mi plan" },
   { href: "/member/settings", label: "Ajustes" },
@@ -102,6 +107,21 @@ export default function MemberNav() {
           >
             Cerrar sesión
           </button>
+          {/* Same legal links the mobile drawer shows below — kept small
+              and muted so they don't compete with the primary nav items,
+              but reachable in one click on desktop too, not just via
+              Ajustes. */}
+          <span className="flex items-center gap-3 border-l border-hairline pl-5">
+            {SECONDARY_ITEMS.map((item) => (
+              <Link
+                key={item.label}
+                href={item.href}
+                className="whitespace-nowrap text-[11px] text-ink-soft hover:text-ink"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </span>
         </nav>
 
         <button

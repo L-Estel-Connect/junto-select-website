@@ -8,7 +8,7 @@ import { useAdminQuery } from "@/lib/admin/useAdminQuery";
 import { AdminEmpty, AdminError, AdminLoading } from "@/components/admin/States";
 import Badge from "@/components/admin/Badge";
 import PhotoThumb from "@/components/admin/PhotoThumb";
-import { genderLabel } from "@/lib/admin/labels";
+import { genderLabel, ELIGIBILITY_REASON_LABELS } from "@/lib/admin/labels";
 import type { MemberFilter } from "@/app/api/admin/dashboard/members/route";
 
 interface MemberSummary {
@@ -22,6 +22,7 @@ interface MemberSummary {
   profileStatus: string;
   searchStatus: string;
   eligibleForMatching: boolean;
+  ineligibleReason: string | null;
   duplicateStatus: string;
   suspectedDuplicate: boolean;
   createdAt: string | null;
@@ -32,6 +33,7 @@ const FILTERS: { value: MemberFilter; label: string }[] = [
   { value: "active_search", label: "Búsqueda activa" },
   { value: "passive", label: "Pasivos" },
   { value: "eligible", label: "Elegibles" },
+  { value: "ineligible", label: "No elegibles" },
   { value: "incomplete", label: "Incompletos" },
   { value: "sel0", label: "0 selecciones" },
   { value: "sel1", label: "1 selección" },
@@ -141,6 +143,11 @@ export default function MembersListPage() {
                       <Badge tone={m.eligibleForMatching ? "positive" : "muted"}>
                         {m.eligibleForMatching ? "Elegible" : "No elegible"}
                       </Badge>
+                      {!m.eligibleForMatching && m.ineligibleReason && (
+                        <p className="mt-1 max-w-[220px] text-[12px] leading-snug text-ink-soft">
+                          {ELIGIBILITY_REASON_LABELS[m.ineligibleReason] ?? m.ineligibleReason}
+                        </p>
+                      )}
                     </td>
                   </tr>
                 ))}

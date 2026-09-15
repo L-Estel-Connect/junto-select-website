@@ -87,7 +87,7 @@ function DeleteProfileModal({
           eliminar tu perfil:
         </p>
         <ul className="mt-3 space-y-1.5 text-[13px] leading-relaxed text-ink-soft">
-          <li>— Dejarás de aparecer como candidato/a en futuras propuestas.</li>
+          <li>— Dejarás de aparecer como candidato/a en futuras selecciones.</li>
           <li>— Tus fotografías se eliminarán de forma permanente.</li>
           <li>
             — Si tienes una membresía de pago activa, se cancelará de inmediato: no se te volverá a

@@ -130,14 +130,40 @@ env:
       - RUNTIME
 
   # Server-only Brevo API key. RUNTIME only, Secret Manager — same
-  # treatment as STRIPE_SECRET_KEY below. STILL NEEDS TO BE SET: run
+  # treatment as STRIPE_SECRET_KEY below. Shared by both the public
+  # invitation-form contact sync above and the transactional sender below
+  # (same key, two different Brevo API endpoints — see
+  # brevoTransactional.ts). If this secret's value/access-grant was never
+  # created in Secret Manager for this backend, the commands are:
   #   firebase apphosting:secrets:set BREVO_API_KEY --project select-dev-508407
   #   firebase apphosting:secrets:grantaccess BREVO_API_KEY --project select-dev-508407 --backend <backend-id>
-  # Until then, /api/invitation still captures every submission in
-  # Firestore (invitationRequests/{id}) — only the Brevo sync itself is
-  # unavailable, and that failure never blocks the user-facing request.
+  # This must be verified directly against the live Secret Manager/App
+  # Hosting backend, not assumed from this file alone — the declaration
+  # below only means the app is wired to read a secret named
+  # BREVO_API_KEY, not that a value has been set for it. Until it
+  # resolves to a real key, /api/invitation still captures every
+  # submission in Firestore (invitationRequests/{id}) and transactional
+  # sends fail closed (see sendOutboundEmails.ts) — neither blocks the
+  # user-facing request that triggered them.
   - variable: BREVO_API_KEY
     secret: BREVO_API_KEY
+    availability:
+      - RUNTIME
+
+  # --- Brevo (transactional email sender identity) ---
+  # See README "Transactional email delivery". Required by
+  # getTransactionalSenderIdentity() (brevoTransactional.ts) before any of
+  # the 6 outboundEmails types can send — the `juntoselect.com` sending
+  # domain has already been verified/authenticated on the Brevo side, so
+  # this only needs the matching plain values, not a DNS/Brevo change.
+  # Not secrets — a sender name/address isn't sensitive, same treatment as
+  # ADMIN_ALLOWLIST_EMAILS above.
+  - variable: BREVO_SENDER_NAME
+    value: "Junto Select"
+    availability:
+      - RUNTIME
+  - variable: BREVO_SENDER_EMAIL
+    value: "contact@juntoselect.com"
     availability:
       - RUNTIME
 

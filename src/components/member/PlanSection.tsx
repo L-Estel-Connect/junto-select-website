@@ -38,10 +38,10 @@ const DISCLOSURES = [
   "El pago se realiza por adelantado, por la duración completa del plan elegido (1, 3 o 6 meses).",
   "Tu membresía se renueva automáticamente al finalizar ese periodo, por la misma duración y al mismo precio, hasta que la canceles.",
   "Puedes cancelar en cualquier momento desde «Gestionar mi membresía». La cancelación se hace efectiva al final del periodo ya pagado — no se hacen reembolsos por el tiempo restante.",
-  "Una membresía activa te da derecho a recibir hasta 3 presentaciones seleccionadas al mes. No se acumulan si no se usan, y ese límite no aumenta con planes de mayor duración.",
-  "Recibir presentaciones no está garantizado incluso con la membresía activa: solo se te presentan personas que cumplen tus requisitos imprescindibles y superan nuestro umbral de calidad. Un mes sin ninguna coincidencia adecuada es un resultado válido.",
+  "Una membresía activa te da derecho a recibir hasta 3 selecciones al mes. No se acumulan si no se usan, y ese límite no aumenta con planes de mayor duración.",
+  "Recibir selecciones no está garantizado incluso con la membresía activa: solo se te presentan personas que cumplen tus requisitos imprescindibles y superan nuestro umbral de calidad. Un mes sin ninguna coincidencia adecuada es un resultado válido.",
   "Junto Select Introduction está disponible únicamente para el mercado de Madrid en esta fase.",
-  "Tu perfil debe estar completo (Sobre ti, Fotos y Lo que buscas) para poder recibir presentaciones — la membresía activa por sí sola no lo sustituye.",
+  "Tu perfil debe estar completo (Sobre ti, Fotos y Lo que buscas) para poder recibir selecciones — la membresía activa por sí sola no lo sustituye.",
   "Los precios incluyen los impuestos aplicables según tu método de pago y ubicación, calculados por Stripe en el momento del cobro.",
   "El pago se procesa de forma segura por Stripe. Junto Select no almacena los datos de tu tarjeta.",
   "Al confirmar el pago aceptas nuestros Términos y condiciones y nuestra Política de privacidad.",
@@ -282,8 +282,8 @@ export default function PlanSection({ uid }: { uid: string }) {
       {entitled ? (
         <>
           <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-            Tu membresía Select está activa: recibirás hasta 3 presentaciones seleccionadas al mes,
-            siempre que tu perfil siga cumpliendo los requisitos de la bolsa de Madrid.
+            Tu membresía está activa: Junto Select está buscando por ti y recibirás hasta 3 selecciones
+            al mes, siempre que tu perfil siga cumpliendo los requisitos de la bolsa de Madrid.
           </p>
           {!marketEligible && (
             <div className="mt-4 rounded-xl border border-hairline bg-white p-4 text-[14px] text-ink-soft">
@@ -307,8 +307,8 @@ export default function PlanSection({ uid }: { uid: string }) {
         <>
           <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
             Formar parte de Junto Select es gratuito: tu perfil permanece en nuestra base privada y puede
-            ser considerado como candidatura para las presentaciones de otros miembros. Para recibir tú
-            mismo/a hasta 3 presentaciones seleccionadas al mes, activa una membresía Select.
+            ser considerado como candidatura para las selecciones de otros miembros. Para recibir tú
+            mismo/a hasta 3 selecciones al mes, hazte miembro.
           </p>
 
           <div className="mt-10 border-t border-hairline">
