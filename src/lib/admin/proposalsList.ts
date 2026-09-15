@@ -28,7 +28,17 @@ function personRef(personId: string, index: Map<string, ProfileRow>) {
   };
 }
 
-function isoOrNull(ts: unknown): string | null {
+/**
+ * Exported so any other admin route that hands a raw Firestore document
+ * straight to `NextResponse.json` can convert its Timestamp fields the
+ * same way — see the proposal-detail route, which previously sent
+ * `ProposalDocument`/`InvitationDocument`/`IntroductionDocument`/
+ * `PairHistoryDocument` as-is: `JSON.stringify` reduces a Timestamp
+ * instance to a plain `{_seconds, _nanoseconds}` object (no `.toDate`
+ * survives serialization), which `new Date(...)` on the client then
+ * turns into "Invalid Date" — never a crash, just a wrong rendered value.
+ */
+export function isoOrNull(ts: unknown): string | null {
   const t = ts as { toDate?: () => Date } | null | undefined;
   return t?.toDate ? t.toDate().toISOString() : null;
 }

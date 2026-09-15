@@ -22,9 +22,29 @@ interface ProposalDetailResponse {
   why: MatchWhy;
 }
 
-function fmt(ts: string | null | undefined): string {
+/**
+ * Defensive on purpose: the API route now always sends ISO strings (see
+ * that route's own comment on why), but this never assumes it — a raw
+ * Firestore Timestamp (`.toDate()`), an already-serialized one
+ * (`{_seconds}`/`{seconds}`, in case some future field forgets the
+ * server-side conversion), or a genuinely bad/legacy value must all
+ * degrade to "—", never to the literal string "Invalid Date".
+ */
+function fmt(ts: unknown): string {
   if (!ts) return "—";
-  return new Date(ts).toLocaleString("es-ES", { dateStyle: "medium", timeStyle: "short" });
+  let date: Date | null = null;
+  if (ts instanceof Date) {
+    date = ts;
+  } else if (typeof ts === "string" || typeof ts === "number") {
+    date = new Date(ts);
+  } else if (typeof ts === "object") {
+    const t = ts as { toDate?: () => Date; _seconds?: number; seconds?: number };
+    if (typeof t.toDate === "function") date = t.toDate();
+    else if (typeof t._seconds === "number") date = new Date(t._seconds * 1000);
+    else if (typeof t.seconds === "number") date = new Date(t.seconds * 1000);
+  }
+  if (!date || Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("es-ES", { dateStyle: "medium", timeStyle: "short" });
 }
 
 function PersonCard({ person }: { person: AdminProfileView | null }) {
@@ -74,7 +94,7 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
         {proposal.source === "admin_manual" && <Badge tone="neutral">Sugerencia del equipo</Badge>}
       </div>
       <p className="mt-1 text-[13px] text-ink-soft">
-        Ciclo: {proposal.cycleId} · Creada: {fmt(proposal.createdAt as string)}
+        Ciclo: {proposal.cycleId} · Creada: {fmt(proposal.createdAt)}
       </p>
       {proposal.adminSuggestion?.note && (
         <p className="mt-2 rounded-lg bg-rose-tint px-3 py-2 text-[13px] text-ink">
@@ -94,21 +114,21 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
       <section className="mt-8">
         <h2 className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">Cronología</h2>
         <div className="mt-3 space-y-2 rounded-xl border border-hairline bg-white p-5 text-[14px]">
-          <p>Seleccionada: {fmt(proposal.createdAt as string)}</p>
+          <p>Seleccionada: {fmt(proposal.createdAt)}</p>
           <p>
             Decisión del miembro:{" "}
             {proposal.stage === "proposed" || proposal.stage === "viewed"
               ? "Pendiente"
-              : `${proposal.stage === "member_passed" ? "Pasó" : "Le interesó"} (${fmt(proposal.decidedAt as string)})`}
+              : `${proposal.stage === "member_passed" ? "Pasó" : "Le interesó"} (${fmt(proposal.decidedAt)})`}
           </p>
           {invitation && (
             <p>
-              Invitación al candidato: enviada {fmt(invitation.createdAt as string)}
-              {invitation.decidedAt ? ` · respondió ${fmt(invitation.decidedAt as string)}` : " · pendiente de respuesta"}
+              Invitación al candidato: enviada {fmt(invitation.createdAt)}
+              {invitation.decidedAt ? ` · respondió ${fmt(invitation.decidedAt)}` : " · pendiente de respuesta"}
             </p>
           )}
-          {introduction && <p>Introducción mutua: {fmt(introduction.createdAt as string)}</p>}
-          <p>Revelación de contacto: {introduction?.contactRevealedAt ? fmt(introduction.contactRevealedAt as string) : "Aún no disponible"}</p>
+          {introduction && <p>Introducción mutua: {fmt(introduction.createdAt)}</p>}
+          <p>Revelación de contacto: {introduction?.contactRevealedAt ? fmt(introduction.contactRevealedAt) : "Aún no disponible"}</p>
         </div>
       </section>
 
@@ -119,7 +139,7 @@ export default function ProposalDetailPage({ params }: { params: Promise<{ id: s
             <p>Estado: {pairHistory.state}</p>
             {pairHistory.state === "blocked" && <p className="text-[#8a3b3b]">Motivo del bloqueo: {pairHistory.blockedReason}</p>}
             {pairHistory.state === "passed" && Boolean(pairHistory.cooldownUntil) && (
-              <p>En periodo de espera hasta: {fmt(pairHistory.cooldownUntil as string)}</p>
+              <p>En periodo de espera hasta: {fmt(pairHistory.cooldownUntil)}</p>
             )}
           </div>
         </section>
