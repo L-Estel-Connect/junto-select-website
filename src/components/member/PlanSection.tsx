@@ -7,6 +7,10 @@ import { useMemberProfile } from "./useMemberProfile";
 import { useBilling } from "@/lib/billing/useBilling";
 import { PLAN_DISPLAY, PLAN_KEYS, type PlanKey } from "@/lib/billing/plans";
 import { isEntitledStatus, type BillingDocument } from "@/lib/billing/types";
+import { isMarketAvailabilityEligible } from "@/lib/introduction/completion";
+
+const MARKET_NOT_AVAILABLE_MESSAGE =
+  "Junto Select está disponible actualmente solo para Madrid. Para recibir selecciones, necesitas vivir en Madrid, cerca de Madrid o venir a Madrid con cierta frecuencia. Si tu situación cambia, podrás actualizar esta respuesta más adelante.";
 
 async function authedFetch(path: string, body?: Record<string, unknown>) {
   const idToken = await auth.currentUser?.getIdToken();
@@ -180,7 +184,7 @@ function ActiveMembership({
  * while the real state (from the Firestore listener above) catches up.
  */
 export default function PlanSection({ uid }: { uid: string }) {
-  const { ready, error, refresh } = useMemberProfile(uid);
+  const { profile, ready, error, refresh } = useMemberProfile(uid);
   const { billing, loading: billingLoading, error: billingError } = useBilling(uid);
 
   // Read via a mount-gated effect, not directly during render: this value
@@ -217,6 +221,7 @@ export default function PlanSection({ uid }: { uid: string }) {
   }
 
   const entitled = isEntitledStatus(billing.status);
+  const marketEligible = profile ? isMarketAvailabilityEligible(profile) : true;
 
   async function handleCheckout() {
     setCheckoutError(null);
@@ -236,8 +241,12 @@ export default function PlanSection({ uid }: { uid: string }) {
         immediateServiceRequested: true,
       });
       window.location.href = url;
-    } catch {
-      setCheckoutError("No hemos podido iniciar el pago. Inténtalo de nuevo en unos minutos.");
+    } catch (err) {
+      setCheckoutError(
+        err instanceof Error && err.message === "market_not_available"
+          ? MARKET_NOT_AVAILABLE_MESSAGE
+          : "No hemos podido iniciar el pago. Inténtalo de nuevo en unos minutos.",
+      );
       setSubmitting(false);
     }
   }
@@ -276,6 +285,17 @@ export default function PlanSection({ uid }: { uid: string }) {
             Tu membresía Select está activa: recibirás hasta 3 presentaciones seleccionadas al mes,
             siempre que tu perfil siga cumpliendo los requisitos de la bolsa de Madrid.
           </p>
+          {!marketEligible && (
+            <div className="mt-4 rounded-xl border border-hairline bg-white p-4 text-[14px] text-ink-soft">
+              Tus selecciones están en pausa porque Junto Select está disponible actualmente solo para
+              Madrid. Actualiza tu disponibilidad en{" "}
+              <a href="/member/profile/about" className="underline decoration-hairline underline-offset-4">
+                Sobre ti
+              </a>{" "}
+              cuando vuelvas a estar en Madrid con regularidad — tu membresía y tu historial no se ven
+              afectados.
+            </div>
+          )}
           <ActiveMembership
             billing={billing}
             onManage={handleManage}
@@ -362,10 +382,16 @@ export default function PlanSection({ uid }: { uid: string }) {
             <span className="font-medium text-ink">{PLAN_DISPLAY[selectedPlan].priceEuros} €</span>
           </div>
 
+          {!marketEligible && (
+            <p role="alert" className="mt-4 text-[13px] leading-relaxed text-[#8a3b3b]">
+              {MARKET_NOT_AVAILABLE_MESSAGE}
+            </p>
+          )}
+
           <button
             type="button"
             onClick={handleCheckout}
-            disabled={submitting || !termsAccepted || !immediateServiceRequested}
+            disabled={submitting || !termsAccepted || !immediateServiceRequested || !marketEligible}
             className="mt-4 w-full rounded-full bg-ink px-9 py-4 text-center text-[13px] font-medium uppercase tracking-[0.18em] text-white transition-opacity disabled:opacity-40"
           >
             {submitting ? "Redirigiendo a Stripe…" : `Continuar al pago — ${PLAN_DISPLAY[selectedPlan].priceEuros} €`}

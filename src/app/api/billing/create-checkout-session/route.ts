@@ -6,6 +6,8 @@ import { getStripePriceId } from "@/lib/stripe/plans";
 import { getAppBaseUrl } from "@/lib/config/appBaseUrl";
 import { isPlanKey, type PlanKey } from "@/lib/billing/plans";
 import type { BillingDocument } from "@/lib/billing/types";
+import { withProfileDefaults, type ProfileDocument } from "@/lib/introduction/types";
+import { isMarketAvailabilityEligible } from "@/lib/introduction/completion";
 
 export const runtime = "nodejs";
 
@@ -58,6 +60,19 @@ export async function POST(request: Request) {
   // wouldn't be properly documented as the consumer's own informed choice.
   if (body.immediateServiceRequested !== true) {
     return NextResponse.json({ ok: false, error: "immediate_service_not_requested" }, { status: 400 });
+  }
+
+  // Madrid service eligibility, checked BEFORE Stripe is ever involved —
+  // see eligibility.ts isMarketAvailabilityEligible for the shared
+  // business rule (the three "in Madrid in some form" answers are fully
+  // equivalent; only an explicit "not regularly in Madrid" blocks this).
+  // Never accept payment from someone who has explicitly told us they
+  // aren't regularly available in Madrid and only tell them afterward
+  // that they can't receive selections.
+  const profileSnap = await adminDb.doc(`profiles/${uid}`).get();
+  const profile = withProfileDefaults(uid, (profileSnap.exists ? profileSnap.data() : {}) as Partial<ProfileDocument>);
+  if (!isMarketAvailabilityEligible(profile)) {
+    return NextResponse.json({ ok: false, error: "market_not_available" }, { status: 400 });
   }
 
   let priceId: string;

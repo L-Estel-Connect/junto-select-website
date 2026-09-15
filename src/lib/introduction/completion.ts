@@ -10,6 +10,44 @@ export function isPhotosComplete(photos: string[]): boolean {
   return photos.length >= 1;
 }
 
+function normalizedCity(city: string): string {
+  return city.trim().toLowerCase();
+}
+
+/**
+ * INDIVIDUAL Madrid-service eligibility — never a pair-compatibility
+ * criterion (hardFilters.ts/scoring.ts intentionally never reference this;
+ * see acceptsGender's neighboring comment in hardFilters.ts for the
+ * equivalent statement about gender). The three "in Madrid in some form"
+ * answers (`lives_in_market`/`lives_near_market`/`frequent_visitor`) are
+ * fully equivalent for every matching purpose — there is no ranking,
+ * scoring, or hard-filter distinction between them. Only an explicit
+ * `not_regular_in_market` pauses matching.
+ *
+ * Legacy inference: a profile that predates this question (never
+ * answered, `marketAvailability === null`) is inferred eligible ONLY when
+ * its city is already Madrid — an existing member should never have to
+ * retroactively answer a newly introduced field just to remain in the
+ * pool. A legacy profile whose city is NOT Madrid gets no such inference
+ * (never invent eligibility for an unconfirmed relationship to Madrid) —
+ * it stays exactly as unconfirmed as before. This can never let a
+ * brand-new signup skip the question for real: the onboarding wizard's
+ * own step-by-step flow (`isAboutMeComplete`, unaffected by this
+ * function) always forces every new profile through this exact question
+ * before reaching preferences/photos, so by the time `computeProfileStatus`
+ * is ever computed for a genuinely new profile, `marketAvailability` is
+ * already a real, non-null answer — this inference only ever fires for
+ * profiles that finished that flow before the question existed at all.
+ */
+export function isMarketAvailabilityEligible(profile: {
+  visible: Pick<AboutMeVisible, "marketAvailability" | "city">;
+}): boolean {
+  const { marketAvailability, city } = profile.visible;
+  if (marketAvailability === "not_regular_in_market") return false;
+  if (marketAvailability === null) return normalizedCity(city) === "madrid";
+  return true; // lives_in_market | lives_near_market | frequent_visitor — all equivalent
+}
+
 type AboutMeCompletionInput = {
   visible: Pick<
     AboutMeVisible,
@@ -121,6 +159,31 @@ export function isAboutMeComplete(profile: AboutMeCompletionInput): boolean {
 }
 
 /**
+ * The MATCHING-eligibility variant of `aboutMeMissingFields` — identical
+ * except `marketAvailability` is exempted exactly when
+ * `isMarketAvailabilityEligible` already considers it resolved (the legacy
+ * city-based inference). Deliberately a SEPARATE function from
+ * `aboutMeMissingFields`/`isAboutMeComplete` rather than changing those:
+ * this distinction is the Madrid-vs-completeness separation itself (see
+ * README/audit "Madrid eligibility is not profile completeness") —
+ * `isAboutMeComplete` keeps gating the onboarding WIZARD's own linear flow
+ * (a brand-new signup must still answer the question for real, regardless
+ * of city), while `computeProfileStatus`/`diagnoseProfileStatus` use THIS
+ * variant to decide actual matching-pool participation and admin display,
+ * where a legacy Madrid member's unanswered question must never look like
+ * a generically "incomplete profile."
+ */
+export function aboutMeMissingFieldsForMatching(profile: AboutMeCompletionInput): AboutMeFieldName[] {
+  return aboutMeMissingFields(profile).filter(
+    (field) => field !== "marketAvailability" || !isMarketAvailabilityEligible(profile),
+  );
+}
+
+export function isAboutMeCompleteForMatching(profile: AboutMeCompletionInput): boolean {
+  return aboutMeMissingFieldsForMatching(profile).length === 0;
+}
+
+/**
  * Every dealbreaker field name `isPreferencesComplete` can report missing
  * — same shared-source-of-truth contract as `AboutMeFieldName` above.
  * `ageRange` is reported separately from `ageMin`/`ageMax` themselves: an
@@ -129,6 +192,7 @@ export function isAboutMeComplete(profile: AboutMeCompletionInput): boolean {
  */
 export type PreferencesFieldName =
   | "gendersSought"
+  | "gendersSoughtAmbiguous"
   | "ageMin"
   | "ageMax"
   | "ageRange"
@@ -142,10 +206,22 @@ export type PreferencesFieldName =
  * The exact list of "Lo que buscas" (dealbreaker) fields still
  * missing/invalid — see `aboutMeMissingFields`'s doc comment for why this
  * shared-source-of-truth shape exists at all.
+ *
+ * `gendersSought` is stored as an array for backward compatibility with
+ * an earlier multi-select UI, but Junto Select V1 requires EXACTLY one
+ * desired partner gender — never zero, never both. Zero is reported as
+ * the ordinary "missing" field; more than one is reported as a distinct
+ * `gendersSoughtAmbiguous` problem, since it's a different, more specific
+ * situation than simply "unanswered" (a legacy profile that pre-dates
+ * single-selection enforcement, or a client bypassing the UI) and needs
+ * its own clear diagnosis rather than looking like a normal missing
+ * field — see hardFilters.ts acceptsGender for the matching-time fail-
+ * closed counterpart to this.
  */
 export function preferencesMissingFields(dealbreakers: Dealbreakers): PreferencesFieldName[] {
   const missing: PreferencesFieldName[] = [];
   if (dealbreakers.gendersSought.length === 0) missing.push("gendersSought");
+  else if (dealbreakers.gendersSought.length > 1) missing.push("gendersSoughtAmbiguous");
   if (dealbreakers.ageMin === null) missing.push("ageMin");
   if (dealbreakers.ageMax === null) missing.push("ageMax");
   if (
@@ -210,7 +286,11 @@ export function computeProfileStatus(
     "aboutMe" | "photos" | "preferences" | "presentation",
     boolean
   > = {
-    aboutMe: isAboutMeComplete(profile),
+    // Matching-eligibility variant, not the strict wizard-navigation
+    // `isAboutMeComplete` — see aboutMeMissingFieldsForMatching's doc
+    // comment: this is what keeps a legacy Madrid member's unanswered
+    // marketAvailability from making their PROFILE look incomplete.
+    aboutMe: isAboutMeCompleteForMatching(profile),
     photos: isPhotosComplete(profile.photos),
     preferences: isPreferencesComplete(profile.dealbreakers),
     presentation: isPresentationComplete(profile.presentation.status),
@@ -272,7 +352,10 @@ export function diagnoseProfileStatus(
     computedStatus,
     stale: profile.meta.profileStatus !== computedStatus,
     sections: {
-      aboutMe: { complete: isAboutMeComplete(profile), missingFields: aboutMeMissingFields(profile) },
+      aboutMe: {
+        complete: isAboutMeCompleteForMatching(profile),
+        missingFields: aboutMeMissingFieldsForMatching(profile),
+      },
       photos: { complete: isPhotosComplete(profile.photos) },
       preferences: {
         complete: isPreferencesComplete(profile.dealbreakers),

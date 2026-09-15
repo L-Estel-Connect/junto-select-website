@@ -33,8 +33,20 @@ function normalizedCity(city: string): string {
 }
 
 // otherGender === null (unknown) -> false: an unstated gender can never
-// satisfy a gendersSought requirement.
+// satisfy a gendersSought requirement. `gendersSought` is stored as an
+// array for backward compatibility with an earlier multi-select UI, but
+// Junto Select V1 requires EXACTLY one desired partner gender — zero
+// (never answered) or more than one (a legacy multi-select answer, or a
+// write that bypassed the current single-select UI) is never a valid,
+// actionable preference, so both fail closed here exactly like every
+// other unknown/invalid dealbreaker in this file. In practice such a
+// profile is already excluded from the matching pool before reaching
+// this check at all (see completion.ts preferencesMissingFields'
+// gendersSoughtAmbiguous), but decision-time revalidation
+// (pairHistory.ts) calls this directly against a freshly reloaded
+// profile, so it must never rely on that pool exclusion alone.
 function acceptsGender(profile: ProfileDocument, otherGender: ProfileDocument["visible"]["gender"]): boolean {
+  if (profile.dealbreakers.gendersSought.length !== 1) return false;
   return otherGender !== null && profile.dealbreakers.gendersSought.includes(otherGender);
 }
 

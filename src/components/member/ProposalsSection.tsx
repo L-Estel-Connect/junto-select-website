@@ -5,6 +5,7 @@ import { IntroductionError, IntroductionLoading } from "@/components/introductio
 import { useMemberProfile } from "./useMemberProfile";
 import { useBilling } from "@/lib/billing/useBilling";
 import { isEntitledStatus } from "@/lib/billing/types";
+import { isMarketAvailabilityEligible } from "@/lib/introduction/completion";
 import { primaryButtonClasses } from "@/lib/styles";
 import { memberFetchJson } from "@/lib/member/memberFetch";
 import { useMemberQuery } from "@/lib/member/useMemberQuery";
@@ -25,7 +26,7 @@ const ACTIONABLE_PROPOSAL_STAGES: MemberProposalView["stage"][] = ["proposed", "
  * buscando por ti" / "activa tu búsqueda" messaging.
  */
 export default function ProposalsSection({ uid }: { uid: string }) {
-  const { ready, error, refresh } = useMemberProfile(uid);
+  const { profile, ready, error, refresh } = useMemberProfile(uid);
   const { billing, loading: billingLoading, error: billingError } = useBilling(uid);
 
   const invitationsQuery = useMemberQuery(
@@ -97,6 +98,17 @@ export default function ProposalsSection({ uid }: { uid: string }) {
           {proposalsWaiting.map((proposal) => (
             <ProposalCard key={proposal.id} proposal={proposal} onDecided={reloadAll} />
           ))}
+        </div>
+      ) : entitled && profile && !isMarketAvailabilityEligible(profile) ? (
+        <div className="mt-14 flex min-h-[30svh] flex-col items-center justify-center text-center">
+          <p className="text-[16px] text-ink">Tus selecciones están en pausa</p>
+          <p className="mt-2 max-w-[42ch] text-[15px] leading-relaxed text-ink-soft">
+            Junto Select está disponible actualmente solo para Madrid. Actualiza tu disponibilidad en{" "}
+            <Link href="/member/profile/about" className="underline decoration-hairline underline-offset-4">
+              Sobre ti
+            </Link>{" "}
+            cuando vuelvas a estar en Madrid con regularidad para reanudarlas.
+          </p>
         </div>
       ) : entitled ? (
         <div className="mt-14 flex min-h-[30svh] flex-col items-center justify-center text-center">

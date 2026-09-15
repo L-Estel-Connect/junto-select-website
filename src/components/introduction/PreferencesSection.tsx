@@ -153,13 +153,26 @@ export default function PreferencesSection({ uid }: { uid: string }) {
 
         <div className="mt-2">
           <FieldRow question="¿A quién te gustaría conocer?">
-            <MultiChipField
+            {/* Single-selection by product design (V1: exactly one desired
+                partner gender) — see completion.ts preferencesMissingFields
+                and hardFilters.ts acceptsGender for the matching-side
+                enforcement. `gendersSought` stays an array in Firestore for
+                backward compatibility with an earlier multi-select UI, so
+                this reads/writes it as a derived single value: a legacy
+                profile with more than one entry shows as unselected here
+                (never silently resolved to one on this person's behalf —
+                see the warning below) until they explicitly choose one. */}
+            <SingleChoiceField
               options={GENDER_OPTIONS}
-              value={dealbreakers.gendersSought}
-              onChange={(v) =>
-                updateDealbreakers({ gendersSought: v as Dealbreakers["gendersSought"] })
-              }
+              value={dealbreakers.gendersSought.length === 1 ? dealbreakers.gendersSought[0] : null}
+              onChange={(v) => updateDealbreakers({ gendersSought: [v as Dealbreakers["gendersSought"][number]] })}
             />
+            {dealbreakers.gendersSought.length > 1 && (
+              <p className="mt-2 text-[13px] text-rose-dark">
+                Tienes más de una opción guardada de una versión anterior. Elige una para continuar — no
+                se te presentará a nadie hasta entonces.
+              </p>
+            )}
           </FieldRow>
 
           <FieldRow question="Rango de edad">

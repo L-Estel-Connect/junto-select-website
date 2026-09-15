@@ -162,10 +162,11 @@ export const PAIR_HISTORY_REASON_LABELS: Record<string, string> = {
  */
 export const ELIGIBILITY_REASON_LABELS: Record<string, string> = {
   profile_status_not_active: "Perfil incompleto (ver detalle más abajo)",
+  gender_preference_ambiguous: "Debe elegir un único género en «Lo que buscas»",
   duplicate_suspected: "Cuenta duplicada — pendiente de revisión",
   duplicate_confirmed: "Cuenta duplicada confirmada",
   market_not_madrid: "Fuera del mercado de Madrid",
-  market_availability_missing_or_irregular: "Disponibilidad en Madrid no especificada o irregular",
+  market_not_available: "No disponible actualmente en Madrid",
 };
 
 /**
@@ -197,6 +198,7 @@ export const ABOUT_ME_FIELD_LABELS: Record<string, string> = {
 /** `PreferencesFieldName` (completion.ts preferencesMissingFields) — same purpose as ABOUT_ME_FIELD_LABELS, for "Lo que buscas". */
 export const PREFERENCES_FIELD_LABELS: Record<string, string> = {
   gendersSought: "Género buscado",
+  gendersSoughtAmbiguous: "Género buscado — debe elegir uno solo (actualmente hay más de uno seleccionado)",
   ageMin: "Edad mínima",
   ageMax: "Edad máxima",
   ageRange: "Rango de edad inválido (mínimo mayor que máximo)",
