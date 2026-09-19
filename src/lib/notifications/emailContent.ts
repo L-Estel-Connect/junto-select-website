@@ -82,5 +82,30 @@ export function buildEmailContent(
           "/member/connections",
         ),
       };
+    // Deliberate, sole exception to this module's "never a first name"
+    // rule: this is a one-time invitation addressed back to someone who
+    // gave US that name themselves on the old form, not matching data
+    // about anyone else — see legacyImport/writeImport.ts's
+    // queueActivationEmails, the only caller. Falls back to a
+    // name-free greeting if the old form's name couldn't be safely
+    // parsed into a first name (see mapping.ts extractFirstName).
+    case "legacy_profile_activation": {
+      const firstName = typeof data.firstName === "string" && data.firstName.trim() ? data.firstName.trim() : null;
+      const greeting = firstName ? `Hola ${firstName},` : "Hola,";
+      return {
+        subject: "Tu perfil de Junto Select está listo",
+        textContent: withFooter(
+          `${greeting}\n\n` +
+            "Hace un tiempo nos compartiste tus datos para formar parte de Junto Select.\n\n" +
+            "Ahora hemos creado una plataforma privada para gestionar las presentaciones de una forma más sencilla y segura.\n\n" +
+            "Hemos precompletado tu perfil únicamente con la información que ya nos habías facilitado.\n\n" +
+            "Tu perfil todavía no está activo y no será presentado a otros miembros hasta que tú decidas revisarlo, completarlo y activarlo.\n\n" +
+            "Podrás revisar y modificar toda la información antes de activar tu perfil.\n\n" +
+            "Si no quieres continuar, no tienes que activar nada. También puedes solicitar la eliminación de tus datos respondiendo a este email.",
+          appBaseUrl,
+          "/introduction/legacy",
+        ),
+      };
+    }
   }
 }

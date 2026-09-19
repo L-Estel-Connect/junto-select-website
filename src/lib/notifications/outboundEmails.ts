@@ -16,7 +16,8 @@ export type OutboundEmailType =
   | "renewal_reminder"
   | "new_proposal"
   | "invitation_received"
-  | "mutual_introduction";
+  | "mutual_introduction"
+  | "legacy_profile_activation";
 
 export type OutboundEmailStatus = "pending" | "sending" | "sent" | "failed";
 

@@ -99,6 +99,8 @@ function withDefaults(uid: string, data: Partial<ProfileDocument>): ProfileDocum
       searchStatus: "passive",
       duplicateStatus: "clear",
       duplicateOf: null,
+      pendingLegacyActivation: false,
+      legacyImportId: null,
       matchingAnchorAt: null,
       matchingSubscriptionId: null,
       matchingPeriodsProcessed: 0,
@@ -136,6 +138,8 @@ export async function getOrCreateProfile(
       searchStatus: "passive",
       duplicateStatus: "clear",
       duplicateOf: null,
+      pendingLegacyActivation: false,
+      legacyImportId: null,
       matchingAnchorAt: null,
       matchingSubscriptionId: null,
       matchingPeriodsProcessed: 0,
@@ -172,10 +176,18 @@ export async function markAboutMeComplete(uid: string) {
  * The one and only place `meta.onboardingFinalized` is ever set to true —
  * called exclusively from the Review screen's "Guardar y finalizar"
  * action. Never inferred automatically from section completeness.
+ *
+ * Also clears `meta.pendingLegacyActivation` unconditionally — a no-op
+ * write for every normal Path A profile (already `false`), but the exact
+ * moment a legacy-contact activation (Path B) completes the same
+ * finalize action every profile goes through: see that flag's own doc
+ * comment in types.ts for why this, and not a separate bespoke
+ * "activation complete" endpoint, is the single place it's ever cleared.
  */
 export async function finalizeOnboarding(uid: string): Promise<void> {
   await updateDoc(profileRef(uid), {
     "meta.onboardingFinalized": true,
+    "meta.pendingLegacyActivation": false,
     "meta.updatedAt": serverTimestamp(),
   });
 }

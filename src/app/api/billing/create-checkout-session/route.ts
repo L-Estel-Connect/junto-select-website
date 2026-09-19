@@ -8,13 +8,9 @@ import { isPlanKey, type PlanKey } from "@/lib/billing/plans";
 import type { BillingDocument } from "@/lib/billing/types";
 import { withProfileDefaults, type ProfileDocument } from "@/lib/introduction/types";
 import { isMarketAvailabilityEligible } from "@/lib/introduction/completion";
+import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/legal/versions";
 
 export const runtime = "nodejs";
-
-/** Bumped only if the Terms & Conditions text changes materially. */
-const CURRENT_TERMS_VERSION = "2026-09-terminos-v1";
-/** Bumped only if the Privacy Policy text changes materially — independent of CURRENT_TERMS_VERSION. */
-const CURRENT_PRIVACY_VERSION = "2026-09-privacidad-v1";
 
 /**
  * Starts a paid-membership subscription. Two things make price injection

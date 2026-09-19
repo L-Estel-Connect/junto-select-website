@@ -20,6 +20,13 @@ import { diagnoseProfileStatus, isMarketAvailabilityEligible } from "@/lib/intro
  * whether or how well they match.
  */
 export function isProfileInEligiblePool(profile: ProfileDocument): boolean {
+  // NON-NEGOTIABLE, checked first and unconditionally: a legacy-contact
+  // profile that hasn't finished activation can NEVER enter the pool,
+  // regardless of what `profileStatus` or anything else says — see
+  // ProfileDocument.meta.pendingLegacyActivation's own doc comment
+  // (types.ts) for why this is deliberate defense-in-depth on top of,
+  // never instead of, the ordinary completion pipeline below.
+  if (profile.meta.pendingLegacyActivation) return false;
   if (profile.meta.profileStatus !== "active_for_matching") return false;
   if (
     profile.meta.duplicateStatus === "suspected" ||
@@ -35,6 +42,7 @@ export function isProfileInEligiblePool(profile: ProfileDocument): boolean {
 }
 
 export type EligibilityFailureReason =
+  | "legacy_pending_activation"
   | "profile_status_not_active"
   | "gender_preference_ambiguous"
   | "duplicate_suspected"
@@ -68,6 +76,7 @@ export interface EligibilityDiagnosis {
  */
 export function explainIneligibility(profile: ProfileDocument): EligibilityDiagnosis {
   const reasons: EligibilityFailureReason[] = [];
+  if (profile.meta.pendingLegacyActivation) reasons.push("legacy_pending_activation");
   if (profile.meta.profileStatus !== "active_for_matching") reasons.push("profile_status_not_active");
   // Called out as its own top-level reason (in addition to also showing
   // up inside profileStatus.sections.preferences.missingFields) because

@@ -155,6 +155,14 @@ service cloud.firestore {
     // are intentionally left uncovered by an explicit rule above and fall
     // through to the default-deny below.
 
+    // legacyImports/{id}: legacy-contact activation records (see
+    // src/lib/legacyImport/) — Admin-SDK-only, same as the matching
+    // infrastructure above. The claim/accept-terms API routes (which DO
+    // run on behalf of an authenticated member) always use the Admin SDK
+    // server-side, never the client SDK, so this rule never needs to
+    // grant a client any access at all; it falls through to the
+    // default-deny below on purpose.
+
     // Default-deny everything else.
     match /{document=**} {
       allow read, write: if false;

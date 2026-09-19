@@ -354,6 +354,31 @@ export interface ProfileDocument {
     // being resolved) — the uid of the account this one was merged into.
     duplicateOf: string | null;
     /**
+     * Legacy-contact activation (Path B — see src/lib/legacyImport/):
+     * `true` only for a profile CREATED by claiming an imported legacy
+     * contact (never for a normal Path A signup, which never sets this at
+     * all beyond its default `false`). This is a NON-NEGOTIABLE,
+     * defense-in-depth matching-eligibility gate, checked directly by
+     * `isProfileInEligiblePool` (eligibility.ts) IN ADDITION TO — never
+     * instead of — the ordinary `profileStatus`/`completion.ts` pipeline:
+     * even if some future bug ever let an incomplete legacy-pending
+     * profile's `profileStatus` read as `active_for_matching`, this flag
+     * alone still excludes it. Cleared to `false` by the exact same
+     * client action that already flips `onboardingFinalized` for every
+     * profile (see profile.ts's `finalizeOnboarding`) — deliberately NOT
+     * additionally locked in firestore.rules the way `searchStatus` is:
+     * `profileStatus` itself (the actual, primary matching gate) is
+     * already NOT client-write-locked today, by this codebase's own
+     * documented, pre-existing limitation (see firestore.rules'
+     * `profiles/{uid}` comment) — locking this flag more tightly than
+     * the gate it backs up would be a false sense of security, not a
+     * real one, so it inherits the identical trust model instead of a
+     * new, inconsistent one.
+     */
+    pendingLegacyActivation: boolean;
+    /** Set only for a profile created via legacy-contact claim — links back to `legacyImports/{id}` for admin provenance. Never read by any eligibility/matching logic (that's `pendingLegacyActivation`'s job) — this is purely a backreference. */
+    legacyImportId: string | null;
+    /**
      * Per-member matching-cycle anchor (added for the per-member-anniversary
      * matching model — see src/lib/matching/dueScheduler.ts). Written ONLY
      * by the Stripe webhook, from `subscription.start_date` — immutable for
@@ -521,6 +546,8 @@ export function withProfileDefaults(
       searchStatus: "passive",
       duplicateStatus: "clear",
       duplicateOf: null,
+      pendingLegacyActivation: false,
+      legacyImportId: null,
       matchingAnchorAt: null,
       matchingSubscriptionId: null,
       matchingPeriodsProcessed: 0,
