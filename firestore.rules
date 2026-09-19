@@ -92,6 +92,29 @@ service cloud.firestore {
         && request.resource.data.meta.get('nextMatchingDueAt', null) == resource.data.meta.get('nextMatchingDueAt', null);
     }
 
+    // Legacy-contact activation (see src/lib/legacyImport/) — UNLIKE
+    // `searchStatus` and friends above, `pendingLegacyActivation` is
+    // explicitly, deliberately locked against ANY client write, not just
+    // left as a documented pre-existing gap the way `profileStatus`
+    // still is: the whole point of this flag is that clearing it must be
+    // impossible except through the dedicated, independently-re-verifying
+    // `/api/legacy/activate` server endpoint (claim.ts
+    // `activateLegacyProfile`), which uses the Admin SDK and so bypasses
+    // this rule file entirely. A client can never flip it true either
+    // (not that doing so would help them — see `legacyImportId`, the
+    // profile's own onboarding requirements are unaffected). `create` is
+    // deliberately not covered here, same precedent as
+    // `matchingStateUnchanged` above: the real profile-creation paths
+    // (`getOrCreateProfile` for Path A, `claimLegacyContact` for Path B)
+    // both run entirely server/client-SDK-side under their own control at
+    // creation time, and there is no exploit in a hand-built `create`
+    // setting these fields since neither one alone grants matching
+    // eligibility.
+    function legacyActivationStateUnchanged() {
+      return request.resource.data.meta.get('pendingLegacyActivation', false) == resource.data.meta.get('pendingLegacyActivation', false)
+        && request.resource.data.meta.get('legacyImportId', null) == resource.data.meta.get('legacyImportId', null);
+    }
+
     match /profiles/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow create: if request.auth != null
@@ -100,7 +123,8 @@ service cloud.firestore {
       allow update: if request.auth != null
         && request.auth.uid == uid
         && birthDateIsEligible(request.resource.data.private.birthDate)
-        && matchingStateUnchanged();
+        && matchingStateUnchanged()
+        && legacyActivationStateUnchanged();
       allow delete: if false;
     }
 

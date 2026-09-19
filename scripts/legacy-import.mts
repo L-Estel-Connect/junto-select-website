@@ -25,7 +25,16 @@
  * `queueOutboundEmail`-equivalent writes; actually dispatching queued
  * mail is exclusively `sendPendingOutboundEmails` (the existing
  * scheduled worker), never this script.
+ *
+ * PROJECT GUARD: before any write, this script independently resolves
+ * the Admin SDK's ACTUAL target project id and aborts unless it is
+ * exactly `select-dev-508407` (below). This is deliberately not just "ask
+ * the operator to double check" — it's a hard, unconditional `process.exit`
+ * with no override flag, so a wrong `GCLOUD_PROJECT`/ADC context (e.g. a
+ * shell still pointed at a different Firebase project from earlier work)
+ * can never result in writing legacy contacts into the wrong project.
  */
+const REQUIRED_PROJECT_ID = "select-dev-508407";
 import { existsSync } from "node:fs";
 import { getApps, getApp, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
@@ -157,8 +166,10 @@ async function main() {
 
   let existingAccountEmails = new Set<string>();
   let db: FirebaseFirestore.Firestore | null = null;
+  let resolvedProjectId: string | null = null;
   try {
     const app = getApps().length ? getApp() : initializeApp();
+    resolvedProjectId = app.options.projectId ?? process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT ?? null;
     db = getFirestore(app);
     existingAccountEmails = await loadExistingAccountEmails(db);
   } catch (error) {
@@ -169,6 +180,8 @@ async function main() {
       error instanceof Error ? error.message : error,
     );
   }
+
+  console.log(`\nResolved Firebase/Admin SDK project: ${resolvedProjectId ?? "(could not be determined)"}`);
 
   const plan = computeImportPlan(rows, existingAccountEmails);
   printSummary(plan);
@@ -183,7 +196,19 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("\n=== WRITE MODE ===");
+  // PROJECT GUARD — see the module doc comment above. Unconditional, no
+  // override flag: refuses to write anywhere except exactly the
+  // authorized Junto Select dev/staging project.
+  if (resolvedProjectId !== REQUIRED_PROJECT_ID) {
+    console.error(
+      `\nABORTING WRITE: resolved project is "${resolvedProjectId ?? "unknown"}", ` +
+        `but this script may only write to "${REQUIRED_PROJECT_ID}". ` +
+        `Set GCLOUD_PROJECT=${REQUIRED_PROJECT_ID} (and matching Admin SDK credentials) and try again.`,
+    );
+    process.exit(1);
+  }
+
+  console.log(`\n=== WRITE MODE (project verified: ${resolvedProjectId}) ===`);
   const writeResult = await executeImportPlan(db, plan);
   console.log(`Written: ${writeResult.written}, skipped (already existed): ${writeResult.skippedExisting}`);
 

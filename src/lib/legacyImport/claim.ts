@@ -1,7 +1,8 @@
 import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
-import { emptyAboutMePrivate, emptyAboutMeVisible, emptyContactPreferences, emptyDealbreakers, emptyPreferences, emptyPresentation, type ProfileDocument } from "@/lib/introduction/types";
+import { emptyAboutMePrivate, emptyAboutMeVisible, emptyContactPreferences, emptyDealbreakers, emptyPreferences, emptyPresentation, withProfileDefaults, type ProfileDocument } from "@/lib/introduction/types";
+import { isAboutMeComplete, isPhotosComplete, isPreferencesComplete, isPresentationComplete } from "@/lib/introduction/completion";
 import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/legal/versions";
 import { legacyImportId } from "./mapping";
 import type { LegacyImportDocument } from "./types";
@@ -169,6 +170,80 @@ export async function acceptLegacyTerms(uid: string, verifiedEmail: string): Pro
         acceptedAt: FieldValue.serverTimestamp(),
       },
       updatedAt: FieldValue.serverTimestamp(),
+    });
+    return { ok: true };
+  });
+}
+
+export type ActivateLegacyProfileResult =
+  | { ok: true }
+  | { ok: false; error: "not_found" | "not_claimed_by_you" | "legal_not_accepted" | "onboarding_incomplete" };
+
+/**
+ * The ONLY place `meta.pendingLegacyActivation` is ever cleared —
+ * deliberately a dedicated, independently-re-verifying server action, not
+ * a side effect of the ordinary client `finalizeOnboarding()` write (see
+ * that function's own doc comment in profile.ts, and firestore.rules'
+ * `legacyActivationStateUnchanged()`, which makes this flag entirely
+ * un-writable from any client SDK call, `finalizeOnboarding()` included).
+ *
+ * Refuses unless ALL THREE hold, independently re-checked here every time
+ * (never trusted from whatever the client claims):
+ *  1. This exact uid claimed this exact legacy contact.
+ *  2. The CURRENT Terms/Privacy versions were explicitly accepted via
+ *     `acceptLegacyTerms` — an OLDER recorded consent (a stale
+ *     termsVersion/privacyVersion, from before either document last
+ *     changed) does not count; the person must accept again. The old
+ *     form's original submission is never treated as consent to
+ *     anything current.
+ *  3. Onboarding is genuinely complete, by the SAME `completion.ts`
+ *     checks that gate a normal Path A "Guardar y finalizar" — never a
+ *     bespoke, looser definition of "done" for this path.
+ *
+ * On success, sets `onboardingFinalized: true` AND
+ * `pendingLegacyActivation: false` in the same update (this replaces, for
+ * a legacy contact, the plain client `finalizeOnboarding()` call — see
+ * MemberProfileSection.tsx), and marks the `legacyImports` doc
+ * `activated`. From this moment on, this profile is governed by the
+ * IDENTICAL `profileStatus`/matching-eligibility pipeline as any Path A
+ * profile — this function does not touch `profileStatus` itself at all.
+ */
+export async function activateLegacyProfile(uid: string, verifiedEmail: string): Promise<ActivateLegacyProfileResult> {
+  const normalizedEmail = verifiedEmail.trim().toLowerCase();
+  const id = legacyImportId(normalizedEmail);
+  const legacyRef = adminDb.doc(`legacyImports/${id}`);
+  const profileRef = adminDb.doc(`profiles/${uid}`);
+
+  return adminDb.runTransaction(async (tx) => {
+    const [legacySnap, profileSnap] = await Promise.all([tx.get(legacyRef), tx.get(profileRef)]);
+
+    if (!legacySnap.exists) return { ok: false, error: "not_found" };
+    const legacy = legacySnap.data() as LegacyImportDocument;
+    if (legacy.claimedUid !== uid) return { ok: false, error: "not_claimed_by_you" };
+
+    const consent = legacy.activationConsent;
+    const legalAccepted =
+      !!consent && consent.termsVersion === CURRENT_TERMS_VERSION && consent.privacyVersion === CURRENT_PRIVACY_VERSION;
+    if (!legalAccepted) return { ok: false, error: "legal_not_accepted" };
+
+    const profile = withProfileDefaults(uid, (profileSnap.exists ? profileSnap.data() : {}) as Partial<ProfileDocument>);
+    const onboardingComplete =
+      isAboutMeComplete(profile) &&
+      isPreferencesComplete(profile.dealbreakers) &&
+      isPhotosComplete(profile.photos) &&
+      isPresentationComplete(profile.presentation.status);
+    if (!onboardingComplete) return { ok: false, error: "onboarding_incomplete" };
+
+    const now = FieldValue.serverTimestamp();
+    tx.update(profileRef, {
+      "meta.pendingLegacyActivation": false,
+      "meta.onboardingFinalized": true,
+      "meta.updatedAt": now,
+    });
+    tx.update(legacyRef, {
+      status: "activated",
+      activatedAt: now,
+      updatedAt: now,
     });
     return { ok: true };
   });

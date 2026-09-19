@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { finalizeOnboarding } from "@/lib/introduction/profile";
 import { useSharedProfile } from "@/lib/introduction/profileCache";
+import { legacyFetchJson } from "@/lib/legacyImport/legacyFetch";
 import {
   getPrerequisiteRedirect,
   isAboutMeComplete,
@@ -51,9 +52,36 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
   const finalized = profile.meta.onboardingFinalized;
 
   async function handleFinalize() {
+    if (!profile) return; // defensive only — guarded against above before this closure is ever reachable
     setError(null);
     setSaving(true);
     try {
+      if (profile.meta.pendingLegacyActivation) {
+        // Legacy-contact activation (Path B): pendingLegacyActivation can
+        // ONLY be cleared by this dedicated, independently-re-verifying
+        // server endpoint (see claim.ts activateLegacyProfile) — the
+        // plain client finalizeOnboarding() write is rejected by
+        // firestore.rules for a profile in this state. A refusal here
+        // (e.g. legal_not_accepted) should not normally happen, since
+        // /introduction/legacy already requires accepting current terms
+        // before routing into onboarding at all.
+        try {
+          await legacyFetchJson("/api/legacy/activate", { method: "POST" });
+        } catch (err) {
+          const code = (err as Error & { code?: string }).code;
+          if (code === "legal_not_accepted") {
+            setError("Debes aceptar los términos y la política de privacidad actuales antes de activar tu perfil. Vuelve al enlace de activación que recibiste por email.");
+          } else {
+            setError("No hemos podido activar tu perfil. Inténtalo de nuevo.");
+          }
+          return;
+        }
+        mutate((prev) => ({
+          ...prev,
+          meta: { ...prev.meta, onboardingFinalized: true, pendingLegacyActivation: false },
+        }));
+        return;
+      }
       await finalizeOnboarding(uid);
       mutate((prev) => ({ ...prev, meta: { ...prev.meta, onboardingFinalized: true } }));
     } catch {

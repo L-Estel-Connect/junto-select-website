@@ -173,21 +173,25 @@ export async function markAboutMeComplete(uid: string) {
 }
 
 /**
- * The one and only place `meta.onboardingFinalized` is ever set to true —
- * called exclusively from the Review screen's "Guardar y finalizar"
- * action. Never inferred automatically from section completeness.
+ * The one and only place a NORMAL (Path A) profile ever sets
+ * `meta.onboardingFinalized` to true — called from the Review screen's
+ * "Guardar y finalizar" action. Never inferred automatically from section
+ * completeness.
  *
- * Also clears `meta.pendingLegacyActivation` unconditionally — a no-op
- * write for every normal Path A profile (already `false`), but the exact
- * moment a legacy-contact activation (Path B) completes the same
- * finalize action every profile goes through: see that flag's own doc
- * comment in types.ts for why this, and not a separate bespoke
- * "activation complete" endpoint, is the single place it's ever cleared.
+ * Deliberately never touches `meta.pendingLegacyActivation` — that field
+ * cannot be changed by ANY client SDK call at all (see firestore.rules'
+ * `legacyActivationStateUnchanged()`); a legacy-contact activation
+ * (Path B) instead goes through the dedicated, independently-re-verifying
+ * `/api/legacy/activate` server endpoint (see claim.ts
+ * `activateLegacyProfile`), which sets BOTH `onboardingFinalized` and
+ * clears `pendingLegacyActivation` together, server-side, only once
+ * claim + current legal acceptance + onboarding completion are all
+ * confirmed. See MemberProfileSection.tsx for the branch that calls one
+ * or the other depending on `profile.meta.pendingLegacyActivation`.
  */
 export async function finalizeOnboarding(uid: string): Promise<void> {
   await updateDoc(profileRef(uid), {
     "meta.onboardingFinalized": true,
-    "meta.pendingLegacyActivation": false,
     "meta.updatedAt": serverTimestamp(),
   });
 }

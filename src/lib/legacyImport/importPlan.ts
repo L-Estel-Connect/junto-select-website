@@ -204,11 +204,14 @@ function buildPrefillAndRaw(row: RawExcelRow): { prefill: LegacyPrefillFields; r
     if (ageResult.warning) warnings.push(ageResult.warning);
   }
 
-  raw.qualitiesValued = trimToNull(cell(row, HEADER_QUALITIES));
-  raw.friendsDescription = trimToNull(cell(row, HEADER_FRIENDS_DESCRIBE));
-  raw.culturalOpenness = trimToNull(cell(row, HEADER_CULTURAL_OPENNESS));
-  raw.instagramOrLinkedIn = trimToNull(cell(row, HEADER_INSTAGRAM_LINKEDIN));
-  raw.noGo = trimToNull(cell(row, HEADER_NO_GO));
+  // DATA MINIMIZATION: the old form's other free-text columns (qualities
+  // valued, friends' description, cultural-background openness,
+  // Instagram/LinkedIn, and especially the "no-go" answer — which can
+  // contain religion, ethnicity, or other special-category content) are
+  // deliberately never read here at all. See LegacyRawFields's own doc
+  // comment (types.ts): none of them feed any current prefill field, so
+  // there is nothing for an admin to verify/debug by retaining them, and
+  // "no-go" specifically must never be persisted anywhere.
 
   const horodateur = row[HEADER_TIMESTAMP];
   if (horodateur instanceof Date) {

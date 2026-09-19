@@ -76,19 +76,26 @@ export const emptyLegacyPrefill: LegacyPrefillFields = {
  * Everything from the old form that did NOT map cleanly to a current
  * field — kept ONLY for admin reference (see labels.ts / the admin legacy
  * list), NEVER copied into any `ProfileDocument` field, NEVER returned
- * from any member-facing or public API. Some of this content is
- * genuinely sensitive free text (a "no-go" answer, cultural preferences)
- * — see the final report's explicit flag for Lara's review on whether
- * this should be retained at all.
+ * from any member-facing or public API.
+ *
+ * DATA MINIMIZATION: this is deliberately NOT a full mirror of the
+ * spreadsheet row. Every field below serves one of exactly two
+ * operational purposes — (1) letting an admin verify/debug a specific
+ * prefill decision (the `raw*` fields, one per field we actually attempt
+ * to map) or (2) a field the original design flagged as useful for admin
+ * review (`ageAtImport`, `submittedAt` for dedup/audit). The old form's
+ * OTHER free-text answers — qualities valued in a partner, how friends
+ * describe them, cultural-background openness, Instagram/LinkedIn, and
+ * especially the "no-go" free text (which can contain religion,
+ * ethnicity, or other special-category content) — have NO such purpose:
+ * they don't feed any current prefill field, so there is nothing to
+ * verify or debug, and they are never read, stored, or persisted
+ * anywhere by this module. `buildPrefillAndRaw` (importPlan.ts) never
+ * even looks at those spreadsheet columns.
  */
 export interface LegacyRawFields {
   rawName: string | null;
   ageAtImport: number | null;
-  qualitiesValued: string | null;
-  friendsDescription: string | null;
-  culturalOpenness: string | null;
-  instagramOrLinkedIn: string | null;
-  noGo: string | null;
   /** Verbatim source values, for admin debugging of a parsing decision — never displayed as if they were current answers. */
   rawHeight: string | null;
   rawAgeRange: string | null;
@@ -101,11 +108,6 @@ export interface LegacyRawFields {
 export const emptyLegacyRaw: LegacyRawFields = {
   rawName: null,
   ageAtImport: null,
-  qualitiesValued: null,
-  friendsDescription: null,
-  culturalOpenness: null,
-  instagramOrLinkedIn: null,
-  noGo: null,
   rawHeight: null,
   rawAgeRange: null,
   rawRelationshipIntention: null,
