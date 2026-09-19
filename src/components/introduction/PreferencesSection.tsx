@@ -48,16 +48,6 @@ const FREQUENCY_OPTIONS = [
   { value: "habitualmente", label: "Habitualmente" },
 ];
 
-// Each option is a complete, unambiguous statement about the requirement
-// itself — deliberately not phrased as a yes/no answer to a "¿Debe...?"
-// question, where "No" could be misread as "not required" instead of the
-// intended "must not want children" (see semantics audit).
-const FUTURE_CHILDREN_OPTIONS = [
-  { value: "si", label: "Debe querer tener hijos" },
-  { value: "no", label: "No debe querer tener hijos" },
-  { value: "indiferente", label: "Me da igual" },
-];
-
 const ACTIVITY_OPTIONS = [
   { value: "muy_activo", label: "Muy activo/a" },
   { value: "activo", label: "Activo/a" },
@@ -243,19 +233,6 @@ export default function PreferencesSection({ uid }: { uid: string }) {
               onChange={(v) => updateDealbreakers({ partnerYoungChildrenMatters: v })}
               yesLabel="Sí, me importaría"
               noLabel="No, no me importaría"
-            />
-          </FieldRow>
-
-          <FieldRow question="Sobre tener hijos en el futuro, ¿qué necesitas de la otra persona?">
-            <SingleChoiceField
-              options={FUTURE_CHILDREN_OPTIONS}
-              value={dealbreakers.partnerWantsFutureChildren}
-              onChange={(v) =>
-                updateDealbreakers({
-                  partnerWantsFutureChildren:
-                    v as Dealbreakers["partnerWantsFutureChildren"],
-                })
-              }
             />
           </FieldRow>
         </div>

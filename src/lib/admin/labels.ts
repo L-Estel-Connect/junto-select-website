@@ -34,17 +34,6 @@ const DISTANCE_LABELS: Record<string, string> = {
   sin_limite: "Sin límite",
 };
 
-// Explicit statements, not yes/no answers — mirrors the member-facing
-// option wording in PreferencesSection.tsx exactly, so the admin view can
-// never look more ambiguous than what the member actually saw and chose
-// (see semantics audit: a "¿Debe...? No" framing risked being misread as
-// "not required" instead of the intended "must not want children").
-const FUTURE_CHILDREN_PREFERENCE_LABELS: Record<string, string> = {
-  si: "Debe querer tener hijos",
-  no: "No debe querer tener hijos",
-  indiferente: "Me da igual",
-};
-
 function lookup(map: Record<string, string>, value: string | null): string {
   if (value === null) return "No especificado";
   return map[value] ?? value;
@@ -74,13 +63,15 @@ export function distanceLabel(value: string | null): string {
 export function futureChildrenIntentionLabel(value: string | null): string {
   return lookup(FUTURE_CHILDREN_INTENTION_LABELS, value);
 }
-export function futureChildrenPreferenceLabel(value: string | null): string {
-  return lookup(FUTURE_CHILDREN_PREFERENCE_LABELS, value);
-}
 // Plain Sí/No/No especificado — the simplified model's only children
 // question is a single boolean (partnerYoungChildrenMatters), so no
 // lookup table is needed.
 export function youngChildrenMattersLabel(value: boolean | null): string {
+  if (value === null) return "No especificado";
+  return value ? "Sí" : "No";
+}
+/** Same plain Sí/No/No especificado rendering, for the person's OWN `visible.hasYoungChildren` self-report (distinct from the dealbreaker above). */
+export function hasYoungChildrenLabel(value: boolean | null): string {
   if (value === null) return "No especificado";
   return value ? "Sí" : "No";
 }
@@ -98,7 +89,6 @@ export const HARD_FILTER_REASON_LABELS: Record<string, string> = {
   relationship_intention: "Tipo de relación aceptado",
   smoking: "Aceptación de fumador",
   young_children: "Hijos menores de 15",
-  future_children: "Compatibilidad de hijos futuros",
 };
 
 /**
@@ -185,8 +175,7 @@ export const ABOUT_ME_FIELD_LABELS: Record<string, string> = {
   incomeRange: "Rango de ingresos",
   languages: "Idiomas",
   hasChildren: "¿Tiene hijos?",
-  childrenCount: "Número de hijos",
-  childrenBirthYears: "Edad de los hijos",
+  hasYoungChildren: "¿Tiene hijos menores de 15 años?",
   wantsFutureChildren: "¿Quiere hijos en el futuro?",
   relationshipIntention: "Tipo de relación buscada",
   smoking: "Fuma",
@@ -206,5 +195,4 @@ export const PREFERENCES_FIELD_LABELS: Record<string, string> = {
   relationshipIntentionsAccepted: "Tipo de relación aceptado",
   smokingAccepted: "Fumador aceptado",
   partnerYoungChildrenMatters: "¿Le importan hijos menores de 15 años?",
-  partnerWantsFutureChildren: "¿Debe querer hijos futuros?",
 };

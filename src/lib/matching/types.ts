@@ -83,8 +83,7 @@ export type HardFilterFailureReason =
   | "distance"
   | "relationship_intention"
   | "smoking"
-  | "young_children"
-  | "future_children";
+  | "young_children";
 
 /** Why a candidate that DID pass the reciprocal hard filter was still excluded, per pairHistory. */
 export type PairHistoryExclusionReason = "pending_or_invited" | "cooldown" | "blocked" | "mutual";

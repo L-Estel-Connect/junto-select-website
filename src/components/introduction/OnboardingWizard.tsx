@@ -70,13 +70,14 @@ export function applyFieldsToProfile(
  * "answered".
  */
 export function isStepAnswered(profile: ProfileDocument, step: AboutMeStep): boolean {
-  if (step.type === "children") return profile.visible.hasChildren !== null;
-  if (step.type === "childrenAges") {
-    if (profile.visible.hasChildren !== true) return true; // doesn't apply
-    return (
-      profile.visible.childrenBirthYears !== null &&
-      profile.visible.childrenBirthYears.length === profile.visible.childrenCount
-    );
+  if (step.type === "children") {
+    // Both fields are always written together (see ChildrenInput/
+    // computeStepFields below) — checking both catches a legacy profile
+    // whose `hasChildren` was answered under the OLD count/ages model
+    // (hasYoungChildren still null) as genuinely unanswered, so the wizard
+    // re-asks the new single question instead of treating stale data as
+    // complete.
+    return profile.visible.hasChildren !== null && profile.visible.hasYoungChildren !== null;
   }
   const value = getByPath(profile, step.path);
   if (Array.isArray(value)) return value.length > 0;
@@ -116,20 +117,11 @@ export function computeStepFields(
   value: unknown,
 ): Record<string, unknown> {
   if (step.type === "children") {
-    const childrenValue = value as { hasChildren: boolean; childrenCount: number | null };
+    const childrenValue = value as { hasChildren: boolean; hasYoungChildren: boolean };
     return {
       "visible.hasChildren": childrenValue.hasChildren,
-      "visible.childrenCount": childrenValue.childrenCount,
+      "visible.hasYoungChildren": childrenValue.hasYoungChildren,
     };
-  }
-  if (step.type === "childrenAges") {
-    // Ages are what the person entered (simplest for them); what gets
-    // stored is birth year, so this can never go stale — see
-    // ProfileDocument.visible.childrenBirthYears.
-    const ages = value as number[] | null;
-    if (!ages) return { "visible.childrenBirthYears": null };
-    const currentYear = new Date().getFullYear();
-    return { "visible.childrenBirthYears": ages.map((age) => currentYear - age) };
   }
   if (step.id === "birthDate") {
     return { [step.path]: Timestamp.fromDate(new Date(`${value as string}T00:00:00`)) };
@@ -204,13 +196,7 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
     if (currentStep.type === "children") {
       return {
         hasChildren: profile.visible.hasChildren,
-        childrenCount: profile.visible.childrenCount,
-      };
-    }
-    if (currentStep.type === "childrenAges") {
-      return {
-        childrenCount: profile.visible.childrenCount,
-        childrenBirthYears: profile.visible.childrenBirthYears,
+        hasYoungChildren: profile.visible.hasYoungChildren,
       };
     }
     if (currentStep.id === "birthDate") {
@@ -219,18 +205,6 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
     }
     return getByPath(profile, currentStep.path);
   }, [profile, currentStep]);
-
-  // The childrenAges step has no per-step branching in the wizard itself
-  // (it's a strictly linear array walk) — instead, when it's reached but
-  // doesn't apply (no children), this auto-advances past it with a null
-  // answer rather than asking a meaningless question.
-  useEffect(() => {
-    if (!profile || !currentStep || saving) return;
-    if (currentStep.type === "childrenAges" && profile.visible.hasChildren !== true) {
-      void handleAnswer(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, currentStep, saving]);
 
   const renderState = !profile
     ? profileError

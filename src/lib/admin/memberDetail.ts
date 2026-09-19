@@ -96,8 +96,7 @@ export interface AdminProfileView {
   heightCm: number | null;
   languages: string[];
   hasChildren: boolean | null;
-  childrenCount: number | null;
-  childrenBirthYears: number[] | null;
+  hasYoungChildren: boolean | null;
   wantsFutureChildren: ProfileDocument["visible"]["wantsFutureChildren"];
   relationshipIntention: ProfileDocument["visible"]["relationshipIntention"];
   smoking: ProfileDocument["visible"]["smoking"];
@@ -135,8 +134,7 @@ function toAdminProfileView(uid: string, personId: string, profile: ProfileDocum
     heightCm: profile.visible.heightCm,
     languages: profile.visible.languages,
     hasChildren: profile.visible.hasChildren,
-    childrenCount: profile.visible.childrenCount,
-    childrenBirthYears: profile.visible.childrenBirthYears,
+    hasYoungChildren: profile.visible.hasYoungChildren,
     wantsFutureChildren: profile.visible.wantsFutureChildren,
     relationshipIntention: profile.visible.relationshipIntention,
     smoking: profile.visible.smoking,

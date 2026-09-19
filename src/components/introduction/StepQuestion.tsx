@@ -52,8 +52,6 @@ function StepInput({ step, value, saving, onAnswer }: Props) {
       return <ChipsInput step={step} value={value} saving={saving} onAnswer={onAnswer} />;
     case "children":
       return <ChildrenInput value={value} saving={saving} onAnswer={onAnswer} />;
-    case "childrenAges":
-      return <ChildrenAgesInput value={value} saving={saving} onAnswer={onAnswer} />;
     default:
       return null;
   }
@@ -235,6 +233,16 @@ function ChipsInput({ step, value, saving, onAnswer }: Props) {
   );
 }
 
+/**
+ * A single three-option question that writes both `hasChildren` and
+ * `hasYoungChildren` atomically in one click — see aboutMeFields.ts's
+ * `ChildrenStep` doc comment for why there's no separate count/ages
+ * question anymore. Modeled after `SelectInput` (answers immediately on
+ * click, no separate Continuar step) since it's really a single select
+ * over three options, just one that happens to set two underlying fields.
+ */
+type ChildrenAnswer = "none" | "grown" | "young";
+
 function ChildrenInput({
   value,
   saving,
@@ -245,143 +253,49 @@ function ChildrenInput({
   onAnswer: (value: unknown) => void;
 }) {
   const initial = value as
-    | { hasChildren: boolean | null; childrenCount: number | null }
+    | { hasChildren: boolean | null; hasYoungChildren: boolean | null }
     | undefined;
-  const [hasChildren, setHasChildren] = useState<boolean | null>(
-    initial?.hasChildren ?? null,
-  );
-  const [count, setCount] = useState<number | null>(
-    initial?.childrenCount ?? null,
-  );
+  const selected: ChildrenAnswer | null =
+    initial?.hasChildren === false
+      ? "none"
+      : initial?.hasChildren === true && initial?.hasYoungChildren === true
+        ? "young"
+        : initial?.hasChildren === true && initial?.hasYoungChildren === false
+          ? "grown"
+          : null;
 
-  function selectHasChildren(next: boolean) {
-    setHasChildren(next);
-    setCount(null);
+  function select(answer: ChildrenAnswer) {
+    if (answer === "none") onAnswer({ hasChildren: false, hasYoungChildren: false });
+    else if (answer === "grown") onAnswer({ hasChildren: true, hasYoungChildren: false });
+    else onAnswer({ hasChildren: true, hasYoungChildren: true });
   }
 
   return (
-    <div>
-      <div className="space-y-3">
-        <button
-          type="button"
-          disabled={saving}
-          onClick={() => selectHasChildren(true)}
-          className={cardOptionClasses(hasChildren === true)}
-        >
-          Sí
-        </button>
-        <button
-          type="button"
-          disabled={saving}
-          onClick={() => selectHasChildren(false)}
-          className={cardOptionClasses(hasChildren === false)}
-        >
-          No
-        </button>
-      </div>
-
-      {hasChildren === true && (
-        <div className="mt-6">
-          <p className="mb-3 text-[15px] text-ink-soft">¿Cuántos?</p>
-          <div className="flex gap-2.5">
-            {[1, 2, 3].map((n) => (
-              <button
-                key={n}
-                type="button"
-                disabled={saving}
-                onClick={() => setCount(n)}
-                className={`flex-1 rounded-full border px-4 py-3 text-[15px] transition-colors ${
-                  count === n
-                    ? "border-rose-dark bg-rose-tint text-ink"
-                    : "border-hairline text-ink hover:border-rose"
-                }`}
-              >
-                {n === 3 ? "3+" : n}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <ContinueButton
-        disabled={hasChildren === null || (hasChildren === true && count === null)}
-        saving={saving}
-        onClick={() =>
-          onAnswer({ hasChildren, childrenCount: hasChildren ? count : null })
-        }
-      />
-    </div>
-  );
-}
-
-/**
- * Asks for each child's current age (simplest for the person to answer),
- * but the value handed to `onAnswer` — and what actually gets persisted,
- * via OnboardingWizard's field-mapping for this step — is birth YEAR, not
- * the age itself, so it never goes stale. This component only ever
- * renders when OnboardingWizard has already determined hasChildren is
- * true (see its auto-skip effect); `value.childrenCount` drives how many
- * age inputs to show.
- */
-function ChildrenAgesInput({
-  value,
-  saving,
-  onAnswer,
-}: {
-  value: unknown;
-  saving: boolean;
-  onAnswer: (value: unknown) => void;
-}) {
-  const initial = value as
-    | { childrenCount: number | null; childrenBirthYears: number[] | null }
-    | undefined;
-  const count = initial?.childrenCount ?? 0;
-  const currentYear = new Date().getFullYear();
-  const initialAges = (initial?.childrenBirthYears ?? []).map(
-    (year) => currentYear - year,
-  );
-  const [ages, setAges] = useState<Array<number | null>>(
-    Array.from({ length: count }, (_, i) => initialAges[i] ?? null),
-  );
-
-  const allFilled =
-    ages.length === count &&
-    ages.every((a) => a !== null && a >= 0 && a <= 90);
-
-  function setAge(index: number, raw: string) {
-    if (raw.trim() === "") {
-      setAges((prev) => prev.map((a, i) => (i === index ? null : a)));
-      return;
-    }
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed)) return;
-    setAges((prev) => prev.map((a, i) => (i === index ? parsed : a)));
-  }
-
-  return (
-    <div>
-      <div className="space-y-4">
-        {Array.from({ length: count }).map((_, i) => (
-          <div key={i}>
-            <p className="mb-2 text-[14px] text-ink-soft">Hijo/a {i + 1}</p>
-            <input
-              type="number"
-              inputMode="numeric"
-              autoFocus={i === 0}
-              min={0}
-              max={90}
-              value={ages[i] ?? ""}
-              onChange={(e) => setAge(i, e.target.value)}
-              className={inputClasses}
-            />
-          </div>
-        ))}
-      </div>
-      <ContinueButton
-        disabled={!allFilled}
-        saving={saving}
-        onClick={() => onAnswer(ages as number[])}
-      />
+    <div className="space-y-3">
+      <button
+        type="button"
+        disabled={saving}
+        onClick={() => select("none")}
+        className={cardOptionClasses(selected === "none")}
+      >
+        No tengo hijos
+      </button>
+      <button
+        type="button"
+        disabled={saving}
+        onClick={() => select("grown")}
+        className={cardOptionClasses(selected === "grown")}
+      >
+        Sí, y todos tienen 15 años o más
+      </button>
+      <button
+        type="button"
+        disabled={saving}
+        onClick={() => select("young")}
+        className={cardOptionClasses(selected === "young")}
+      >
+        Sí, y al menos uno tiene menos de 15 años
+      </button>
     </div>
   );
 }

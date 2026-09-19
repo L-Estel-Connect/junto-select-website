@@ -1,9 +1,6 @@
-import { getAge, hasChildUnderAge } from "@/lib/introduction/age";
+import { getAge } from "@/lib/introduction/age";
 import type { ProfileDocument } from "@/lib/introduction/types";
 import type { HardFilterFailureReason } from "./types";
-
-/** A partner's children counting as "young" for the partnerYoungChildrenMatters dealbreaker. */
-const YOUNG_CHILD_AGE_THRESHOLD = 15;
 
 /**
  * Reciprocal hard filters — a pair is only ever eligible if BOTH people's
@@ -13,13 +10,19 @@ const YOUNG_CHILD_AGE_THRESHOLD = 15;
  *
  * When a dealbreaker is engaged (the recipient actually stated a
  * requirement) but the OTHER person's relevant self-report is unknown
- * (null — including "no lo sé" for future-children intent, a genuine but
- * inconclusive answer), the filter FAILS rather than passing. Unknown is
- * never treated as compatible — see README "Unknown handling". New
- * profiles are required to answer the fields this depends on
- * (`childrenBirthYears` when they have children, `wantsFutureChildren`),
- * so in practice this null case should only arise for a profile that
- * completed onboarding before these fields existed.
+ * (null), the filter FAILS rather than passing. Unknown is never treated
+ * as compatible — see README "Unknown handling". New profiles are
+ * required to answer the field this depends on (`hasYoungChildren`, via
+ * the single onboarding "¿Tienes hijos?" question), so in practice this
+ * null case should only arise for a profile that completed onboarding
+ * before that field existed and whose legacy data couldn't be derived
+ * (see types.ts's `deriveLegacyHasYoungChildren`).
+ *
+ * Future-children compatibility is NOT a hard filter here anymore — it
+ * moved to a mutual self-report SCORING signal (see scoring.ts's
+ * `futureChildrenAlignment`), since a hard reject on "not aligned on
+ * wanting more kids" was judged too strict a dealbreaker for this
+ * audience. `Dealbreakers.partnerWantsFutureChildren` is legacy-only now.
  */
 
 function ageOf(profile: ProfileDocument): number | null {
@@ -117,34 +120,20 @@ function acceptsSmoking(profile: ProfileDocument, other: ProfileDocument): boole
 // question or dealbreaker anymore; a candidate whose children are all
 // 15+ always passes this check).
 //
-// Explicit three-way handling on the OTHER person's data: `null`
-// (unknown hasChildren) always fails closed; `false` (confirmed no
-// children) passes since the dealbreaker can never bind; `true` requires
-// looking at their actual birth years. Unknown birth years (missing/empty
-// array) also fail closed rather than being treated as "no young child."
-// When there genuinely is a child under 15, the recipient's own stated
-// requirement decides: `true` ("Sí, me importa") hard-excludes; `false`
-// ("No, no me importa") never does; `null` (never answered) fails closed,
-// the same "unknown dealbreaker" convention used everywhere else here.
+// Reads `hasYoungChildren` directly — asked as its own onboarding
+// question now, never derived from birth years at filter time (see
+// types.ts's `deriveLegacyHasYoungChildren` for the ONE place legacy data
+// still gets converted, on read). `null` (unknown) always fails closed;
+// `false` (no young children, whether or not there are older ones) passes
+// since the dealbreaker can never bind; `true` requires the recipient's
+// own stated requirement: `true` ("Sí, me importaría") hard-excludes;
+// `false` ("No, no me importaría") never does; `null` (never answered)
+// fails closed, the same "unknown dealbreaker" convention used everywhere
+// else here.
 function acceptsYoungChildren(profile: ProfileDocument, other: ProfileDocument): boolean {
-  if (other.visible.hasChildren === null) return false;
-  if (other.visible.hasChildren === false) return true;
-  const birthYears = other.visible.childrenBirthYears;
-  if (!birthYears || birthYears.length === 0) return false; // unknown -> never treated as compatible
-  const hasYoungChild = hasChildUnderAge(birthYears, YOUNG_CHILD_AGE_THRESHOLD);
-  if (!hasYoungChild) return true; // no young children, so this dealbreaker doesn't bind
+  if (other.visible.hasYoungChildren === null) return false;
+  if (other.visible.hasYoungChildren === false) return true;
   return profile.dealbreakers.partnerYoungChildrenMatters === false;
-}
-
-function acceptsFutureChildrenIntention(profile: ProfileDocument, other: ProfileDocument): boolean {
-  const pref = profile.dealbreakers.partnerWantsFutureChildren;
-  // "indiferente", or the recipient never stated a preference at all —
-  // either way there's nothing to check against the other person's data.
-  if (pref == null || pref === "indiferente") return true;
-  const intention = other.visible.wantsFutureChildren;
-  if (intention == null) return false; // unknown -> never treated as compatible
-  if (intention === "no_lo_se") return false; // an explicit "I don't know" never satisfies a specific si/no requirement
-  return intention === pref;
 }
 
 /**
@@ -163,7 +152,6 @@ const CHECKS: Array<{
   { reason: "relationship_intention", accepts: (p, o) => acceptsIntention(p, o) },
   { reason: "smoking", accepts: (p, o) => acceptsSmoking(p, o) },
   { reason: "young_children", accepts: (p, o) => acceptsYoungChildren(p, o) },
-  { reason: "future_children", accepts: (p, o) => acceptsFutureChildrenIntention(p, o) },
 ];
 
 export interface HardFilterEvaluation {

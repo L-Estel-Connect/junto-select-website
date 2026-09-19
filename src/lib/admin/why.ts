@@ -19,6 +19,11 @@ import type { ScoreDimensionBreakdown, ScoreResult } from "@/lib/matching/scorin
  * mismatch.
  */
 
+// Income's line here only ever shows this label plus the existing
+// fit/tier/contribution numbers (never the raw bracket, on either side —
+// see scoring.ts incomeCompatibility's own privacy doc comment), so this
+// surface is privacy-safe by construction: WhyLine simply has no field
+// for a raw value to leak through.
 const DIMENSION_NAMES: Record<ScoreDimensionBreakdown["dimension"], string> = {
   activityFit: "Nivel de actividad física",
   relationshipIntentionAlignment: "Tipo de relación buscada",
@@ -26,6 +31,8 @@ const DIMENSION_NAMES: Record<ScoreDimensionBreakdown["dimension"], string> = {
   heightFit: "Altura",
   languageOverlap: "Idiomas en común",
   educationAlignment: "Formación",
+  futureChildrenAlignment: "Deseo de tener hijos en el futuro",
+  incomeCompatibility: "Compatibilidad de ingresos",
 };
 
 export type WhyTier = "good" | "partial" | "weak" | "mismatch" | "not_evaluated";

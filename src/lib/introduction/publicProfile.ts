@@ -32,7 +32,6 @@ export interface PublicProfileView {
   heightCm: number | null;
   languages: string[];
   hasChildren: boolean | null;
-  childrenCount: number | null;
   relationshipIntention: RelationshipIntention | null;
   smoking: FrequencyLevel | null;
   drinking: FrequencyLevel | null;
@@ -56,7 +55,6 @@ export function buildPublicProfileView(uid: string, profile: ProfileDocument): P
     heightCm: profile.visible.heightCm,
     languages: profile.visible.languages,
     hasChildren: profile.visible.hasChildren,
-    childrenCount: profile.visible.childrenCount,
     relationshipIntention: profile.visible.relationshipIntention,
     smoking: profile.visible.smoking,
     drinking: profile.visible.drinking,

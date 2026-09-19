@@ -58,8 +58,7 @@ type AboutMeCompletionInput = {
     | "educationLevel"
     | "languages"
     | "hasChildren"
-    | "childrenCount"
-    | "childrenBirthYears"
+    | "hasYoungChildren"
     | "wantsFutureChildren"
     | "relationshipIntention"
     | "smoking"
@@ -86,8 +85,7 @@ export type AboutMeFieldName =
   | "incomeRange"
   | "languages"
   | "hasChildren"
-  | "childrenCount"
-  | "childrenBirthYears"
+  | "hasYoungChildren"
   | "wantsFutureChildren"
   | "relationshipIntention"
   | "smoking"
@@ -128,14 +126,12 @@ export function aboutMeMissingFields(profile: AboutMeCompletionInput): AboutMeFi
 
   if (visible.hasChildren === null) {
     missing.push("hasChildren");
-  } else if (visible.hasChildren === true) {
-    if (visible.childrenCount === null) missing.push("childrenCount");
-    if (
-      !visible.childrenBirthYears ||
-      visible.childrenBirthYears.length !== visible.childrenCount
-    ) {
-      missing.push("childrenBirthYears");
-    }
+  } else if (visible.hasYoungChildren === null) {
+    // A profile whose `hasChildren` was answered under the OLD count/ages
+    // model but couldn't be derived into `hasYoungChildren` (see types.ts
+    // `deriveLegacyHasYoungChildren` case C) — genuinely missing the one
+    // fact the current single question actually needs.
+    missing.push("hasYoungChildren");
   }
   if (visible.wantsFutureChildren === null) missing.push("wantsFutureChildren");
 
@@ -199,8 +195,7 @@ export type PreferencesFieldName =
   | "maxDistance"
   | "relationshipIntentionsAccepted"
   | "smokingAccepted"
-  | "partnerYoungChildrenMatters"
-  | "partnerWantsFutureChildren";
+  | "partnerYoungChildrenMatters";
 
 /**
  * The exact list of "Lo que buscas" (dealbreaker) fields still
@@ -240,7 +235,6 @@ export function preferencesMissingFields(dealbreakers: Dealbreakers): Preference
   if (dealbreakers.relationshipIntentionsAccepted.length === 0) missing.push("relationshipIntentionsAccepted");
   if (dealbreakers.smokingAccepted.length === 0) missing.push("smokingAccepted");
   if (dealbreakers.partnerYoungChildrenMatters === null) missing.push("partnerYoungChildrenMatters");
-  if (dealbreakers.partnerWantsFutureChildren === null) missing.push("partnerWantsFutureChildren");
   return missing;
 }
 

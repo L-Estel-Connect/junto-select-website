@@ -14,7 +14,7 @@ import {
   educationLabel,
   frequencyLabel,
   futureChildrenIntentionLabel,
-  futureChildrenPreferenceLabel,
+  hasYoungChildrenLabel,
   genderLabel,
   languageList,
   relationshipIntentionLabel,
@@ -232,7 +232,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ uid: st
               profile.hasChildren === null
                 ? ""
                 : profile.hasChildren
-                  ? `Sí (${profile.childrenBirthYears?.length ?? profile.childrenCount ?? "?"})`
+                  ? `Sí — menores de 15: ${hasYoungChildrenLabel(profile.hasYoungChildren)}`
                   : "No"
             }
           />
@@ -277,10 +277,6 @@ export default function MemberDetailPage({ params }: { params: Promise<{ uid: st
               <Field
                 label="¿Le importan hijos menores de 15 años?"
                 value={youngChildrenMattersLabel(profile.dealbreakers.partnerYoungChildrenMatters)}
-              />
-              <Field
-                label="¿Debe querer hijos futuros?"
-                value={futureChildrenPreferenceLabel(profile.dealbreakers.partnerWantsFutureChildren)}
               />
             </div>
           </div>

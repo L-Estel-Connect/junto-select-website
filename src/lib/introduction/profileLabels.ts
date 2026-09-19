@@ -51,9 +51,7 @@ export const ACTIVITY_LABELS: Record<ActivityLevel, string> = {
   poco_activo: "Poco activo/a",
 };
 
-export function childrenLine(hasChildren: boolean | null, count: number | null): string | null {
+export function childrenLine(hasChildren: boolean | null): string | null {
   if (hasChildren === null) return null;
-  if (!hasChildren) return "Sin hijos";
-  if (!count) return "Tiene hijos";
-  return count >= 3 ? "Tiene 3 o más hijos" : `Tiene ${count} ${count === 1 ? "hijo" : "hijos"}`;
+  return hasChildren ? "Tiene hijos" : "Sin hijos";
 }

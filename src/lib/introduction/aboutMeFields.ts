@@ -13,7 +13,6 @@ export type StepId =
   | "smoking"
   | "drinking"
   | "activityLevel"
-  | "childrenAges"
   | "wantsFutureChildren"
   | "marketAvailability";
 
@@ -64,19 +63,19 @@ export interface ChipsStep extends BaseStep {
   maxSelect?: number;
 }
 
+/**
+ * A single question with exactly three options, each writing BOTH
+ * `visible.hasChildren` and `visible.hasYoungChildren` atomically (see
+ * `ChildrenInput` in StepQuestion.tsx): "no children" (false/false), "yes,
+ * all 15+" (true/false), "yes, at least one under 15" (true/true). There
+ * is deliberately no separate child-count or per-child-age question
+ * anymore — `hasYoungChildren` is the only children-related fact the
+ * matching engine needs (see hardFilters.ts acceptsYoungChildren), and
+ * asking for it directly avoids ever deriving it from birth years that
+ * would go stale.
+ */
 export interface ChildrenStep extends BaseStep {
   type: "children";
-}
-
-/**
- * One age input per child, converted to a birth YEAR at save time (never
- * a full birth date — see README). Auto-skipped by OnboardingWizard when
- * the person answered "no children" on the ChildrenStep above, since this
- * step's own `required` doesn't drive that (there's no per-step branching
- * mechanism in the wizard) — see OnboardingWizard's dedicated effect.
- */
-export interface ChildrenAgesStep extends BaseStep {
-  type: "childrenAges";
 }
 
 export type AboutMeStep =
@@ -85,8 +84,7 @@ export type AboutMeStep =
   | DateStep
   | SelectStep
   | ChipsStep
-  | ChildrenStep
-  | ChildrenAgesStep;
+  | ChildrenStep;
 
 /**
  * Every question here maps to something the future matching engine or the
@@ -102,13 +100,12 @@ export type AboutMeStep =
  *  - birthDate, incomeRange -> matching-only, never displayed. Income is
  *    collected as a bracket, not an exact figure, specifically so it can
  *    inform lifestyle-compatibility without ever being shown to anyone.
- *  - childrenAges, wantsFutureChildren, marketAvailability -> added later
- *    (see README "Children / future children" and "Madrid-only scope")
- *    specifically so the matching engine can enforce the
- *    partnerYoungChildrenMatters / partnerWantsFutureChildren dealbreakers
- *    reciprocally, and so V1's Madrid-only pool restriction has real data
- *    to gate on. Deliberately appended at the end of this array — see the
- *    comment just above those steps for why.
+ *  - wantsFutureChildren, marketAvailability -> added later (see README
+ *    "Madrid-only scope") specifically so the matching engine can score
+ *    mutual future-children compatibility (see scoring.ts
+ *    futureChildrenAlignment) and so V1's Madrid-only pool restriction has
+ *    real data to gate on. Deliberately appended at the end of this array
+ *    — see the comment just above those steps for why.
  *
  * "Sport / physical activity" and "general lifestyle / activity level"
  * from the original brief are deliberately merged into one
@@ -226,6 +223,8 @@ export const aboutMeSteps: AboutMeStep[] = [
     path: "visible.hasChildren",
     type: "children",
     question: "¿Tienes hijos?",
+    helper:
+      "Nos ayuda a encontrar mejores afinidades. Solo necesitamos saber si tienes hijos menores de 15 años, no su edad exacta.",
     required: true,
   },
   {
@@ -280,7 +279,7 @@ export const aboutMeSteps: AboutMeStep[] = [
       { value: "poco_activo", label: "Poco activo/a" },
     ],
   },
-  // The four steps below were added after the original nine shipped, and
+  // The two steps below were added after the original nine shipped, and
   // are deliberately APPENDED here rather than inserted next to the
   // questions they relate to (children, city). A returning profile
   // resumes the wizard at its stored `onboardingStepIndex`, which for
@@ -290,18 +289,6 @@ export const aboutMeSteps: AboutMeStep[] = [
   // to answer just what's missing, with no migration or edit-page needed.
   // Inserting these earlier would silently skip them for everyone who
   // already passed that position.
-  {
-    id: "childrenAges",
-    path: "visible.childrenBirthYears",
-    type: "childrenAges",
-    question: "¿Qué edad tienen tus hijos?",
-    helper:
-      "Nos ayuda a encontrar mejores afinidades. Guardamos el año de nacimiento, no la fecha exacta.",
-    // Not a normal required/optional question — it's skipped entirely
-    // (auto-answered) when hasChildren isn't true, and mandatory when it
-    // is. See OnboardingWizard's auto-skip effect.
-    required: false,
-  },
   {
     id: "wantsFutureChildren",
     path: "visible.wantsFutureChildren",

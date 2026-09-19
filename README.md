@@ -514,46 +514,47 @@ itself is kept only as a historical/informational flag now.
 
 ### Children / future children
 
-Reciprocal hard filters for `partnerHasYoungChildrenOk` and
-`partnerWantsFutureChildren` (the dealbreaker fields already existed,
-already required, already rendered in `PreferencesSection.tsx`) were
-previously **not enforced** — there was no self-report field on the
-*other* person's profile to check them against. That gap is closed:
+The children model was redesigned again (see "Scoring V2" below for the
+sibling redesign of scoring): the earlier per-child birth-years model
+(`childrenBirthYears`, an onboarding `childrenAges` step) is now
+**LEGACY** — still typed, for reading old Firestore documents, but no
+longer asked or written by any active UI.
 
-- `AboutMeVisible.childrenBirthYears: number[] | null` — one entry per
-  child, birth **year only**, never a full birth date and never a stored
-  static "age" that would go stale. The onboarding step
-  (`aboutMeFields.ts`'s `childrenAges` step, rendered by
-  `ChildrenAgesInput` in `StepQuestion.tsx`) still *asks* for each
-  child's current age — simplest for the person answering — and converts
-  it to a birth year at save time.
-- Whether any child counts as "young" (under 15, for
-  `partnerHasYoungChildrenOk`) is never persisted — it's derived on
-  demand from `childrenBirthYears`, in `src/lib/introduction/age.ts`
-  (`hasChildUnderAge`), every time the matching engine needs it. There is
-  no stored `hasChildUnder15` field to ever drift out of sync with the
-  birth years it should be derived from.
-- **Birth-year boundary ambiguity**: subtracting a birth *year* alone
-  from the current year is ambiguous by exactly ±1 year, depending on
-  whether the birthday has happened yet. `isPossiblyUnderAge()` always
-  resolves that ambiguity toward "could still be under the threshold" —
-  e.g. birth year 2011 in 2026 (`2026-2011=15`) is treated as possibly
-  still 14, never confidently "definitely 15+". This is the same "never
-  treat ambiguous data as satisfying a hard requirement" rule applied to
-  date math instead of missing data.
+- `AboutMeVisible.hasYoungChildren: boolean | null` — the ONLY
+  children-related fact the matching engine needs, asked directly as one
+  of three options on the single "¿Tienes hijos?" onboarding question
+  (`aboutMeFields.ts`'s `children` step, rendered by `ChildrenInput` in
+  `StepQuestion.tsx`): "No tengo hijos" (`hasChildren: false,
+  hasYoungChildren: false`), "Sí, y todos tienen 15 años o más"
+  (`true, false`), "Sí, y al menos uno tiene menos de 15 años"
+  (`true, true`). No child count, no per-child ages, nothing that could
+  go stale — this replaced the derive-on-demand-from-birth-years approach
+  entirely.
+- **Legacy data compatibility** (`types.ts`'s
+  `deriveLegacyHasYoungChildren`, applied inside `withProfileDefaults` so
+  every raw Firestore read is normalized the same way): (A)
+  `hasChildren === false` on an old document derives `hasYoungChildren:
+  false` directly (no children at all definitively means no young
+  children either); (B) `hasChildren === true` with at least one legacy
+  `childrenBirthYears` entry derives it via the same `hasChildUnderAge`
+  logic the old hard filter used, so a fully-answered old profile is
+  never made to re-answer; (C) `hasChildren === true` with no birth years
+  on record derives `null` (genuinely unknown) — `isAboutMeComplete()`
+  then routes that profile back into onboarding to answer the one new
+  question, and the hard filter fails closed on it in the meantime, same
+  as any other unknown.
 - `AboutMeVisible.wantsFutureChildren: "si" | "no" | "no_lo_se" | null` —
-  a new, separate type from the existing partner-preference
-  `FutureChildrenPreference` (which has `"indiferente"` instead — that
-  doesn't make sense as a description of one's own desire).
-- **Unknown data is never treated as compatible.** If a dealbreaker is
-  actually engaged (the recipient stated a real requirement, not
-  "indiferente"/unset) and the other person's relevant self-report field
-  is `null` — or, for future-children, is the honest-but-inconclusive
-  `"no_lo_se"` — the hard filter **fails** (the pair is excluded), never
-  passes. Both new self-report fields are required for `isAboutMeComplete()`
-  (conditionally for `childrenBirthYears`, only when `hasChildren` is
-  true), so in practice this null case should only affect profiles that
-  completed onboarding before these fields existed.
+  unchanged: a self-report of the person's OWN desire, kept separate from
+  the (now-legacy) partner-preference `FutureChildrenPreference` type
+  (which has `"indiferente"` instead — that doesn't make sense as a
+  description of one's own desire). No longer a hard filter (see "Scoring
+  V2" below) — it now feeds `scoring.ts`'s `futureChildrenAlignment`
+  instead, comparing both sides' own answers to this question.
+- **Unknown data is never treated as compatible.** The young-children
+  hard filter (`hardFilters.ts` `acceptsYoungChildren`) still fails
+  closed on `hasYoungChildren === null` exactly as before — nothing about
+  the redesign changed that principle, only how the underlying fact is
+  collected/derived.
 
 ### Madrid-only scope (V1)
 
@@ -614,9 +615,9 @@ this order, never reordered or overridden by anything downstream:
 
 1. **Hard requirements**, reciprocal — a pair is only considered if
    *both* people's `dealbreakers` accept the other (gender, age range,
-   relationship intention, smoking, children — including young-children
-   and future-children intent, both fully enforced since the schema
-   correction that added `childrenBirthYears`/`wantsFutureChildren`).
+   relationship intention, smoking, young-children). Future-children
+   compatibility is deliberately NOT a hard filter anymore — see "Scoring
+   V2" below for why it moved to a soft scoring signal instead.
    Every `accepts*` check in `hardFilters.ts` is explicitly written so
    `null`/unknown data can never satisfy the requirement — see "Hard-filter
    audit fixes" below for the two places this was found to be violated in
@@ -703,9 +704,67 @@ answer scored a full 15-point match. V2:
   change in `relationshipIntentionAlignment()`, and traceable via
   `SCORING_VERSION` if they are.
 
-Weights when everything is evaluable (sum = 90, used as the coverage
-denominator): activity 20, relationship-intention 20, drinking 15,
-height 15, language overlap 15, education 5.
+Weights when everything is evaluable under V2-V4 (sum = 90, used as the
+coverage denominator for those historical versions): activity 20,
+relationship-intention 20, drinking 15, height 15, language overlap 15,
+education 5. See "Scoring V5" immediately below for the CURRENT weight
+table — `scoring.ts` only ever implements the latest version; this V2
+writeup stays purely as the historical record of the coverage/confidence
+design this section introduced, which V5 keeps unchanged.
+
+### Scoring V5
+
+The matching-model redesign that removed the `future_children` hard
+filter (see "Children / future children" above) also rebalanced scoring
+end to end. `scoring.ts`'s `SCORING_VERSION` is `5`.
+
+- **`futureChildrenAlignment` (new, weight 20)** — future-children
+  compatibility moved IN from a hard filter to here: both sides' own
+  `wantsFutureChildren` self-report is compared (never a partner
+  requirement — the removed dealbreaker compared one side's stated
+  requirement against the other's self-report; this compares both
+  self-reports directly, so it's inherently symmetric). si+si or no+no =
+  1.0; either side "no_lo_se" against a definite si/no = 0.6; no_lo_se+
+  no_lo_se = 0.5; si+no = 0.15 (a real but no-longer-disqualifying
+  mismatch).
+- **`incomeCompatibility` (new, weight 10)** — the first time
+  `private.incomeRange` feeds matching at all (previously collected but
+  used by zero matching logic). Bracket-distance only: adjacent brackets
+  (e.g. `40k_80k` vs `80k_150k`) score 0.66, two apart 0.33, three apart
+  (`menos_40k` vs `mas_150k`) 0.0, same bracket 1.0. `"prefiero_no_decirlo"`
+  on either side makes it non-evaluable, same principle as
+  `educationAlignment`'s handling of its own decline-to-answer option.
+  **Never exposed to either member** — `publicProfile.ts`'s
+  `buildPublicProfileView()` never includes `private.incomeRange`, and the
+  admin "why" breakdown (`why.ts`) shows only this dimension's
+  `fit`/`contribution`, never the underlying bracket, on either side.
+- **`educationAlignment` gains ordinal adjacency** (previously exact-match
+  only): the three real levels form a scale, one step apart (e.g.
+  universidad vs máster) scores 0.5 instead of 0, two steps apart still 0.
+  Still deliberately a minor signal (weight 10, unchanged in spirit from
+  V2-V4's "must never rank by educational status") — adjacency only
+  softens a near-miss, it doesn't turn this into a bigger driver.
+- **`languageOverlap` reformulated**: the old strict intersection/union
+  Jaccard index under-rewarded two people who share every language they
+  speak when one of them simply speaks more languages overall (a large
+  union alone dragged the ratio down). V5 instead rewards ANY shared
+  language highly: 0 shared = 0 (still a real mismatch), 1 shared = 0.85,
+  each additional shared language adds a small bonus up to a 1.0 cap.
+- **Every other dimension keeps its V2-V4 formula**, just reweighted.
+
+Weights when everything is evaluable (sum = 100, used as the coverage
+denominator): relationship-intention 25, height 20, future-children
+alignment 20, income compatibility 10, education 10, language overlap 10,
+activity 3, drinking 2.
+
+`MIN_COVERAGE_FOR_FULL_CONFIDENCE` stays `0.5`, the same floor V2
+introduced — re-derived rather than carried over blindly: the three
+dimensions guaranteed evaluable for every pair reaching scoring
+(relationship-intention 25 + future-children-alignment 20 + language
+overlap 10 = 55, all three backed by required, non-skippable onboarding
+fields) already clear 0.5 of the new 100-point total, so a pair with only
+those three evaluable still reaches full confidence — exactly the
+V2-era design intent, preserved under the new numbers.
 
 **Internal observability** (never shown to a member): every proposal now
 also stores `scoreCoverage`, `scoreConfidence`, and `scoreBreakdown` (the

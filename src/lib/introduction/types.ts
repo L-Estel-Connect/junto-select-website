@@ -1,4 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
+import { hasChildUnderAge } from "./age";
 
 export type Gender = "mujer" | "hombre";
 
@@ -30,6 +31,16 @@ export type ActivityLevel =
 
 export type DistancePreference = "misma_ciudad" | "hasta_50km" | "sin_limite";
 
+/**
+ * LEGACY, dealbreaker-side type only — kept solely so
+ * `Dealbreakers.partnerWantsFutureChildren` (also legacy, read-only) can
+ * still type old Firestore documents. No longer collected by any UI and no
+ * longer read by any active hard-filter or scoring logic: future-children
+ * compatibility moved from a partner REQUIREMENT to a mutual SELF-REPORT
+ * scoring signal (see `scoring.ts`'s `futureChildrenAlignment`, which
+ * compares both sides' own `FutureChildrenIntention` instead). See the
+ * matching-model redesign that removed this dealbreaker.
+ */
 export type FutureChildrenPreference = "si" | "no" | "indiferente";
 
 /**
@@ -121,6 +132,16 @@ export interface Dealbreakers {
   // hardFilters.ts acceptsYoungChildren). See normalizeYoungChildrenMatters
   // above for how legacy field names/values map onto this.
   partnerYoungChildrenMatters: boolean | null;
+  /**
+   * LEGACY — no longer collected (removed from `PreferencesSection.tsx`)
+   * and no longer read by `hardFilters.ts` (the `future_children` hard
+   * filter was removed) or by `scoring.ts` (future-children compatibility
+   * is now `futureChildrenAlignment`, a mutual self-report scoring
+   * dimension). Kept only so old Firestore documents that still carry a
+   * value here don't break `ProfileDocument` typing; `withProfileDefaults`
+   * still defaults it to `null` for new/incomplete docs, but nothing
+   * writes or reads it as an active requirement anymore.
+   */
   partnerWantsFutureChildren: FutureChildrenPreference | null;
 }
 
@@ -227,14 +248,30 @@ export interface AboutMeVisible {
   heightCm: number | null;
   languages: string[];
   hasChildren: boolean | null;
+  /**
+   * The ONLY children-related fact the matching engine needs from this
+   * person's own data: does at least one of their children count as
+   * "young" (under 15)? Answered directly, as one of the single
+   * onboarding "¿Tienes hijos?" question's three options — no birth years,
+   * no child count. Only meaningful when `hasChildren === true`; `null`
+   * means either "no children" (irrelevant) or "not yet answered". See
+   * hardFilters.ts's `acceptsYoungChildren`, which reads this directly
+   * instead of deriving it from birth years.
+   */
+  hasYoungChildren: boolean | null;
+  /**
+   * LEGACY — no longer asked (the onboarding `childrenAges` step and its
+   * `ChildrenAgesInput`/`AboutMeEditSection` editing UI were removed). Kept
+   * only so old Firestore documents don't break `ProfileDocument` typing;
+   * no active code reads this anymore. `hasYoungChildren` above is what
+   * the matching engine now uses; see the matching-model redesign that
+   * replaced per-child birth years with this single direct question.
+   */
   childrenCount: number | null;
-  // One entry per child, birth YEAR only — never a full birth date, and
-  // never a static "age" that would go stale. Whether any child is under
-  // a given age threshold (e.g. 15, for the partnerYoungChildrenMatters
-  // dealbreaker) is always DERIVED from this at the moment it's needed
-  // (see src/lib/introduction/age.ts) — there is no separate stored
-  // "under 15" flag to ever fall out of sync with this data. Only
-  // meaningful when hasChildren === true; null means not yet answered.
+  /**
+   * LEGACY — see `childrenCount`'s doc comment; same removal, same reason.
+   * Not read by hardFilters.ts or scoring.ts anymore.
+   */
   childrenBirthYears: number[] | null;
   wantsFutureChildren: FutureChildrenIntention | null;
   relationshipIntention: RelationshipIntention | null;
@@ -366,6 +403,7 @@ export const emptyAboutMeVisible: AboutMeVisible = {
   heightCm: null,
   languages: [],
   hasChildren: null,
+  hasYoungChildren: null,
   childrenCount: null,
   childrenBirthYears: null,
   wantsFutureChildren: null,
@@ -381,6 +419,44 @@ export const emptyAboutMePrivate: AboutMePrivate = {
   birthDate: null,
   incomeRange: null,
 };
+
+/** Threshold used ONLY to derive `hasYoungChildren` from legacy per-child birth years — see `deriveLegacyHasYoungChildren`. hardFilters.ts itself no longer needs this constant, since `hasYoungChildren` is now asked directly. */
+const LEGACY_YOUNG_CHILD_AGE_THRESHOLD = 15;
+
+/**
+ * Backward-compatible read-side derivation of `visible.hasYoungChildren`
+ * for a profile written before that field existed. Exactly three cases,
+ * matching the three ways a pre-redesign profile could have answered the
+ * old "¿Tienes hijos?" + "¿Cuántos?" + "¿Qué edad tienen?" questions:
+ *
+ * (A) `hasChildren === false` — no children at all, so definitively no
+ *     young children either; derive `false`, no re-ask needed.
+ * (B) `hasChildren === true` AND at least one legacy `childrenBirthYears`
+ *     entry exists — derive from those birth years directly (the same
+ *     `hasChildUnderAge` logic the old hard filter used), so a profile
+ *     that fully answered the old flow is never made to re-answer.
+ * (C) `hasChildren === true` with no birth years on record (either never
+ *     answered under the old flow, or `hasChildren` itself was never
+ *     answered) — genuinely unknown; derive `null`, which both
+ *     `isStepAnswered` (routes back into onboarding) and
+ *     `acceptsYoungChildren` (fails closed) already handle correctly.
+ *
+ * A profile that already has a real `hasYoungChildren` value (answered
+ * under the current single-question model) always uses that as-is — this
+ * derivation only ever fires for data that predates the field.
+ */
+function deriveLegacyHasYoungChildren(
+  hasChildren: boolean | null,
+  hasYoungChildren: unknown,
+  childrenBirthYears: unknown,
+): boolean | null {
+  if (hasYoungChildren === true || hasYoungChildren === false) return hasYoungChildren;
+  if (hasChildren === false) return false; // (A)
+  if (hasChildren === true && Array.isArray(childrenBirthYears) && childrenBirthYears.length > 0) {
+    return hasChildUnderAge(childrenBirthYears as number[], LEGACY_YOUNG_CHILD_AGE_THRESHOLD); // (B)
+  }
+  return null; // (C)
+}
 
 /**
  * Backfills sub-objects/fields a raw Firestore document predates (added to
@@ -399,7 +475,15 @@ export function withProfileDefaults(
   data: Partial<ProfileDocument>,
 ): ProfileDocument {
   return {
-    visible: { ...emptyAboutMeVisible, ...data.visible },
+    visible: {
+      ...emptyAboutMeVisible,
+      ...data.visible,
+      hasYoungChildren: deriveLegacyHasYoungChildren(
+        data.visible?.hasChildren ?? null,
+        data.visible?.hasYoungChildren,
+        data.visible?.childrenBirthYears,
+      ),
+    },
     private: { ...emptyAboutMePrivate, ...data.private },
     photos: data.photos ?? [],
     dealbreakers: {

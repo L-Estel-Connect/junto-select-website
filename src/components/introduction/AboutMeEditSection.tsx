@@ -47,7 +47,6 @@ const EDITABLE_STEP_IDS: StepId[] = [
   "heightCm",
   "languages",
   "children",
-  "childrenAges",
   "relationshipIntention",
   "smoking",
   "drinking",
@@ -87,30 +86,23 @@ function summarize(profile: ProfileDocument, id: StepId): string {
     case "children":
       if (profile.visible.hasChildren === null) return "No especificado";
       if (profile.visible.hasChildren === false) return "No";
-      return `Sí (${profile.visible.childrenCount ?? "?"})`;
-    case "childrenAges": {
-      const years = profile.visible.childrenBirthYears;
-      if (!years || years.length === 0) return "No especificado";
-      const currentYear = new Date().getFullYear();
-      return years.map((y) => `${currentYear - y} años`).join(", ");
-    }
+      if (profile.visible.hasYoungChildren === null) return "Sí (edad no especificada)";
+      return profile.visible.hasYoungChildren
+        ? "Sí, con hijos menores de 15 años"
+        : "Sí, todos mayores de 15 años";
     default:
       return optionLabel(id, getByPath(profile, aboutMeSteps.find((s) => s.id === id)!.path) as string | null);
   }
 }
 
-type ChildrenDraft = { hasChildren: boolean | null; childrenCount: number | null };
+type ChildrenDraft = { hasChildren: boolean | null; hasYoungChildren: boolean | null };
 
-/** The DRAFT for `childrenAges` is the ages themselves (nulls where unfilled) — converted to birth years only at save time, same as onboarding's own ChildrenAgesInput. */
 function initialDraftFor(step: AboutMeStep, profile: ProfileDocument): unknown {
   if (step.type === "children") {
-    return { hasChildren: profile.visible.hasChildren, childrenCount: profile.visible.childrenCount } satisfies ChildrenDraft;
-  }
-  if (step.type === "childrenAges") {
-    const count = profile.visible.childrenCount ?? 0;
-    const currentYear = new Date().getFullYear();
-    const years = profile.visible.childrenBirthYears ?? [];
-    return Array.from({ length: count }, (_, i) => (years[i] !== undefined ? currentYear - years[i] : null));
+    return {
+      hasChildren: profile.visible.hasChildren,
+      hasYoungChildren: profile.visible.hasYoungChildren,
+    } satisfies ChildrenDraft;
   }
   return getByPath(profile, step.path);
 }
@@ -130,12 +122,8 @@ function isDraftValid(step: AboutMeStep, draft: unknown): boolean {
     case "children": {
       const d = draft as ChildrenDraft;
       if (d.hasChildren === null) return false;
-      if (d.hasChildren === true && d.childrenCount === null) return false;
+      if (d.hasChildren === true && d.hasYoungChildren === null) return false;
       return true;
-    }
-    case "childrenAges": {
-      const ages = draft as Array<number | null>;
-      return ages.every((a) => a !== null && Number.isFinite(a) && a >= 0 && a <= 90);
     }
     default:
       return true;
@@ -229,70 +217,28 @@ function FieldEditor({
     case "children": {
       const d = draft as ChildrenDraft;
       return (
-        <div>
-          <div className="space-y-3">
-            <button
-              type="button"
-              onClick={() => setDraft({ hasChildren: true, childrenCount: d.childrenCount } satisfies ChildrenDraft)}
-              className={cardOptionClasses(d.hasChildren === true)}
-            >
-              Sí
-            </button>
-            <button
-              type="button"
-              onClick={() => setDraft({ hasChildren: false, childrenCount: null } satisfies ChildrenDraft)}
-              className={cardOptionClasses(d.hasChildren === false)}
-            >
-              No
-            </button>
-          </div>
-          {d.hasChildren === true && (
-            <div className="mt-6">
-              <p className="mb-3 text-[15px] text-ink-soft">¿Cuántos?</p>
-              <div className="flex gap-2.5">
-                {[1, 2, 3].map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setDraft({ hasChildren: true, childrenCount: n } satisfies ChildrenDraft)}
-                    className={`flex-1 rounded-full border px-4 py-3 text-[15px] transition-colors ${
-                      d.childrenCount === n
-                        ? "border-rose-dark bg-rose-tint text-ink"
-                        : "border-hairline text-ink hover:border-rose"
-                    }`}
-                  >
-                    {n === 3 ? "3+" : n}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    }
-    case "childrenAges": {
-      const ages = draft as Array<number | null>;
-      return (
-        <div className="space-y-4">
-          {ages.map((age, i) => (
-            <div key={i}>
-              <p className="mb-2 text-[14px] text-ink-soft">Hijo/a {i + 1}</p>
-              <input
-                type="number"
-                inputMode="numeric"
-                autoFocus={i === 0}
-                min={0}
-                max={90}
-                value={age ?? ""}
-                onChange={(e) => {
-                  const next = [...ages];
-                  next[i] = e.target.value.trim() === "" ? null : Number(e.target.value);
-                  setDraft(next);
-                }}
-                className={inputClasses}
-              />
-            </div>
-          ))}
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => setDraft({ hasChildren: false, hasYoungChildren: false } satisfies ChildrenDraft)}
+            className={cardOptionClasses(d.hasChildren === false)}
+          >
+            No tengo hijos
+          </button>
+          <button
+            type="button"
+            onClick={() => setDraft({ hasChildren: true, hasYoungChildren: false } satisfies ChildrenDraft)}
+            className={cardOptionClasses(d.hasChildren === true && d.hasYoungChildren === false)}
+          >
+            Sí, y todos tienen 15 años o más
+          </button>
+          <button
+            type="button"
+            onClick={() => setDraft({ hasChildren: true, hasYoungChildren: true } satisfies ChildrenDraft)}
+            className={cardOptionClasses(d.hasChildren === true && d.hasYoungChildren === true)}
+          >
+            Sí, y al menos uno tiene menos de 15 años
+          </button>
         </div>
       );
     }
@@ -325,10 +271,6 @@ export default function AboutMeEditSection({ uid }: { uid: string }) {
     return <IntroductionLoading />;
   }
 
-  const visibleFieldIds = EDITABLE_STEP_IDS.filter(
-    (id) => id !== "childrenAges" || profile.visible.hasChildren === true,
-  );
-
   function handleEdit(id: StepId) {
     if (!profile) return;
     const step = aboutMeSteps.find((s) => s.id === id)!;
@@ -350,15 +292,6 @@ export default function AboutMeEditSection({ uid }: { uid: string }) {
     setSaving(true);
     try {
       const fields = computeStepFields(step, draft);
-      // Stale-data hygiene: if this edit just turned "¿Tienes hijos?" to
-      // No, any previously stored birth years no longer describe anyone —
-      // clear them rather than leaving inapplicable data behind (they'd
-      // otherwise be invisible in this UI, since the row is hidden
-      // whenever hasChildren isn't true, but would still linger in
-      // Firestore untouched).
-      if (expandedId === "children" && (draft as ChildrenDraft).hasChildren === false) {
-        fields["visible.childrenBirthYears"] = null;
-      }
       // A self-attribute edit can make a profile that was matching-eligible
       // stop being so (e.g. hasChildren flipped to true but birth years
       // aren't answered yet) — or the reverse, once completed. Recompute
@@ -399,7 +332,7 @@ export default function AboutMeEditSection({ uid }: { uid: string }) {
       </p>
 
       <div className="mt-8">
-        {visibleFieldIds.map((id) => {
+        {EDITABLE_STEP_IDS.map((id) => {
           const step = aboutMeSteps.find((s) => s.id === id)!;
           const expanded = expandedId === id;
           return (

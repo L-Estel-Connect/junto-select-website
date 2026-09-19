@@ -36,7 +36,7 @@ export default function PublicProfileCard({ profile }: { profile: PublicProfileV
       : null,
     profile.heightCm ? `${profile.heightCm} cm` : null,
     languages.length > 0 ? languages.join(", ") : null,
-    childrenLine(profile.hasChildren, profile.childrenCount),
+    childrenLine(profile.hasChildren),
     profile.relationshipIntention ? RELATIONSHIP_LABELS[profile.relationshipIntention] : null,
     profile.smoking ? SMOKING_LABELS[profile.smoking] : null,
     profile.drinking ? DRINKING_LABELS[profile.drinking] : null,
