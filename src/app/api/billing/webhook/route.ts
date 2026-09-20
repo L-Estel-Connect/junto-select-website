@@ -7,6 +7,7 @@ import { isEntitledStatus, type BillingDocument, type BillingStatus } from "@/li
 import { matchingPeriodDate } from "@/lib/matching/config";
 import { queueOutboundEmail } from "@/lib/notifications/outboundEmails";
 import type { ProfileDocument } from "@/lib/introduction/types";
+import { computeEventBenefitAnchorUpdate, invalidateCurrentEventBenefitForMember } from "@/lib/eventBenefits/lifecycle";
 
 export const runtime = "nodejs";
 
@@ -191,7 +192,25 @@ async function syncSubscription(subscription: Stripe.Subscription): Promise<void
   const status = mapStripeStatus(subscription.status);
   const now = new Date();
 
-  await adminDb.doc(`billing/${uid}`).set(
+  const billingRef = adminDb.doc(`billing/${uid}`);
+  const previousBillingSnap = await billingRef.get();
+  const previousBilling = previousBillingSnap.exists ? (previousBillingSnap.data() as BillingDocument) : null;
+  const wasEntitled = previousBilling ? isEntitledStatus(previousBilling.status) : false;
+
+  // Event benefit (Ticket Tailor monthly discount) anchor — seeded the
+  // same "first time we see this subscription id" way as the matching
+  // anchor below, but into billing/{uid} with its own dedicated fields
+  // (see computeEventBenefitAnchorUpdate's doc comment for why it's kept
+  // separate from matching's anchor rather than reusing it).
+  const eventBenefitAnchorUpdate =
+    typeof subscription.start_date === "number"
+      ? computeEventBenefitAnchorUpdate(previousBilling?.eventBenefitSubscriptionId ?? null, {
+          id: subscription.id,
+          start_date: subscription.start_date,
+        })
+      : null;
+
+  await billingRef.set(
     {
       stripeCustomerId: typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id,
       stripeSubscriptionId: subscription.id,
@@ -201,9 +220,22 @@ async function syncSubscription(subscription: Stripe.Subscription): Promise<void
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
       canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null,
       updatedAt: now,
+      ...(eventBenefitAnchorUpdate ?? {}),
     } satisfies Partial<BillingDocument>,
     { merge: true },
   );
+
+  // Entitlement genuinely ended (active/trialing/past_due -> anything
+  // else) — invalidate whatever event benefit is currently active. Never
+  // the reverse direction: staying entitled (including past_due, which
+  // IS entitled) never touches the event benefit here at all. Best-effort
+  // and isolated from the rest of this handler's success/failure, exactly
+  // like the matching-anchor block below.
+  if (wasEntitled && !isEntitledStatus(status)) {
+    await invalidateCurrentEventBenefitForMember(uid).catch((error) => {
+      console.error(`Stripe webhook: failed to invalidate event benefit for uid ${uid}`, error);
+    });
+  }
 
   // BILLING ENTITLEMENT vs MATCHING ELIGIBILITY: this is the ONLY thing a
   // payment event is ever allowed to influence. It flips whether this

@@ -143,6 +143,26 @@ service cloud.firestore {
     // only, Admin-SDK-only, no legitimate client read or write path — left
     // uncovered on purpose and falls through to the default-deny below.
 
+    // `eventBenefits/{cycleKey}` — one immutable-once-settled record per
+    // monthly Ticket Tailor event-benefit cycle (see
+    // src/lib/eventBenefits/lifecycle.ts). Owner-only read, same pattern
+    // as `proposals`/`introductions`; never client-writable — a member
+    // can never create a benefit for themself, change its percentage,
+    // manufacture a cycle key, or mark one active/invalidated. Every
+    // write is Admin SDK only (the webhook, the due-scan scheduler).
+    match /eventBenefits/{cycleKey} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow write: if false;
+    }
+
+    // eligibleTicketTailorEvents/{ticketTailorEventId}: admin-managed
+    // configuration of which Ticket Tailor events/ticket types
+    // participate in the member benefit — Admin-SDK-only (the admin
+    // dashboard's session-authorized API routes), no legitimate client
+    // read or write path at all — left uncovered on purpose, same
+    // treatment as `matchingCycles`/`legacyImports` above, and falls
+    // through to the default-deny below.
+
     // A member-facing proposal from the V1 matching engine. Recipient-only
     // read (matched against the uid the proposal was actually generated
     // for, snapshotted at creation time — see src/lib/matching/engine.ts).

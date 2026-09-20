@@ -23,7 +23,7 @@ function MembershipOffer() {
         </li>
         <li className="flex gap-2.5">
           <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-ink-soft" />
-          <span>Descuentos y ventajas en eventos Junto Select</span>
+          <span>20 % de descuento en un evento Junto cada mes</span>
         </li>
         <li className="flex gap-2.5">
           <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-ink-soft" />

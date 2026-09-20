@@ -208,3 +208,17 @@ env:
     value: "price_1UFHD2GlmEAMyuMwRWxOlFjl"
     availability:
       - RUNTIME
+
+  # --- Ticket Tailor (member event-benefit V1) ---
+  # See src/lib/ticketTailor/client.ts — no secret has been created for
+  # this yet, and TICKET_TAILOR_INTEGRATION_VERIFIED there is still
+  # `false`, so no real Ticket Tailor mutation can happen even once this
+  # secret exists and this entry is deployed. Server-only, RUNTIME only,
+  # Secret Manager — same treatment as STRIPE_SECRET_KEY above. This
+  # entry alone does not enable anything: creating the actual secret value
+  # in Secret Manager is a separate, explicit step (see the manual
+  # configuration checklist in the implementation report).
+  - variable: TICKET_TAILOR_API_KEY
+    secret: TICKET_TAILOR_API_KEY
+    availability:
+      - RUNTIME

@@ -57,6 +57,22 @@ export interface BillingDocument {
   termsAcceptance: TermsAcceptance | null;
   createdAt: unknown; // Firestore Timestamp
   updatedAt: unknown; // Firestore Timestamp
+
+  // --- Event benefit (Ticket Tailor monthly discount) anchor — see
+  // src/lib/eventBenefits/lifecycle.ts. Deliberately its OWN anchor
+  // fields, separate from profiles/{uid}.meta's matching anchor
+  // (matchingAnchorAt/matchingPeriodsProcessed/nextMatchingDueAt): the
+  // event benefit's monthly cadence must never be coupled to matching's.
+  // Seeded by the same "first time we see this subscription id" check in
+  // the webhook's syncSubscription, reset on a genuine resubscription. ---
+  /** The subscription's own `start_date` — period 0's due date IS this anchor. */
+  eventBenefitAnchorAt: unknown | null; // Firestore Timestamp
+  /** Which subscription this anchor belongs to — a new id means a resubscription, and resets the whole event-benefit lifecycle from period 0. */
+  eventBenefitSubscriptionId: string | null;
+  /** Count of monthly benefits granted so far for this subscription. */
+  eventBenefitPeriodsIssued: number;
+  /** When the next monthly benefit is due; advanced by runDueEventBenefitScan; set to null once entitlement lapses. */
+  nextEventBenefitDueAt: unknown | null; // Firestore Timestamp
 }
 
 export const emptyBillingDocument: BillingDocument = {
@@ -71,6 +87,10 @@ export const emptyBillingDocument: BillingDocument = {
   termsAcceptance: null,
   createdAt: null,
   updatedAt: null,
+  eventBenefitAnchorAt: null,
+  eventBenefitSubscriptionId: null,
+  eventBenefitPeriodsIssued: 0,
+  nextEventBenefitDueAt: null,
 };
 
 /** Statuses that count as "billing entitlement currently valid." */
