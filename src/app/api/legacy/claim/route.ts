@@ -49,5 +49,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: result.error }, { status });
   }
 
-  return NextResponse.json({ ok: true, alreadyClaimed: result.alreadyClaimed });
+  return NextResponse.json({ ok: true, state: result.state });
 }

@@ -64,14 +64,21 @@ export function watchAuthState(callback: (user: User | null) => void) {
 // --- Email magic link ---------------------------------------------------
 
 /**
- * Sends a passwordless sign-in link to `email`. The link always points
- * back at /introduction on whatever origin is currently running (so this
- * works unchanged in the emulator, on localhost, and in production —
- * each just needs to be in Firebase's authorized domains list).
+ * Sends a passwordless sign-in link to `email`. `continueUrl` is the
+ * EXACT absolute URL Firebase embeds in the emailed link itself — this is
+ * not "redirect after sign-in," it's literally what the browser navigates
+ * to when the link is clicked (see AuthButtons.tsx's `magicLinkReturnPath`
+ * prop, and /introduction/legacy/page.tsx's own doc comment for why this
+ * matters: a hardcoded `/introduction` here previously meant a legacy
+ * contact's magic link always opened normal Path A's landing page,
+ * regardless of which page's "Continuar con email" button sent it).
+ * Defaults to `/introduction` — every pre-existing call site (normal
+ * Path A signup) is unaffected unless it explicitly opts into a
+ * different return path.
  */
-export async function sendMagicLink(email: string) {
+export async function sendMagicLink(email: string, continueUrl?: string) {
   await sendSignInLinkToEmail(auth, email, {
-    url: `${window.location.origin}/introduction`,
+    url: continueUrl ?? `${window.location.origin}/introduction`,
     handleCodeInApp: true,
   });
   window.localStorage.setItem(EMAIL_STORAGE_KEY, email);

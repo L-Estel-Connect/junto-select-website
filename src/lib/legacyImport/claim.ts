@@ -8,7 +8,7 @@ import { legacyImportId } from "./mapping";
 import type { LegacyImportDocument } from "./types";
 
 export type ClaimLegacyContactResult =
-  | { ok: true; alreadyClaimed: boolean }
+  | { ok: true; state: "claimed_pending" | "already_claimed_pending" | "already_activated" }
   | { ok: false; error: "not_found" }
   | { ok: false; error: "claimed_by_other" }
   | { ok: false; error: "existing_account" };
@@ -27,11 +27,13 @@ export type ClaimLegacyContactResult =
  *  - No `legacyImports/{id}` doc for this email at all -> `not_found`.
  *  - Already claimed by a DIFFERENT uid -> `claimed_by_other` (a claim
  *    can never be stolen or re-pointed).
- *  - Already claimed by THIS SAME uid -> `alreadyClaimed: true`,
- *    idempotent no-op — critically, this does NOT re-run the prefill
- *    merge over `profiles/{uid}`, so a second call (e.g. a page refresh
- *    mid-onboarding) can never clobber answers the person has since
- *    edited.
+ *  - Already claimed by THIS SAME uid -> `state: "already_claimed_pending"`
+ *    or `state: "already_activated"` (distinguished by the legacyImports
+ *    doc's own `status`, already read in this same transaction — no extra
+ *    lookup needed), an idempotent no-op either way — critically, this
+ *    does NOT re-run the prefill merge over `profiles/{uid}`, so a second
+ *    call (e.g. a page refresh mid-onboarding) can never clobber answers
+ *    the person has since edited.
  *  - `profiles/{uid}` already exists for this authenticated uid (this
  *    email already belongs to a real Junto Select account, whether from
  *    a normal Path A signup or an earlier legacy claim under a different
@@ -58,7 +60,7 @@ export async function claimLegacyContact(uid: string, verifiedEmail: string): Pr
     const legacy = legacySnap.data() as LegacyImportDocument;
 
     if (legacy.claimedUid && legacy.claimedUid === uid) {
-      return { ok: true, alreadyClaimed: true };
+      return { ok: true, state: legacy.status === "activated" ? "already_activated" : "already_claimed_pending" };
     }
     if (legacy.claimedUid && legacy.claimedUid !== uid) {
       return { ok: false, error: "claimed_by_other" };
@@ -134,7 +136,7 @@ export async function claimLegacyContact(uid: string, verifiedEmail: string): Pr
       updatedAt: now,
     });
 
-    return { ok: true, alreadyClaimed: false };
+    return { ok: true, state: "claimed_pending" };
   });
 }
 
