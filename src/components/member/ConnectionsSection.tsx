@@ -41,17 +41,21 @@ export default function ConnectionsSection({ uid }: { uid: string }) {
   const introductions = introductionsQuery.data?.introductions ?? [];
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col px-6 py-14">
+    <div className="mx-auto flex w-full max-w-[1100px] flex-col px-6 py-14">
       <h1 className="font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">
         Conexiones
       </h1>
 
       {introductions.length > 0 ? (
-        // One card per row on mobile; 2 columns from `sm` up, 3 only once
-        // there's genuinely enough width for it (`xl`) — a 3-column grid at
-        // tablet/small-laptop widths would leave each card too cramped for
-        // its name/city/status text.
-        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        // Column count is never chosen by a viewport breakpoint — each
+        // track is `minmax(min(320px,100%), 380px)`, so the browser fits
+        // as many genuinely-comfortable (320-380px) columns as the actual
+        // available width allows: 1 on mobile (using ~the full width,
+        // never wider than 380px), 2 on tablet/narrower desktop, 3 only
+        // once there's genuinely room for three at a comfortable width. A single
+        // card never stretches to fill the row (auto-fit collapses unused
+        // tracks instead of feeding them their share of the free space).
+        <div className="mt-10 grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),380px))] gap-4">
           {introductions.map((introduction) => (
             <ConnectionCard key={introduction.id} connection={introduction} />
           ))}

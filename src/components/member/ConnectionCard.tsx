@@ -21,17 +21,21 @@ function formatShortDate(value: unknown): string | null {
  * The entire card is one <Link> — a single, large, unambiguous tap
  * target (important on mobile), which also gives it a real accessible
  * name from its own text content with no extra aria- plumbing needed.
- * Name/city are truncated (with a `min-w-0` flex child, required for
- * `truncate` to actually clip inside a flex row) so a long value can
- * never break the card's layout or force horizontal scroll.
+ * Name/city keep `truncate` (with a `min-w-0` flex child, required for
+ * `truncate` to actually clip inside a flex row) as a defensive fallback
+ * for genuinely long values — the text column itself is sized generously
+ * enough (see ConnectionsSection.tsx's grid) that an ordinary first name
+ * or Spanish city never needs to invoke it. "Interés mutuo" and the date
+ * are two separate lines rather than one joined string so the date can
+ * never force that label to wrap mid-phrase in a narrower card.
  */
 export default function ConnectionCard({ connection }: { connection: MemberConnectionSummaryView }) {
   const date = formatShortDate(connection.createdAt);
 
   if (!connection.other) {
     return (
-      <div className="flex items-center gap-4 rounded-2xl border border-hairline bg-white p-4">
-        <div className="aspect-[3/4] w-20 shrink-0 rounded-md bg-hairline/40" />
+      <div className="flex items-center gap-4 rounded-2xl border border-hairline bg-white p-5">
+        <div className="aspect-[3/4] w-24 shrink-0 rounded-md bg-hairline/40" />
         <p className="text-[14px] text-ink-soft">Esta persona ya no está disponible.</p>
       </div>
     );
@@ -42,9 +46,9 @@ export default function ConnectionCard({ connection }: { connection: MemberConne
   return (
     <Link
       href={`/member/connections/${connection.id}`}
-      className="flex items-start gap-4 rounded-2xl border border-hairline bg-white p-4 transition-colors hover:border-rose"
+      className="flex items-start gap-4 rounded-2xl border border-hairline bg-white p-5 transition-colors hover:border-rose"
     >
-      <div className="w-20 shrink-0 overflow-hidden rounded-md">
+      <div className="w-24 shrink-0 overflow-hidden rounded-md">
         {primaryPhoto ? (
           <PublicPhotoThumbnail path={primaryPhoto} />
         ) : (
@@ -61,9 +65,10 @@ export default function ConnectionCard({ connection }: { connection: MemberConne
         </p>
         {city && <p className="mt-0.5 truncate text-[14px] text-ink-soft">{city}</p>}
         <p className="mt-2 text-[12px] font-medium uppercase tracking-[0.08em] text-ink-soft">
-          Interés mutuo{date ? ` · ${date}` : ""}
+          Interés mutuo
         </p>
-        <p className="mt-2 text-[13px] font-medium text-ink">Ver conexión</p>
+        {date && <p className="mt-0.5 text-[11px] text-ink-soft">{date}</p>}
+        <p className="mt-2 whitespace-nowrap text-[13px] font-medium text-ink">Ver conexión</p>
       </div>
     </Link>
   );
