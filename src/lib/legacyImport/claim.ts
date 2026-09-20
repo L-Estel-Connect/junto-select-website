@@ -40,8 +40,12 @@ export type ClaimLegacyContactResult =
  *    row) -> `existing_account`; the real profile is never read into,
  *    written to, or overwritten, and the legacyImports doc is marked
  *    `collision` for admin visibility instead of silently disappearing.
- *  - Otherwise: create `profiles/{uid}` seeded from `prefill`, mark the
- *    legacyImports doc `claimed`.
+ *  - Otherwise: create `profiles/{uid}` seeded from ONLY the stable
+ *    basic-identity subset of `prefill` — firstName, profession,
+ *    heightCm — never gender/relationshipIntention/ageMin/ageMax/phone
+ *    even though the legacy import may carry them (see the `newProfile`
+ *    construction below for why), and mark the legacyImports doc
+ *    `claimed`.
  *
  * All of the above happens inside ONE transaction, so two concurrent
  * claim attempts (e.g. a double-clicked button, or two tabs) can never
@@ -82,28 +86,32 @@ export async function claimLegacyContact(uid: string, verifiedEmail: string): Pr
     const now = FieldValue.serverTimestamp();
     const { prefill } = legacy;
 
+    // DELIBERATELY CONSERVATIVE: only stable basic-identity fields are
+    // copied from the old form — firstName, profession, heightCm. Every
+    // matching/preference field the old prefill COULD have supplied
+    // (gender, relationshipIntention, ageMin/ageMax, phone) is
+    // intentionally left unanswered here, even though `legacy.prefill`
+    // still carries them (see LegacyPrefillFields/importPlan.ts — those
+    // are UNCHANGED; this is the only place that ever reads them into a
+    // real profile, and it now reads only a subset). The old questionnaire
+    // and the current matching questionnaire aren't the same, and a
+    // preference from however long ago is exactly the kind of thing that
+    // may have changed — the member answers those fresh, through the
+    // identical onboarding flow and completeness checks Path A uses; a
+    // narrower prefill never relaxes what's required to activate.
     const newProfile: ProfileDocument = {
       visible: {
         ...emptyAboutMeVisible,
         firstName: prefill.firstName ?? "",
-        gender: prefill.gender,
         profession: prefill.profession ?? "",
         heightCm: prefill.heightCm,
-        relationshipIntention: prefill.relationshipIntention,
       },
       private: { ...emptyAboutMePrivate },
       photos: [],
-      dealbreakers: {
-        ...emptyDealbreakers,
-        ageMin: prefill.ageMin,
-        ageMax: prefill.ageMax,
-      },
+      dealbreakers: { ...emptyDealbreakers },
       preferences: { ...emptyPreferences },
       presentation: { ...emptyPresentation },
-      contactPreferences: {
-        ...emptyContactPreferences,
-        phone: prefill.phone,
-      },
+      contactPreferences: { ...emptyContactPreferences },
       meta: {
         onboardingStepIndex: 0,
         aboutMeComplete: false,
