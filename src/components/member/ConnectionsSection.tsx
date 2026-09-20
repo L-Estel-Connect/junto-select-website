@@ -4,17 +4,21 @@ import { IntroductionError, IntroductionLoading } from "@/components/introductio
 import { useMemberProfile } from "./useMemberProfile";
 import { memberFetchJson } from "@/lib/member/memberFetch";
 import { useMemberQuery } from "@/lib/member/useMemberQuery";
-import type { MemberIntroductionView } from "@/lib/matching/memberLifecycleTypes";
-import IntroductionCard from "./IntroductionCard";
+import type { MemberConnectionSummaryView } from "@/lib/matching/memberLifecycleTypes";
+import ConnectionCard from "./ConnectionCard";
 
 /**
- * Real mutual introductions — read-only, no chat (see product principle:
- * contact happens outside Junto Select once an introduction exists).
+ * The connections OVERVIEW — a scannable list of compact cards, never the
+ * full profile/contact details inline (see ConnectionCard.tsx and
+ * MemberConnectionSummaryView's own doc comment). Read-only, no chat (see
+ * product principle: contact happens outside Junto Select once an
+ * introduction exists). Opening a specific connection navigates to
+ * /member/connections/[id], which fetches its own full detail.
  */
 export default function ConnectionsSection({ uid }: { uid: string }) {
   const { ready, error, refresh } = useMemberProfile(uid);
   const introductionsQuery = useMemberQuery(
-    () => memberFetchJson<{ introductions: MemberIntroductionView[] }>("/api/member/introductions"),
+    () => memberFetchJson<{ introductions: MemberConnectionSummaryView[] }>("/api/member/introductions"),
     [uid],
   );
 
@@ -37,15 +41,19 @@ export default function ConnectionsSection({ uid }: { uid: string }) {
   const introductions = introductionsQuery.data?.introductions ?? [];
 
   return (
-    <div className="mx-auto flex w-full max-w-[560px] flex-col px-6 py-14 sm:px-0">
+    <div className="mx-auto flex w-full max-w-5xl flex-col px-6 py-14">
       <h1 className="font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">
         Conexiones
       </h1>
 
       {introductions.length > 0 ? (
-        <div className="mt-10 space-y-6">
+        // One card per row on mobile; 2 columns from `sm` up, 3 only once
+        // there's genuinely enough width for it (`xl`) — a 3-column grid at
+        // tablet/small-laptop widths would leave each card too cramped for
+        // its name/city/status text.
+        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {introductions.map((introduction) => (
-            <IntroductionCard key={introduction.id} introduction={introduction} />
+            <ConnectionCard key={introduction.id} connection={introduction} />
           ))}
         </div>
       ) : (
