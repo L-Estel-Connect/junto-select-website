@@ -14,7 +14,19 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type View = "options" | "email-form" | "email-sent";
 
-export default function AuthButtons() {
+interface AuthButtonsProps {
+  /**
+   * Absolute-path destination the magic-link email should return the
+   * browser to after it's clicked — passed straight through to
+   * sendMagicLink's `continueUrl`. Defaults to "/introduction" (normal
+   * Path A signup); the legacy activation page passes
+   * "/introduction/legacy" so its own magic link never opens Path A's
+   * landing page instead (see auth.ts's sendMagicLink doc comment).
+   */
+  magicLinkReturnPath?: string;
+}
+
+export default function AuthButtons({ magicLinkReturnPath = "/introduction" }: AuthButtonsProps) {
   const [view, setView] = useState<View>("options");
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
@@ -51,7 +63,7 @@ export default function AuthButtons() {
     setError(null);
     setPending(true);
     try {
-      await sendMagicLink(trimmed);
+      await sendMagicLink(trimmed, `${window.location.origin}${magicLinkReturnPath}`);
       setView("email-sent");
     } catch {
       setError(
