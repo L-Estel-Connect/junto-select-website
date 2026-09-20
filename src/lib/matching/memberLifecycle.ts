@@ -5,6 +5,7 @@ import { withProfileDefaults, type ProfileDocument } from "@/lib/introduction/ty
 import { recordCandidateDecision, recordInvitationViewed, recordMemberDecision, recordProposalViewed } from "./pairHistory";
 import type { InvitationDocument, IntroductionDocument, PassType, ProposalDocument } from "./types";
 import type {
+  MemberConnectionSummaryView,
   MemberDecisionResult,
   MemberIntroductionView,
   MemberInvitationView,
@@ -144,42 +145,123 @@ export async function decideInvitationForMember(
 // --- Introductions (stage 3: mutual interest, contact reveal) ---
 
 /**
- * Contact details are ONLY ever assembled here, from an introduction
- * document the member is a genuine party to (already re-verified by uid
- * equality against the query itself, not client input) — there is no
- * other path in this codebase that returns another member's
- * contactPreferences. `email` resolves through Firebase Auth (see
- * ContactPreferences' doc comment), everything else from the profile doc.
+ * Given an introduction doc and the calling member's uid, resolves who the
+ * OTHER party is and loads their profile — shared by both the list summary
+ * and the single-introduction detail builders below, so "which uid is the
+ * other party" and "what if their profile is gone" are never implemented
+ * twice and can never drift into two different answers.
  */
-export async function getIntroductionsForMember(uid: string): Promise<MemberIntroductionView[]> {
+async function loadOtherParty(
+  data: IntroductionDocument,
+  uid: string,
+): Promise<{ otherUid: string; otherProfile: ProfileDocument } | null> {
+  const otherUid = data.uidA === uid ? data.uidB : data.uidA;
+  const otherProfile = await loadProfile(otherUid);
+  if (!otherProfile) return null;
+  return { otherUid, otherProfile };
+}
+
+/** Firestore Timestamp duck-typing, matching the pattern already used client-side (see IntroductionCard.tsx's formatDate). */
+function createdAtMillis(value: unknown): number {
+  const ts = value as { toMillis?: () => number } | null | undefined;
+  return typeof ts?.toMillis === "function" ? ts.toMillis() : 0;
+}
+
+/**
+ * The lightweight OVERVIEW shape (see MemberConnectionSummaryView's own
+ * doc comment) — built from the SAME buildPublicProfileView() the full
+ * detail view uses, just narrowed to firstName/age/city/primaryPhoto
+ * before it's ever serialized to the client. Deliberately never calls
+ * buildRevealedContacts or looks up the other party's Auth email at all —
+ * that's the actual cost this saves for a list of N connections (N fewer
+ * Admin Auth lookups), not just a smaller response body.
+ */
+function toSummaryView(
+  id: string,
+  data: IntroductionDocument,
+  party: { otherUid: string; otherProfile: ProfileDocument } | null,
+): MemberConnectionSummaryView {
+  if (!party) return { id, createdAt: data.createdAt, other: null };
+  const view = buildPublicProfileView(party.otherUid, party.otherProfile);
+  return {
+    id,
+    createdAt: data.createdAt,
+    other: { uid: view.uid, firstName: view.firstName, age: view.age, city: view.city, primaryPhoto: view.photos[0] ?? null },
+  };
+}
+
+/**
+ * Every mutual introduction this member is a party to, as compact
+ * overview cards — see /member/connections. Newest first: each query is
+ * itself ordered by createdAt, but that alone is NOT enough once the two
+ * result sets (as uidA, as uidB) are concatenated — the combined array is
+ * explicitly re-sorted by createdAt descending below, since interleaving
+ * two independently-ordered lists does not preserve a single total order.
+ * No contact details and no Auth lookups happen here at all — see
+ * getIntroductionDetailForMember for the full, single-introduction view.
+ */
+export async function getIntroductionsForMember(uid: string): Promise<MemberConnectionSummaryView[]> {
   const [asA, asB] = await Promise.all([
-    adminDb.collection("introductions").where("uidA", "==", uid).get(),
-    adminDb.collection("introductions").where("uidB", "==", uid).get(),
+    adminDb.collection("introductions").where("uidA", "==", uid).orderBy("createdAt", "desc").get(),
+    adminDb.collection("introductions").where("uidB", "==", uid).orderBy("createdAt", "desc").get(),
   ]);
   const docs = [...asA.docs, ...asB.docs];
 
-  return Promise.all(
+  const summaries = await Promise.all(
     docs.map(async (d) => {
       const data = d.data() as IntroductionDocument;
-      const otherUid = data.uidA === uid ? data.uidB : data.uidA;
-      const otherProfile = await loadProfile(otherUid);
-      if (!otherProfile) {
-        return { id: d.id, createdAt: data.createdAt, other: null, contacts: [] };
-      }
-      let accountEmail: string | null = null;
-      try {
-        accountEmail = (await adminAuth.getUser(otherUid)).email ?? null;
-      } catch {
-        accountEmail = null;
-      }
-      return {
-        id: d.id,
-        createdAt: data.createdAt,
-        other: buildPublicProfileView(otherUid, otherProfile),
-        contacts: buildRevealedContacts(otherProfile.contactPreferences, accountEmail),
-      };
+      const party = await loadOtherParty(data, uid);
+      return toSummaryView(d.id, data, party);
     }),
   );
+
+  return summaries.sort((a, b) => createdAtMillis(b.createdAt) - createdAtMillis(a.createdAt));
+}
+
+export type IntroductionDetailResult = { ok: true; introduction: MemberIntroductionView } | { ok: false; error: "not_found" };
+
+/**
+ * The full single-introduction view for /member/connections/[id] —
+ * contact details are ONLY ever assembled here, from an introduction
+ * document the member is independently re-verified to be a genuine party
+ * to (never trusted from the URL alone: `uid` must equal this doc's own
+ * `uidA` or `uidB`). `email` resolves through Firebase Auth (see
+ * ContactPreferences' doc comment), everything else from the profile doc.
+ *
+ * Returns the SAME `not_found` error for "no such introduction" and "this
+ * introduction exists but isn't yours" — deliberately indistinguishable,
+ * so a signed-in member can never use the response to tell a guessed ID
+ * apart from a genuinely nonexistent one.
+ */
+export async function getIntroductionDetailForMember(uid: string, introductionId: string): Promise<IntroductionDetailResult> {
+  const snap = await adminDb.doc(`introductions/${introductionId}`).get();
+  if (!snap.exists) return { ok: false, error: "not_found" };
+
+  const data = snap.data() as IntroductionDocument;
+  if (data.uidA !== uid && data.uidB !== uid) return { ok: false, error: "not_found" };
+
+  const party = await loadOtherParty(data, uid);
+  if (!party) {
+    return { ok: true, introduction: { id: snap.id, createdAt: data.createdAt, other: null, contacts: [] } };
+  }
+
+  const { otherUid, otherProfile } = party;
+  let accountEmail: string | null = null;
+  try {
+    accountEmail = (await adminAuth.getUser(otherUid)).email ?? null;
+  } catch {
+    accountEmail = null;
+  }
+
+  return {
+    ok: true,
+    introduction: {
+      id: snap.id,
+      createdAt: data.createdAt,
+      other: buildPublicProfileView(otherUid, otherProfile),
+      contacts: buildRevealedContacts(otherProfile.contactPreferences, accountEmail),
+    },
+  };
 }
 
 // --- Dashboard summary (Phase 7: obvious action visibility, no new infra) ---
