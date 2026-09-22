@@ -5,27 +5,34 @@ import "server-only";
  * src/lib/stripe/client.ts, but with one deliberate extra layer:
  * `TICKET_TAILOR_INTEGRATION_VERIFIED` (below).
  *
- * The request schemas below were corrected against Ticket Tailor's 2026
- * official API documentation (manually verified by a human against
- * developers.tickettailor.com/docs/api/, not independently re-fetched by
- * this codebase): base URL `https://api.tickettailor.com`, paths under
- * `/v1/...`, HTTP Basic Auth of the form `Basic base64(api_key)` (the raw
- * key alone, NO trailing colon), an `Accept: application/json` header,
- * and `application/x-www-form-urlencoded` (NOT JSON) bodies on every
- * mutating request. Discount fields: `code`, `name`, `type` (=
- * `percentage`), `price_percent`, `max_redemptions`, `expires` (a single
- * Unix timestamp — there is no `valid_from`/`valid_until` pair), and
- * `ticket_types` (the associated ticket type ids).
+ * The request/response schemas below reflect TWO real, controlled API
+ * tests run against production Ticket Tailor on 2026-09-22 (a temporary
+ * TEST discount on a past event's ticket type, created then immediately
+ * deleted both times — see the engagement's test reports for the exact
+ * HTTP traffic). Verified facts: base URL `https://api.tickettailor.com`,
+ * paths under `/v1/...`; HTTP Basic Auth of the form `Basic
+ * base64(api_key)` (the raw key alone, NO trailing colon) plus `Accept:
+ * application/json`; `application/x-www-form-urlencoded` (NOT JSON)
+ * bodies on every mutating request; discount write fields `code`, `name`,
+ * `type` (= `percentage`), `price_percent`, `max_redemptions`, `expires`
+ * (a single Unix timestamp — there is no `valid_from`/`valid_until`
+ * pair), and `ticket_types` associated via REPEATED `ticket_types[]`
+ * fields (never comma-joined, never a bare scalar, never indexed
+ * brackets, never JSON — a real test proved a comma-joined/bare-scalar
+ * `ticket_types` value silently associates nothing, returning
+ * `ticket_types: []`). On READ, the discount object's percentage lives
+ * under `face_value_percentage` — NOT an echo of the `price_percent`
+ * write field — and `expires` comes back as a structured object whose
+ * Unix value is at `.expires.unix`, never a bare number.
  *
- * One assumption remains genuinely unverified: the exact
- * application/x-www-form-urlencoded encoding Ticket Tailor expects for
- * the `ticket_types` array value (this implementation sends it as a
- * comma-separated string — a reasonable default for this API style, but
- * not confirmed against a real request/response). Because of that single
- * remaining gap, `TICKET_TAILOR_INTEGRATION_VERIFIED` stays `false` below
- * — flip it only once that encoding has been confirmed (ideally via a
- * real call against a Ticket Tailor test/sandbox box office) so nothing
- * here can silently misfire against a real, billable account.
+ * Despite the contract now being empirically verified end-to-end (auth,
+ * create, single- and multi-ticket-type association, the
+ * price_percent/face_value_percentage write/read asymmetry,
+ * max_redemptions, expiry, GET-by-ID, GET-by-code, update/union
+ * semantics, and delete), `TICKET_TAILOR_INTEGRATION_VERIFIED` is kept
+ * `false` below by deliberate product decision: activating the real
+ * integration is a separate, explicit rollout step, not an automatic
+ * consequence of the contract being correct.
  */
 export const TICKET_TAILOR_INTEGRATION_VERIFIED = false as const;
 
@@ -46,6 +53,31 @@ export interface TicketTailorDiscount {
   code: string;
   /** The ticket type ids currently associated with this discount, per Ticket Tailor's own record. */
   ticketTypeIds: string[];
+  /**
+   * The discount's percentage value as Ticket Tailor reports it back —
+   * read from the response's `face_value_percentage` field. NOT the same
+   * field name as the `price_percent` write field: Ticket Tailor uses
+   * different names for the discount-creation input and the returned
+   * representation (verified via a real request/response pair). `null`
+   * when Ticket Tailor didn't return a value. Not currently consulted by
+   * any caller — Junto tracks its own 20% internally in Firestore — this
+   * exists so the real response shape is parsed correctly if a future
+   * caller ever needs it.
+   */
+  percentage: number | null;
+}
+
+/**
+ * Ticket Tailor's real `expires` response shape — a structured object,
+ * NOT a bare Unix number (confirmed via a real create/GET response). No
+ * caller currently reads a discount's expiry back from a response (Junto
+ * tracks its own validFrom/validUntil internally in Firestore), so this
+ * type is intentionally unused by any parsing logic today — it exists
+ * purely as a guardrail so a future reader doesn't reintroduce the
+ * bare-number assumption. If ever consumed, use `.unix`.
+ */
+export interface TicketTailorDiscountExpiresResponse {
+  unix: number;
 }
 
 /**
@@ -86,8 +118,29 @@ export interface TicketTailorClient {
   associateDiscountWithTicketTypes(discountId: string, ticketTypeIds: string[]): Promise<void>;
 }
 
-function parseDiscount(data: { id: string; code: string; ticket_types?: string[] | null }): TicketTailorDiscount {
-  return { id: data.id, code: data.code, ticketTypeIds: data.ticket_types ?? [] };
+interface TicketTailorDiscountResponse {
+  id: string;
+  code: string;
+  ticket_types?: string[] | null;
+  /** Read field for the percentage value — asymmetric with the `price_percent` write field. See TicketTailorDiscount.percentage. */
+  face_value_percentage?: number | null;
+  /** Structured, not a bare number — see TicketTailorDiscountExpiresResponse. Unused today; typed here only so a future reader doesn't misparse it. */
+  expires?: TicketTailorDiscountExpiresResponse;
+}
+
+/**
+ * Exported purely so tests can assert the real response-parsing behavior
+ * directly — without it, exercising this code path would require flipping
+ * TICKET_TAILOR_INTEGRATION_VERIFIED (every LiveTicketTailorClient method
+ * refuses to run while it's false), which tests must never do.
+ */
+export function parseDiscount(data: TicketTailorDiscountResponse): TicketTailorDiscount {
+  return {
+    id: data.id,
+    code: data.code,
+    ticketTypeIds: data.ticket_types ?? [],
+    percentage: data.face_value_percentage ?? null,
+  };
 }
 
 /**
@@ -102,10 +155,8 @@ export function buildTicketTailorAuthHeader(apiKey: string): string {
 }
 
 /**
- * NOT independently confirmed — see the file-level doc comment. The
- * `ticket_types` encoding (comma-separated) is the one remaining
- * assumption; everything else here reflects the verified 2026 API
- * reference. Exported (alongside `buildTicketTypesUpdateRequestBody`)
+ * Verified against a real request/response pair — see the file-level doc
+ * comment. Exported (alongside `buildTicketTypesUpdateRequestBody`)
  * purely so tests can assert the exact wire-format fields Ticket Tailor
  * documents, without needing TICKET_TAILOR_INTEGRATION_VERIFIED or a real
  * network call.
@@ -118,14 +169,29 @@ export function buildCreateDiscountRequestBody(params: CreateDiscountParams): UR
   body.set("price_percent", String(params.percentage));
   body.set("max_redemptions", String(params.maxRedemptions));
   body.set("expires", String(Math.floor(params.expiresAt.getTime() / 1000)));
-  body.set("ticket_types", params.ticketTypeIds.join(","));
+  appendTicketTypes(body, params.ticketTypeIds);
   return body;
 }
 
 export function buildTicketTypesUpdateRequestBody(ticketTypeIds: string[]): URLSearchParams {
   const body = new URLSearchParams();
-  body.set("ticket_types", ticketTypeIds.join(","));
+  appendTicketTypes(body, ticketTypeIds);
   return body;
+}
+
+/**
+ * Ticket Tailor expects an array value as REPEATED `ticket_types[]`
+ * fields — confirmed via a real request/response pair for both one and
+ * two ticket types. A comma-joined or bare-scalar `ticket_types` value
+ * was proven NOT to associate anything (the response came back with
+ * `ticket_types: []`). Deduplicates via `Set` so a caller passing the
+ * same id twice (e.g. a union that already contained it) never produces
+ * duplicate `ticket_types[]` fields.
+ */
+function appendTicketTypes(body: URLSearchParams, ticketTypeIds: string[]): void {
+  for (const ticketTypeId of new Set(ticketTypeIds)) {
+    body.append("ticket_types[]", ticketTypeId);
+  }
 }
 
 class LiveTicketTailorClient implements TicketTailorClient {
@@ -134,7 +200,7 @@ class LiveTicketTailorClient implements TicketTailorClient {
   private assertVerified(operation: string): void {
     if (!TICKET_TAILOR_INTEGRATION_VERIFIED) {
       throw new Error(
-        `ticket_tailor_integration_not_verified: refusing to perform "${operation}" — the request schema has not been fully confirmed against the real Ticket Tailor API reference yet (see src/lib/ticketTailor/client.ts doc comment).`,
+        `ticket_tailor_integration_not_verified: refusing to perform "${operation}" — real integration is not yet activated (see src/lib/ticketTailor/client.ts doc comment: the contract is verified, but activation is a separate, deliberate rollout step).`,
       );
     }
   }
@@ -155,7 +221,7 @@ class LiveTicketTailorClient implements TicketTailorClient {
       body: buildCreateDiscountRequestBody(params),
     });
     if (!res.ok) throw new Error(`ticket_tailor_create_discount_failed_${res.status}`);
-    const data = (await res.json()) as { id: string; code: string; ticket_types?: string[] | null };
+    const data = (await res.json()) as TicketTailorDiscountResponse;
     return parseDiscount(data);
   }
 
@@ -165,7 +231,7 @@ class LiveTicketTailorClient implements TicketTailorClient {
       headers: this.headers(),
     });
     if (!res.ok) throw new Error(`ticket_tailor_find_discount_failed_${res.status}`);
-    const data = (await res.json()) as { data?: Array<{ id: string; code: string; ticket_types?: string[] | null }> };
+    const data = (await res.json()) as { data?: TicketTailorDiscountResponse[] };
     const match = data.data?.find((d) => d.code === code);
     return match ? parseDiscount(match) : null;
   }
@@ -176,7 +242,7 @@ class LiveTicketTailorClient implements TicketTailorClient {
       headers: this.headers(),
     });
     if (!res.ok) throw new Error(`ticket_tailor_get_discount_failed_${res.status}`);
-    const data = (await res.json()) as { id: string; code: string; ticket_types?: string[] | null };
+    const data = (await res.json()) as TicketTailorDiscountResponse;
     return parseDiscount(data);
   }
 
