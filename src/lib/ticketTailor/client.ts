@@ -3,46 +3,49 @@ import "server-only";
 /**
  * Server-only Ticket Tailor client abstraction — analogous in spirit to
  * src/lib/stripe/client.ts, but with one deliberate extra layer:
- * `TICKET_TAILOR_INTEGRATION_VERIFIED` (below). The exact request body
- * fields for creating/associating a discount were NOT independently
- * confirmed against Ticket Tailor's raw API reference during this
- * implementation (the environment this was built in cannot reach
- * developers.tickettailor.com — see the Ticket Tailor API audit report).
- * What IS reasonably well-sourced: the API base URL, that discounts (not
- * vouchers) are the right object for a per-ticket-type percentage code,
- * and that ticket-type association is explicit and per-ticket-type. What
- * is NOT independently confirmed: the exact JSON field names for
- * percentage/max-redemptions/ticket-type-association, and the exact auth
- * header shape.
+ * `TICKET_TAILOR_INTEGRATION_VERIFIED` (below).
  *
- * Rather than guess those fields and risk silently sending a malformed
- * request to a real, billable Ticket Tailor account once a real API key
- * is eventually configured, every mutating method on the real
- * (`fetch`-based) implementation refuses to run while
- * `TICKET_TAILOR_INTEGRATION_VERIFIED` is `false`. Flip it to `true` only
- * after a human has confirmed the request shapes in `buildCreateDiscountRequestBody`/
- * `buildAssociateTicketTypesRequestBody` against the real, current API
- * reference at developers.tickettailor.com/docs/api/ — and ideally after
- * a successful call against a Ticket Tailor TEST/sandbox box office, if
- * one is available, before ever pointing this at production.
+ * The request schemas below were corrected against Ticket Tailor's 2026
+ * official API documentation (manually verified by a human against
+ * developers.tickettailor.com/docs/api/, not independently re-fetched by
+ * this codebase): base URL `https://api.tickettailor.com`, paths under
+ * `/v1/...`, HTTP Basic Auth of the form `Basic base64(api_key)` (the raw
+ * key alone, NO trailing colon), an `Accept: application/json` header,
+ * and `application/x-www-form-urlencoded` (NOT JSON) bodies on every
+ * mutating request. Discount fields: `code`, `name`, `type` (=
+ * `percentage`), `price_percent`, `max_redemptions`, `expires` (a single
+ * Unix timestamp — there is no `valid_from`/`valid_until` pair), and
+ * `ticket_types` (the associated ticket type ids).
+ *
+ * One assumption remains genuinely unverified: the exact
+ * application/x-www-form-urlencoded encoding Ticket Tailor expects for
+ * the `ticket_types` array value (this implementation sends it as a
+ * comma-separated string — a reasonable default for this API style, but
+ * not confirmed against a real request/response). Because of that single
+ * remaining gap, `TICKET_TAILOR_INTEGRATION_VERIFIED` stays `false` below
+ * — flip it only once that encoding has been confirmed (ideally via a
+ * real call against a Ticket Tailor test/sandbox box office) so nothing
+ * here can silently misfire against a real, billable account.
  */
 export const TICKET_TAILOR_INTEGRATION_VERIFIED = false as const;
 
-const TICKET_TAILOR_API_BASE = "https://api.tickettailor.com/v1";
+const TICKET_TAILOR_API_BASE = "https://api.tickettailor.com";
 
 export interface CreateDiscountParams {
   code: string;
+  name: string;
   percentage: number;
   maxRedemptions: number;
   ticketTypeIds: string[];
-  validFrom: Date;
-  validUntil: Date;
+  expiresAt: Date;
 }
 
 export interface TicketTailorDiscount {
   /** Ticket Tailor's own object id — stored as EventBenefitDocument.ticketTailorDiscountId. */
   id: string;
   code: string;
+  /** The ticket type ids currently associated with this discount, per Ticket Tailor's own record. */
+  ticketTypeIds: string[];
 }
 
 /**
@@ -63,31 +66,66 @@ export interface TicketTailorClient {
    * when no such discount exists.
    */
   findDiscountByCode(code: string): Promise<TicketTailorDiscount | null>;
-  /** Best-effort — callers must treat a thrown error as "external sync failed," never as a reason to skip the Firestore-side invalidation. */
+  /** Reads a discount's current state — used to union-merge ticket_types before an update, never to drive a blind overwrite. */
+  getDiscount(discountId: string): Promise<TicketTailorDiscount>;
+  /**
+   * Genuine entitlement-loss invalidation ONLY (never routine monthly
+   * supersession, which relies solely on the discount's own `expires`).
+   * Permanent/irreversible on Ticket Tailor's side. Best-effort from a
+   * caller's perspective — callers must treat a thrown error as "external
+   * sync failed," never as a reason to skip the Firestore-side
+   * invalidation.
+   */
   invalidateDiscount(discountId: string): Promise<void>;
-  /** Best-effort, idempotent (associating an already-associated ticket type must be safe to repeat). */
+  /**
+   * Idempotent, non-destructive: reads the discount's currently
+   * associated ticket types, unions them with `ticketTypeIds`, and only
+   * ever grows the associated set — safe to call repeatedly and safe to
+   * call for an event whose ticket types were already associated.
+   */
   associateDiscountWithTicketTypes(discountId: string, ticketTypeIds: string[]): Promise<void>;
 }
 
-/**
- * NOT independently confirmed — see the file-level doc comment. Isolated
- * into its own function specifically so the one place that needs
- * verification is small, obvious, and easy to re-check against the real
- * docs before `TICKET_TAILOR_INTEGRATION_VERIFIED` is ever flipped.
- */
-function buildCreateDiscountRequestBody(params: CreateDiscountParams): Record<string, unknown> {
-  return {
-    code: params.code,
-    percentage_off: params.percentage,
-    max_redemptions: params.maxRedemptions,
-    ticket_type_ids: params.ticketTypeIds,
-    valid_from: params.validFrom.toISOString(),
-    valid_until: params.validUntil.toISOString(),
-  };
+function parseDiscount(data: { id: string; code: string; ticket_types?: string[] | null }): TicketTailorDiscount {
+  return { id: data.id, code: data.code, ticketTypeIds: data.ticket_types ?? [] };
 }
 
-function buildAssociateTicketTypesRequestBody(ticketTypeIds: string[]): Record<string, unknown> {
-  return { ticket_type_ids: ticketTypeIds };
+/**
+ * Ticket Tailor's documented auth format: `Basic Base64Encode(api_key)` —
+ * the raw key alone, with NO trailing colon (unlike the Stripe-style
+ * `apiKey:` convention). Exported as a pure function so its exact
+ * encoding can be verified directly in tests without needing
+ * TICKET_TAILOR_INTEGRATION_VERIFIED or a real network call.
+ */
+export function buildTicketTailorAuthHeader(apiKey: string): string {
+  return `Basic ${Buffer.from(apiKey).toString("base64")}`;
+}
+
+/**
+ * NOT independently confirmed — see the file-level doc comment. The
+ * `ticket_types` encoding (comma-separated) is the one remaining
+ * assumption; everything else here reflects the verified 2026 API
+ * reference. Exported (alongside `buildTicketTypesUpdateRequestBody`)
+ * purely so tests can assert the exact wire-format fields Ticket Tailor
+ * documents, without needing TICKET_TAILOR_INTEGRATION_VERIFIED or a real
+ * network call.
+ */
+export function buildCreateDiscountRequestBody(params: CreateDiscountParams): URLSearchParams {
+  const body = new URLSearchParams();
+  body.set("code", params.code);
+  body.set("name", params.name);
+  body.set("type", "percentage");
+  body.set("price_percent", String(params.percentage));
+  body.set("max_redemptions", String(params.maxRedemptions));
+  body.set("expires", String(Math.floor(params.expiresAt.getTime() / 1000)));
+  body.set("ticket_types", params.ticketTypeIds.join(","));
+  return body;
+}
+
+export function buildTicketTypesUpdateRequestBody(ticketTypeIds: string[]): URLSearchParams {
+  const body = new URLSearchParams();
+  body.set("ticket_types", ticketTypeIds.join(","));
+  return body;
 }
 
 class LiveTicketTailorClient implements TicketTailorClient {
@@ -96,60 +134,73 @@ class LiveTicketTailorClient implements TicketTailorClient {
   private assertVerified(operation: string): void {
     if (!TICKET_TAILOR_INTEGRATION_VERIFIED) {
       throw new Error(
-        `ticket_tailor_integration_not_verified: refusing to perform "${operation}" — the request schema has not been confirmed against the real Ticket Tailor API reference yet (see src/lib/ticketTailor/client.ts doc comment).`,
+        `ticket_tailor_integration_not_verified: refusing to perform "${operation}" — the request schema has not been fully confirmed against the real Ticket Tailor API reference yet (see src/lib/ticketTailor/client.ts doc comment).`,
       );
     }
   }
 
-  private authHeader(): string {
-    // "API key over HTTP Basic Auth" — corroborated by a third-party
-    // summary of the API's auth model, NOT read directly from an official
-    // page in this environment. Re-verify before activation.
-    return `Basic ${Buffer.from(`${this.apiKey}:`).toString("base64")}`;
+  private headers(extra?: Record<string, string>): Record<string, string> {
+    return {
+      Authorization: buildTicketTailorAuthHeader(this.apiKey),
+      Accept: "application/json",
+      ...extra,
+    };
   }
 
   async createDiscount(params: CreateDiscountParams): Promise<TicketTailorDiscount> {
     this.assertVerified("createDiscount");
-    const res = await fetch(`${TICKET_TAILOR_API_BASE}/discounts`, {
+    const res = await fetch(`${TICKET_TAILOR_API_BASE}/v1/discounts`, {
       method: "POST",
-      headers: { Authorization: this.authHeader(), "Content-Type": "application/json" },
-      body: JSON.stringify(buildCreateDiscountRequestBody(params)),
+      headers: this.headers({ "Content-Type": "application/x-www-form-urlencoded" }),
+      body: buildCreateDiscountRequestBody(params),
     });
     if (!res.ok) throw new Error(`ticket_tailor_create_discount_failed_${res.status}`);
-    const data = (await res.json()) as { id: string; code: string };
-    return { id: data.id, code: data.code };
+    const data = (await res.json()) as { id: string; code: string; ticket_types?: string[] | null };
+    return parseDiscount(data);
   }
 
   async findDiscountByCode(code: string): Promise<TicketTailorDiscount | null> {
     this.assertVerified("findDiscountByCode");
-    // NOT independently confirmed: the exact query-param name for
-    // filtering the discount list by code (assumed `code` below). See
-    // the "List discounts" doc page cited in the Ticket Tailor API audit
-    // — re-verify before activation.
-    const res = await fetch(`${TICKET_TAILOR_API_BASE}/discounts?code=${encodeURIComponent(code)}`, {
-      headers: { Authorization: this.authHeader() },
+    const res = await fetch(`${TICKET_TAILOR_API_BASE}/v1/discounts?code=${encodeURIComponent(code)}`, {
+      headers: this.headers(),
     });
     if (!res.ok) throw new Error(`ticket_tailor_find_discount_failed_${res.status}`);
-    const data = (await res.json()) as { data?: Array<{ id: string; code: string }> };
+    const data = (await res.json()) as { data?: Array<{ id: string; code: string; ticket_types?: string[] | null }> };
     const match = data.data?.find((d) => d.code === code);
-    return match ? { id: match.id, code: match.code } : null;
+    return match ? parseDiscount(match) : null;
+  }
+
+  async getDiscount(discountId: string): Promise<TicketTailorDiscount> {
+    this.assertVerified("getDiscount");
+    const res = await fetch(`${TICKET_TAILOR_API_BASE}/v1/discounts/${discountId}`, {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`ticket_tailor_get_discount_failed_${res.status}`);
+    const data = (await res.json()) as { id: string; code: string; ticket_types?: string[] | null };
+    return parseDiscount(data);
   }
 
   async invalidateDiscount(discountId: string): Promise<void> {
     this.assertVerified("invalidateDiscount");
-    const res = await fetch(`${TICKET_TAILOR_API_BASE}/discounts/${discountId}`, {
+    const res = await fetch(`${TICKET_TAILOR_API_BASE}/v1/discounts/${discountId}`, {
       method: "DELETE",
-      headers: { Authorization: this.authHeader() },
+      headers: this.headers(),
     });
     if (!res.ok) throw new Error(`ticket_tailor_invalidate_discount_failed_${res.status}`);
   }
 
   async associateDiscountWithTicketTypes(discountId: string, ticketTypeIds: string[]): Promise<void> {
     this.assertVerified("associateDiscountWithTicketTypes");
-    const res = await fetch(`${TICKET_TAILOR_API_BASE}/discounts/${discountId}`, {
-      method: "PATCH",
-      headers: { Authorization: this.authHeader(), "Content-Type": "application/json" },
-      body: JSON.stringify(buildAssociateTicketTypesRequestBody(ticketTypeIds)),
+    // Ticket Tailor has no separate association endpoint — this reads the
+    // discount's currently associated ticket types first and updates with
+    // the UNION, so syncing a newly eligible event never accidentally
+    // drops a ticket type already associated from an earlier sync.
+    const current = await this.getDiscount(discountId);
+    const union = new Set([...current.ticketTypeIds, ...ticketTypeIds]);
+    const res = await fetch(`${TICKET_TAILOR_API_BASE}/v1/discounts/${discountId}`, {
+      method: "POST",
+      headers: this.headers({ "Content-Type": "application/x-www-form-urlencoded" }),
+      body: buildTicketTypesUpdateRequestBody([...union]),
     });
     if (!res.ok) throw new Error(`ticket_tailor_associate_ticket_types_failed_${res.status}`);
   }

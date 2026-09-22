@@ -216,11 +216,11 @@ async function processDueMember(uid: string, billing: BillingDocument, now: Date
         existing ??
         (await client.createDiscount({
           code: benefit.code,
+          name: `Junto Select – ${benefit.code}`,
           percentage: benefit.percentage,
           maxRedemptions: 1,
           ticketTypeIds,
-          validFrom: toDate(benefit.validFrom) ?? now,
-          validUntil: toDate(benefit.validUntil) ?? now,
+          expiresAt: toDate(benefit.validUntil) ?? now,
         }));
       await benefitRef.update({ ticketTailorDiscountId: discount.id, status: "active" });
       benefit = { ...benefit, ticketTailorDiscountId: discount.id, status: "active" };
@@ -238,16 +238,15 @@ async function processDueMember(uid: string, billing: BillingDocument, now: Date
     if (previousSnap.exists) {
       const previous = previousSnap.data() as EventBenefitDocument;
       if (previous.status === "active") {
-        if (previous.ticketTailorDiscountId) {
-          try {
-            await getTicketTailorClient().invalidateDiscount(previous.ticketTailorDiscountId);
-          } catch (error) {
-            // Non-fatal: the superseded code's own Ticket-Tailor-side
-            // expiry (set to exactly this moment at creation time) is the
-            // primary protection — this call is a best-effort extra.
-            console.error(`processDueMember: failed to invalidate previous cycle for uid ${uid}`, error);
-          }
-        }
+        // Routine monthly supersession relies solely on the previous
+        // discount's own `expires` (set at creation time to exactly this
+        // cycle boundary) — no DELETE call here. Ticket Tailor's
+        // documented DELETE is reserved exclusively for a genuine
+        // entitled -> non-entitled transition (see
+        // invalidateCurrentEventBenefitForMember); calling it here would
+        // permanently destroy the discount, which is unnecessary when
+        // expiry already does the job and is explicitly out of scope for
+        // routine supersession.
         await previousRef.update({ status: "superseded", invalidatedAt: now, invalidatedReason: "superseded" });
       }
     }
