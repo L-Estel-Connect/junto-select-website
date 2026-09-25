@@ -43,6 +43,11 @@ export async function POST(request: Request) {
     });
   }
 
-  const result = await importEventParticipants(body.eventId.trim(), rows);
-  return NextResponse.json({ ok: true, result });
+  try {
+    const result = await importEventParticipants(body.eventId.trim(), rows);
+    return NextResponse.json({ ok: true, result });
+  } catch (error) {
+    console.error("event-reconnect import-participants: failed", error);
+    return NextResponse.json({ ok: false, error: "failed_to_import_participants" }, { status: 500 });
+  }
 }

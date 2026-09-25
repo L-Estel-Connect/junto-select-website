@@ -11,6 +11,11 @@ export async function GET(request: Request) {
   const eventId = new URL(request.url).searchParams.get("eventId");
   if (!eventId) return NextResponse.json({ ok: false, error: "invalid_request" }, { status: 400 });
 
-  const summary = await getReconnectAdminSummary(eventId);
-  return NextResponse.json({ ok: true, summary });
+  try {
+    const summary = await getReconnectAdminSummary(eventId);
+    return NextResponse.json({ ok: true, summary });
+  } catch (error) {
+    console.error("event-reconnect summary: failed", error);
+    return NextResponse.json({ ok: false, error: "failed_to_load_summary" }, { status: 500 });
+  }
 }

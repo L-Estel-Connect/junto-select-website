@@ -26,10 +26,29 @@ export async function adminFetch(path: string, init: RequestInit = {}): Promise<
   return fetch(path, { ...init, headers });
 }
 
-/** Convenience wrapper for the common case: JSON in, JSON out, throws with a readable message on ok:false. */
+/**
+ * Convenience wrapper for the common case: JSON in, JSON out, throws with a
+ * readable message on ok:false. Reads the body as TEXT first and only then
+ * attempts to parse it — every server route here is expected to always
+ * return valid JSON, but if something upstream (a crashed function, a
+ * platform-level error page, a proxy timeout) ever returns an empty or
+ * non-JSON body, this surfaces a clear, actionable error instead of letting
+ * the raw `res.json()` TypeError ("Unexpected end of JSON input") reach the
+ * UI unexplained.
+ */
 export async function adminFetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await adminFetch(path, init);
-  const data = await res.json();
+  const text = await res.text();
+  let data: { ok?: boolean; error?: string } & Record<string, unknown>;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(
+      text
+        ? `unexpected_response_${res.status}: ${text.slice(0, 200)}`
+        : `empty_response_${res.status}`,
+    );
+  }
   if (!res.ok || data.ok === false) {
     throw new Error(data.error || `request_failed_${res.status}`);
   }

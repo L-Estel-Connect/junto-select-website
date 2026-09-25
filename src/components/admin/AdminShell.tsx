@@ -58,6 +58,27 @@ export default function AdminShell({
     router.replace("/admin/login");
   }
 
+  // Previously `children` rendered unconditionally, immediately, on every
+  // render — including the first one, before Firebase Auth's client-side
+  // state had resolved (`loading` true, `user` still null even though the
+  // server-side page-load cookie already proved a valid admin session).
+  // Every dashboard page fires its own adminFetch calls on mount, and
+  // adminFetch throws "not_signed_in" synchronously whenever
+  // `auth.currentUser` is null at call time — so a page could, and did,
+  // flash that error on an entirely legitimate, already-authorized load,
+  // purely because the client SDK's auth state hadn't caught up yet. Now
+  // children mount only once `loading` is false and `user` exists — while
+  // that resolves (or if it never does and the redirect above fires
+  // instead), show a plain loading state, never the dashboard shell with
+  // pages that are guaranteed to fail their first fetch.
+  if (loading || !user) {
+    return (
+      <div className="flex min-h-svh items-center justify-center bg-paper">
+        <p className="text-sm text-ink-soft">Cargando…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-svh bg-paper">
       <aside className="flex w-60 shrink-0 flex-col border-r border-hairline bg-white px-5 py-8">
