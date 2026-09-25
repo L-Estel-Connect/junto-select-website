@@ -60,7 +60,11 @@ export async function getActiveReconnectEventForMember(
   return null;
 }
 
-async function buildCandidateView(participant: EventParticipantDocument, participantId: string): Promise<ReconnectCandidateView | null> {
+async function buildCandidateView(
+  participant: EventParticipantDocument,
+  participantId: string,
+  callerParticipantId: string,
+): Promise<ReconnectCandidateView | null> {
   if (!participant.claimedUid) return null;
   const profileSnap = await adminDb.doc(`profiles/${participant.claimedUid}`).get();
   if (!profileSnap.exists) return null;
@@ -73,6 +77,7 @@ async function buildCandidateView(participant: EventParticipantDocument, partici
     firstName: profile.visible.firstName || "—",
     age,
     photoPath: profile.photos[0] ?? null,
+    isSelf: participantId === callerParticipantId,
   };
 }
 
@@ -85,8 +90,18 @@ async function buildCandidateView(participant: EventParticipantDocument, partici
  * didn't attend — enforced by requiring the caller's own participant
  * record to exist (checked by the route, not duplicated here) before this
  * is ever called.
+ *
+ * The caller's OWN activated profile is included here if it matches the
+ * query, exactly like anyone else's — deliberately never filtered out (see
+ * ReconnectCandidateView.isSelf's doc comment: the product intent is that
+ * a person can see themselves inside the exact same participant
+ * experience others see, not a separate preview).
  */
-export async function searchReconnectCandidatesByName(eventId: string, namePrefix: string): Promise<ReconnectCandidateView[]> {
+export async function searchReconnectCandidatesByName(
+  eventId: string,
+  namePrefix: string,
+  callerParticipantId: string,
+): Promise<ReconnectCandidateView[]> {
   const normalized = namePrefix.trim().toLowerCase();
   if (!normalized) return [];
 
@@ -99,7 +114,7 @@ export async function searchReconnectCandidatesByName(eventId: string, namePrefi
   const matches: ReconnectCandidateView[] = [];
   for (const doc of snap.docs) {
     const participant = doc.data() as EventParticipantDocument;
-    const view = await buildCandidateView(participant, doc.id);
+    const view = await buildCandidateView(participant, doc.id, callerParticipantId);
     if (view && view.firstName.toLowerCase().startsWith(normalized)) {
       matches.push(view);
     }
@@ -112,9 +127,10 @@ export async function searchReconnectCandidatesByName(eventId: string, namePrefi
  * event, in neutral (insertion) order, never ranked/personalized/filtered
  * by any signal. Name + one photo only (see ReconnectCandidateView) — no
  * bio, no compatibility, nothing else, by construction (the view type
- * simply has no such fields to leak).
+ * simply has no such fields to leak). Includes the caller's own card, same
+ * reasoning as searchReconnectCandidatesByName above.
  */
-export async function listReconnectGallery(eventId: string): Promise<ReconnectCandidateView[]> {
+export async function listReconnectGallery(eventId: string, callerParticipantId: string): Promise<ReconnectCandidateView[]> {
   const snap = await adminDb
     .collection("eventParticipants")
     .where("eventId", "==", eventId)
@@ -123,7 +139,7 @@ export async function listReconnectGallery(eventId: string): Promise<ReconnectCa
 
   const views: ReconnectCandidateView[] = [];
   for (const doc of snap.docs) {
-    const view = await buildCandidateView(doc.data() as EventParticipantDocument, doc.id);
+    const view = await buildCandidateView(doc.data() as EventParticipantDocument, doc.id, callerParticipantId);
     if (view) views.push(view);
   }
   return views;

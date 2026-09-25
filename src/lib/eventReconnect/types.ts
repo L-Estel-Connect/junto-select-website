@@ -112,12 +112,20 @@ export interface ReconnectStateView {
   isActivated: boolean;
 }
 
-/** A minimal, name-only lookup — never the underlying profile beyond what a Reconnect card is allowed to show. */
+/**
+ * A minimal, name-only lookup — never the underlying profile beyond what a
+ * Reconnect card is allowed to show. The caller's OWN activated profile is
+ * deliberately included in search/gallery results (not filtered out) so
+ * they can see exactly how they appear to other attendees, in the same
+ * card UI — `isSelf` is what the client uses to hide the request button
+ * and add a "Tú" label, never a signal to render a different component.
+ */
 export interface ReconnectCandidateView {
   participantId: string;
   firstName: string;
   age: number | null;
   photoPath: string | null;
+  isSelf: boolean;
 }
 
 /** The single most relevant Reconnect event for a member right now, if any — see getActiveReconnectEventForMember. */
