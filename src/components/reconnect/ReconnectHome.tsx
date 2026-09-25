@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/lib/firebase/useAuth";
 import { memberFetchJson } from "@/lib/member/memberFetch";
 import { useMemberQuery } from "@/lib/member/useMemberQuery";
 import { useSharedProfile } from "@/lib/introduction/profileCache";
@@ -40,6 +41,7 @@ export default function ReconnectHome({ uid, eventId }: { uid: string; eventId: 
     [eventId],
   );
   const { profile } = useSharedProfile(uid);
+  const { user } = useAuth();
   const [requestsRemaining, setRequestsRemaining] = useState<number | null>(null);
 
   // Adjusted during render (not in an effect) — seeds local state from the
@@ -63,10 +65,20 @@ export default function ReconnectHome({ uid, eventId }: { uid: string; eventId: 
   const { state } = stateQuery.data;
 
   if (!state.isParticipant) {
+    // Deliberately explicit about the exact email checked, and that this
+    // is a hard stop, not a temporary loading state — the only identity
+    // check Reconnect ever performs is this one (the signed-in account's
+    // own verified email against the event's imported attendee list), and
+    // there is no other way in: no manual "which attendee am I" picker to
+    // fall back to, since that would be spoofable.
     return (
       <NeutralMessage
-        title="No hemos encontrado tu registro para este evento"
-        body="Comprueba que has iniciado sesión con el mismo email con el que compraste tu entrada."
+        title="No hemos encontrado tu entrada para este evento"
+        body={
+          user?.email
+            ? `No hay ninguna entrada importada para este evento asociada a ${user.email}. Si compraste tu entrada con otro email, inicia sesión con esa cuenta.`
+            : "Comprueba que has iniciado sesión con el mismo email con el que compraste tu entrada."
+        }
       />
     );
   }
