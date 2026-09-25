@@ -280,14 +280,21 @@ export interface InvitationDocument {
  * schema migration.
  */
 export interface IntroductionDocument {
-  proposalId: string;
-  cycleId: string;
-  personIdA: string; // the original active/paid member
-  personIdB: string; // the original candidate
+  /** Absent for an event-sourced introduction (source === "event") — there is no proposal/cycle behind it. */
+  proposalId?: string;
+  cycleId?: string;
+  personIdA: string; // the original active/paid member, OR (source: "event") the Reconnect request's initiator
+  personIdB: string; // the original candidate, OR (source: "event") the Reconnect request's recipient
   uidA: string;
   uidB: string;
   createdAt: unknown;
   contactRevealedAt: unknown | null;
+  /** Absent/undefined on every introduction written before Reconnect existed — treat as "algorithm". See src/lib/eventReconnect/requests.ts. */
+  source?: "algorithm" | "event";
+  /** Only present when source === "event". */
+  eventId?: string;
+  /** Denormalized at creation time so Connexiones can show "Os conocisteis en Junto Select · <label>" without a second lookup — never re-read from the event record afterward, so a later label edit doesn't rewrite history. */
+  eventLabel?: string;
 }
 
 // --- Pair history (symmetric, canonical sorted-pair id) --------------------

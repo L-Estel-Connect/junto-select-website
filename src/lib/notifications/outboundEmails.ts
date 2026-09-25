@@ -17,7 +17,9 @@ export type OutboundEmailType =
   | "new_proposal"
   | "invitation_received"
   | "mutual_introduction"
-  | "legacy_profile_activation";
+  | "legacy_profile_activation"
+  /** One-time, content-free — see src/lib/eventReconnect: "someone you met wants to reconnect, activate to see who." Capped at one per participant per event regardless of how many different people request them — see EventParticipantDocument.invitationEmailSentAt. */
+  | "event_reconnect_invite";
 
 export type OutboundEmailStatus = "pending" | "sending" | "sent" | "failed";
 

@@ -181,12 +181,14 @@ function toSummaryView(
   data: IntroductionDocument,
   party: { otherUid: string; otherProfile: ProfileDocument } | null,
 ): MemberConnectionSummaryView {
-  if (!party) return { id, createdAt: data.createdAt, other: null };
+  const eventLabel = data.source === "event" ? (data.eventLabel ?? null) : null;
+  if (!party) return { id, createdAt: data.createdAt, other: null, eventLabel };
   const view = buildPublicProfileView(party.otherUid, party.otherProfile);
   return {
     id,
     createdAt: data.createdAt,
     other: { uid: view.uid, firstName: view.firstName, age: view.age, city: view.city, primaryPhoto: view.photos[0] ?? null },
+    eventLabel,
   };
 }
 
@@ -239,10 +241,11 @@ export async function getIntroductionDetailForMember(uid: string, introductionId
 
   const data = snap.data() as IntroductionDocument;
   if (data.uidA !== uid && data.uidB !== uid) return { ok: false, error: "not_found" };
+  const eventLabel = data.source === "event" ? (data.eventLabel ?? null) : null;
 
   const party = await loadOtherParty(data, uid);
   if (!party) {
-    return { ok: true, introduction: { id: snap.id, createdAt: data.createdAt, other: null, contacts: [] } };
+    return { ok: true, introduction: { id: snap.id, createdAt: data.createdAt, other: null, contacts: [], eventLabel } };
   }
 
   const { otherUid, otherProfile } = party;
@@ -260,6 +263,7 @@ export async function getIntroductionDetailForMember(uid: string, introductionId
       createdAt: data.createdAt,
       other: buildPublicProfileView(otherUid, otherProfile),
       contacts: buildRevealedContacts(otherProfile.contactPreferences, accountEmail),
+      eventLabel,
     },
   };
 }

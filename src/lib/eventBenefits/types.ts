@@ -83,4 +83,24 @@ export interface EligibleTicketTailorEventDocument {
   /** Bookkeeping only — when a sync last ran and what it found, for admin visibility/debugging. */
   lastSyncedAt: unknown | null;
   lastSyncResult: { attempted: number; succeeded: number; failed: number } | null;
+  /**
+   * Reconnect (see src/lib/eventReconnect/) extends this SAME document
+   * rather than a second event registry — both features key off the same
+   * Ticket Tailor event identity, and Lara already visits this one admin
+   * screen once per event. `eventDate` is the calendar date Ticket Tailor
+   * lists for the event (YYYY-MM-DD, Madrid-local) — Reconnect's open/close
+   * window is always COMPUTED from it (see eventConfig.ts), never stored
+   * separately, so these two timestamps can never drift from the event
+   * date. `null` for an event that predates Reconnect or was never given a
+   * date — Reconnect is simply unavailable for it. `reconnectEnabled`
+   * defaults to `false`: registering an event for the discount benefit
+   * must never implicitly turn on Reconnect for it too. `reconnectForceClosedAt`
+   * is the one manual safety override (see the audit) — set, it closes
+   * discovery immediately regardless of the computed window; independent
+   * of `reconnectEnabled` so Lara can force-close without un-registering
+   * the event.
+   */
+  eventDate: string | null;
+  reconnectEnabled: boolean;
+  reconnectForceClosedAt: unknown | null;
 }

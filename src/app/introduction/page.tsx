@@ -24,16 +24,27 @@ export default function IntroductionLandingPage() {
   // PlanSection.tsx's `checkoutParam` (window.location isn't available
   // during server rendering).
   const [sessionExpired, setSessionExpired] = useState(false);
+  // Where to send someone once signed in, when they arrived here from
+  // RequireReconnectAuth (see components/reconnect/) rather than a fresh
+  // Path A signup — e.g. `?next=/reconnect/abc123`. Restricted to exactly
+  // the `/reconnect/` tree, never an arbitrary path, so this can never
+  // become an open redirect: this page's own default destination
+  // (/introduction/onboarding) is the only other place a signed-in visitor
+  // here can land.
+  const [nextPath, setNextPath] = useState<string | null>(null);
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSessionExpired(new URLSearchParams(window.location.search).get("session") === "expired");
+    setSessionExpired(params.get("session") === "expired");
+    const next = params.get("next");
+    setNextPath(next && next.startsWith("/reconnect/") ? next : null);
   }, []);
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace("/introduction/onboarding");
+      router.replace(nextPath ?? "/introduction/onboarding");
     }
-  }, [loading, user, router]);
+  }, [loading, user, router, nextPath]);
 
   if (loading || user) {
     return (
@@ -80,7 +91,13 @@ export default function IntroductionLandingPage() {
                 {linkError}
               </p>
             )}
-            <AuthButtons />
+            {/* If we came here from Reconnect (see nextPath above), the
+                magic-link email should return the browser straight to the
+                Reconnect page, not bounce through here again — this page's
+                own `useAuth()` hook has already unmounted by the time an
+                email link is clicked, but RequireReconnectAuth mounts the
+                identical hook, so completion works the same way there. */}
+            <AuthButtons magicLinkReturnPath={nextPath ?? "/introduction"} />
           </>
         )}
       </div>

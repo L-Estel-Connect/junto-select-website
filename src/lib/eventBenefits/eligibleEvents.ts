@@ -36,19 +36,31 @@ export async function registerEligibleEvent(params: {
   ticketTailorEventId: string;
   ticketTailorTicketTypeIds: string[];
   label: string;
+  /** YYYY-MM-DD, Madrid-local — required for Reconnect to ever be available for this event; omit/null if unknown. */
+  eventDate?: string | null;
+  /** Defaults to false — registering an event for the discount benefit must never implicitly enable Reconnect. */
+  reconnectEnabled?: boolean;
 }): Promise<void> {
   const now = new Date();
   const ref = adminDb.doc(`eligibleTicketTailorEvents/${params.ticketTailorEventId}`);
   const existing = await ref.get();
+  const existingData = existing.data() as EligibleTicketTailorEventDocument | undefined;
   await ref.set(
     {
       ticketTailorEventId: params.ticketTailorEventId,
       ticketTailorTicketTypeIds: params.ticketTailorTicketTypeIds,
       label: params.label,
-      createdAt: existing.exists ? existing.data()?.createdAt : now,
+      createdAt: existing.exists ? existingData?.createdAt : now,
       updatedAt: now,
-      lastSyncedAt: existing.exists ? (existing.data()?.lastSyncedAt ?? null) : null,
-      lastSyncResult: existing.exists ? (existing.data()?.lastSyncResult ?? null) : null,
+      lastSyncedAt: existing.exists ? (existingData?.lastSyncedAt ?? null) : null,
+      lastSyncResult: existing.exists ? (existingData?.lastSyncResult ?? null) : null,
+      eventDate: params.eventDate ?? existingData?.eventDate ?? null,
+      reconnectEnabled: params.reconnectEnabled ?? existingData?.reconnectEnabled ?? false,
+      // Never reset by re-registering the event — the force-close override
+      // is a dedicated, separate admin action (see setReconnectForceClosed
+      // in eventReconnect/eventConfig.ts) and must survive an unrelated
+      // edit to ticket types/label.
+      reconnectForceClosedAt: existingData?.reconnectForceClosedAt ?? null,
     } satisfies EligibleTicketTailorEventDocument,
     { merge: false },
   );

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { adminFetchJson } from "@/lib/admin/adminFetch";
 import type { EligibleTicketTailorEventDocument } from "@/lib/eventBenefits/types";
 import { useAdminQuery } from "@/lib/admin/useAdminQuery";
+import ReconnectEventControls from "@/components/admin/ReconnectEventControls";
 
 /**
  * V1's entire "event management" surface, deliberately minimal per spec:
@@ -23,6 +24,8 @@ export default function EventBenefitsPage() {
   const [eventId, setEventId] = useState("");
   const [ticketTypeIds, setTicketTypeIds] = useState("");
   const [label, setLabel] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [reconnectEnabled, setReconnectEnabled] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
@@ -42,17 +45,34 @@ export default function EventBenefitsPage() {
     try {
       await adminFetchJson("/api/admin/event-benefits/eligible-events", {
         method: "POST",
-        body: JSON.stringify({ ticketTailorEventId: eventId.trim(), ticketTailorTicketTypeIds: ids, label: label.trim() }),
+        body: JSON.stringify({
+          ticketTailorEventId: eventId.trim(),
+          ticketTailorTicketTypeIds: ids,
+          label: label.trim(),
+          eventDate: eventDate.trim() || null,
+          reconnectEnabled,
+        }),
       });
       setEventId("");
       setTicketTypeIds("");
       setLabel("");
+      setEventDate("");
+      setReconnectEnabled(false);
       eventsQuery.reload();
     } catch (err) {
       setRegisterError(err instanceof Error ? err.message : "No se ha podido registrar el evento.");
     } finally {
       setRegistering(false);
     }
+  }
+
+  function handleEdit(event: EligibleTicketTailorEventDocument) {
+    setEventId(event.ticketTailorEventId);
+    setTicketTypeIds(event.ticketTailorTicketTypeIds.join(", "));
+    setLabel(event.label);
+    setEventDate(event.eventDate ?? "");
+    setReconnectEnabled(event.reconnectEnabled);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleSync(ticketTailorEventId: string) {
@@ -116,6 +136,30 @@ export default function EventBenefitsPage() {
             className="rounded-md border border-hairline px-3 py-2 text-[13px]"
           />
         </div>
+        <div className="mt-3 flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 text-[13px] text-ink">
+            Fecha del evento
+            <input
+              type="date"
+              value={eventDate}
+              onChange={(e) => setEventDate(e.target.value)}
+              className="rounded-md border border-hairline px-3 py-2 text-[13px]"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-[13px] text-ink">
+            <input
+              type="checkbox"
+              checked={reconnectEnabled}
+              onChange={(e) => setReconnectEnabled(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Reconnect activado
+          </label>
+        </div>
+        <p className="mt-1 text-[12px] text-ink-soft">
+          Reconnect se abre automáticamente a las 00:01 del día siguiente a la fecha del evento y se
+          cierra 48 horas después — nunca se configura manualmente.
+        </p>
         {registerError && <p className="mt-2 text-[12px] text-[#8a3b3b]">{registerError}</p>}
         <button
           type="button"
@@ -143,18 +187,28 @@ export default function EventBenefitsPage() {
                       {event.ticketTailorEventId} · {event.ticketTailorTicketTypeIds.length} tipo(s) de entrada
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleSync(event.ticketTailorEventId)}
-                    disabled={syncingId === event.ticketTailorEventId}
-                    className="rounded-full border border-hairline px-4 py-1.5 text-[12px] font-medium text-ink-soft hover:text-ink disabled:opacity-50"
-                  >
-                    {syncingId === event.ticketTailorEventId ? "Sincronizando…" : "Sincronizar"}
-                  </button>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleEdit(event)}
+                      className="rounded-full border border-hairline px-4 py-1.5 text-[12px] font-medium text-ink-soft hover:text-ink"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSync(event.ticketTailorEventId)}
+                      disabled={syncingId === event.ticketTailorEventId}
+                      className="rounded-full border border-hairline px-4 py-1.5 text-[12px] font-medium text-ink-soft hover:text-ink disabled:opacity-50"
+                    >
+                      {syncingId === event.ticketTailorEventId ? "Sincronizando…" : "Sincronizar"}
+                    </button>
+                  </div>
                 </div>
                 {syncResults[event.ticketTailorEventId] && (
                   <p className="mt-2 text-[12px] text-ink-soft">{syncResults[event.ticketTailorEventId]}</p>
                 )}
+                <ReconnectEventControls event={event} />
               </div>
             ))}
           </div>

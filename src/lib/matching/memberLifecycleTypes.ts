@@ -32,6 +32,8 @@ export interface MemberIntroductionView {
   createdAt: unknown;
   other: PublicProfileView | null;
   contacts: RevealedContact[];
+  /** Present only for a Reconnect-originated introduction — see IntroductionDocument.eventLabel. */
+  eventLabel: string | null;
 }
 
 /**
@@ -55,6 +57,8 @@ export interface MemberConnectionSummaryView {
     city: string;
     primaryPhoto: string | null;
   } | null;
+  /** Present only for a Reconnect-originated introduction — see IntroductionDocument.eventLabel. */
+  eventLabel: string | null;
 }
 
 export interface MemberLifecycleSummary {

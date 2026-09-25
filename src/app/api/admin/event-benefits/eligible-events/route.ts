@@ -25,14 +25,20 @@ export async function POST(request: Request) {
   const admin = await requireAdminOrRespond(request);
   if (admin instanceof NextResponse) return admin;
 
-  let body: { ticketTailorEventId?: unknown; ticketTailorTicketTypeIds?: unknown; label?: unknown };
+  let body: {
+    ticketTailorEventId?: unknown;
+    ticketTailorTicketTypeIds?: unknown;
+    label?: unknown;
+    eventDate?: unknown;
+    reconnectEnabled?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 });
   }
 
-  const { ticketTailorEventId, ticketTailorTicketTypeIds, label } = body;
+  const { ticketTailorEventId, ticketTailorTicketTypeIds, label, eventDate, reconnectEnabled } = body;
   if (
     typeof ticketTailorEventId !== "string" ||
     !ticketTailorEventId.trim() ||
@@ -40,7 +46,9 @@ export async function POST(request: Request) {
     !label.trim() ||
     !Array.isArray(ticketTailorTicketTypeIds) ||
     ticketTailorTicketTypeIds.length === 0 ||
-    !ticketTailorTicketTypeIds.every((id) => typeof id === "string" && id.trim())
+    !ticketTailorTicketTypeIds.every((id) => typeof id === "string" && id.trim()) ||
+    (eventDate !== undefined && eventDate !== null && (typeof eventDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate))) ||
+    (reconnectEnabled !== undefined && typeof reconnectEnabled !== "boolean")
   ) {
     return NextResponse.json({ ok: false, error: "invalid_request" }, { status: 400 });
   }
@@ -49,6 +57,8 @@ export async function POST(request: Request) {
     ticketTailorEventId: ticketTailorEventId.trim(),
     ticketTailorTicketTypeIds: ticketTailorTicketTypeIds.map((id) => id.trim()),
     label: label.trim(),
+    eventDate: (eventDate as string | undefined) ?? null,
+    reconnectEnabled: (reconnectEnabled as boolean | undefined) ?? false,
   });
 
   return NextResponse.json({ ok: true });
