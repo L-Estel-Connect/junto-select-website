@@ -8,6 +8,9 @@ import { useBilling } from "@/lib/billing/useBilling";
 import { PLAN_DISPLAY, PLAN_KEYS, type PlanKey } from "@/lib/billing/plans";
 import { isEntitledStatus, type BillingDocument } from "@/lib/billing/types";
 import { isMarketAvailabilityEligible } from "@/lib/introduction/completion";
+import { memberFetchJson } from "@/lib/member/memberFetch";
+import { useMemberQuery } from "@/lib/member/useMemberQuery";
+import type { MemberEventBenefitView } from "@/lib/eventBenefits/types";
 
 const MARKET_NOT_AVAILABLE_MESSAGE =
   "Junto Select está disponible actualmente solo para Madrid. Para recibir selecciones, necesitas vivir en Madrid, cerca de Madrid o venir a Madrid con cierta frecuencia. Si tu situación cambia, podrás actualizar esta respuesta más adelante.";
@@ -40,6 +43,7 @@ const DISCLOSURES = [
   "Puedes cancelar en cualquier momento desde «Gestionar mi membresía». La cancelación se hace efectiva al final del periodo ya pagado — no se hacen reembolsos por el tiempo restante.",
   "Una membresía activa te da derecho a recibir hasta 3 selecciones al mes. No se acumulan si no se usan, y ese límite no aumenta con planes de mayor duración.",
   "Recibir selecciones no está garantizado incluso con la membresía activa: solo se te presentan personas que cumplen tus requisitos imprescindibles y superan nuestro umbral de calidad. Un mes sin ninguna coincidencia adecuada es un resultado válido.",
+  "Cada mes de membresía activa, disfrutas de un 20 % de descuento en un evento Junto. Recibirás un código personal de un solo uso, que se renueva cada mes y no se acumula.",
   "Junto Select Introduction está disponible únicamente para el mercado de Madrid en esta fase.",
   "Tu perfil debe estar completo (Sobre ti, Fotos y Lo que buscas) para poder recibir selecciones — la membresía activa por sí sola no lo sustituye.",
   "Los precios incluyen los impuestos aplicables según tu método de pago y ubicación, calculados por Stripe en el momento del cobro.",
@@ -87,12 +91,77 @@ function PlanCard({
   );
 }
 
+/**
+ * "Beneficio de evento" — the Ticket Tailor monthly discount, read ONLY
+ * from /api/member/event-benefit (Firestore/Junto stays the read path;
+ * the browser never talks to Ticket Tailor or sees its API key). No
+ * "Código ya utilizado" state exists on purpose: Ticket Tailor's
+ * redemption/used state was not verified as reliable enough to surface
+ * (see the Ticket Tailor API audit) — showing nothing false is safer
+ * than showing an unverified claim.
+ */
+function EventBenefitSection({ uid }: { uid: string }) {
+  const benefitQuery = useMemberQuery(
+    () => memberFetchJson<{ benefit: MemberEventBenefitView | null }>("/api/member/event-benefit"),
+    [uid],
+  );
+  const [copied, setCopied] = useState(false);
+
+  const loading = !benefitQuery.data && !benefitQuery.error;
+  const benefit = benefitQuery.data?.benefit ?? null;
+  const validUntil = formatDate(benefit?.validUntil);
+
+  async function handleCopy(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can fail silently in some browsers/contexts —
+      // the code is still selectable/visible text either way.
+    }
+  }
+
+  return (
+    <div className="mt-10 border-t border-hairline pt-8">
+      <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">Beneficio de evento</p>
+      {loading || benefitQuery.error ? (
+        <p className="mt-3 text-[14px] text-ink-soft">
+          {benefitQuery.error ? "No hemos podido cargar tu beneficio de evento." : "Cargando…"}
+        </p>
+      ) : benefit ? (
+        <>
+          <p className="mt-2 text-[15px] text-ink">20 % de descuento en un evento Junto</p>
+          <div className="mt-3 flex items-center gap-3">
+            <span className="rounded-md border border-hairline bg-paper px-3 py-2 font-mono text-[15px] tracking-[0.08em] text-ink">
+              {benefit.code}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleCopy(benefit.code)}
+              className="text-[12px] font-medium uppercase tracking-[0.1em] text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink"
+            >
+              {copied ? "Copiado" : "Copiar código"}
+            </button>
+          </div>
+          {validUntil && <p className="mt-2 text-[12px] text-ink-soft">Válido hasta el {validUntil}.</p>}
+          <p className="mt-3 text-[12px] leading-relaxed text-ink-soft">Tu código se renueva cada mes y no se acumula.</p>
+        </>
+      ) : (
+        <p className="mt-3 text-[14px] text-ink-soft">Estamos preparando tu código de este mes.</p>
+      )}
+    </div>
+  );
+}
+
 function ActiveMembership({
+  uid,
   billing,
   onManage,
   managing,
   manageError,
 }: {
+  uid: string;
   billing: BillingDocument;
   onManage: () => void;
   managing: boolean;
@@ -129,6 +198,8 @@ function ActiveMembership({
           </div>
         )}
       </div>
+
+      <EventBenefitSection uid={uid} />
 
       {billing.cancelAtPeriodEnd && renewalDate ? (
         <p className="mt-4 text-[13px] leading-relaxed text-ink-soft">
@@ -297,6 +368,7 @@ export default function PlanSection({ uid }: { uid: string }) {
             </div>
           )}
           <ActiveMembership
+            uid={uid}
             billing={billing}
             onManage={handleManage}
             managing={submitting}

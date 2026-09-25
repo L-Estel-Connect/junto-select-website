@@ -12,6 +12,7 @@ import { isEntitledStatus } from "@/lib/billing/types";
 import { memberFetchJson } from "@/lib/member/memberFetch";
 import { useMemberQuery } from "@/lib/member/useMemberQuery";
 import type { MemberLifecycleSummary } from "@/lib/matching/memberLifecycleTypes";
+import type { ActiveReconnectEventView } from "@/lib/eventReconnect/types";
 
 const linkClasses =
   "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
@@ -40,6 +41,10 @@ export default function MemberHome({ uid }: { uid: string }) {
   const { billing, loading: billingLoading } = useBilling(uid);
   const summaryQuery = useMemberQuery(
     () => memberFetchJson<{ summary: MemberLifecycleSummary }>("/api/member/lifecycle-summary"),
+    [uid],
+  );
+  const reconnectQuery = useMemberQuery(
+    () => memberFetchJson<{ event: ActiveReconnectEventView | null }>("/api/member/reconnect/active"),
     [uid],
   );
 
@@ -99,6 +104,26 @@ export default function MemberHome({ uid }: { uid: string }) {
           <p className="text-[15px] font-medium text-ink">Tienes una introducción mutua.</p>
           <Link href="/member/connections" className={`mt-3 inline-block text-sm ${linkClasses}`}>
             Ver mi conexión
+          </Link>
+        </div>
+      )}
+
+      {/* Additive-only: this card exists purely to link an already-finalized
+          member (e.g. Lara) to /reconnect/[eventId] — everything Reconnect
+          actually does lives entirely on that route, never duplicated here.
+          reconnectQuery resolves to `event: null` for the vast majority of
+          members almost all the time (no event, no window open, nothing
+          pending), so nothing renders — exactly the "nothing exposed
+          before/during the event" state the product spec requires. */}
+      {reconnectQuery.data?.event && (
+        <div className="mt-8 rounded-2xl border border-hairline bg-white p-6">
+          <p className="text-[15px] font-medium text-ink">Reconnect · {reconnectQuery.data.event.eventLabel}</p>
+          <p className="mt-1 text-[13px] text-ink-soft">¿Conociste a alguien que te gustaría volver a ver?</p>
+          <Link
+            href={`/reconnect/${reconnectQuery.data.event.eventId}`}
+            className={`mt-3 inline-block text-sm ${linkClasses}`}
+          >
+            Reconectar
           </Link>
         </div>
       )}

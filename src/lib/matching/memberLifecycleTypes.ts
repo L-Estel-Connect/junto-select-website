@@ -32,6 +32,33 @@ export interface MemberIntroductionView {
   createdAt: unknown;
   other: PublicProfileView | null;
   contacts: RevealedContact[];
+  /** Present only for a Reconnect-originated introduction — see IntroductionDocument.eventLabel. */
+  eventLabel: string | null;
+}
+
+/**
+ * The lightweight shape for the /member/connections OVERVIEW list — only
+ * what a compact card needs (see ConnectionCard.tsx), deliberately never
+ * the education/height/languages/children/relationshipIntention/smoking/
+ * drinking/activityLevel/presentationText fields PublicProfileView also
+ * carries, and NEVER contacts. Built from the exact same
+ * buildPublicProfileView() as the full detail view (see memberLifecycle.ts
+ * toSummaryView), so firstName/age/city can never drift between the
+ * summary and detail — this is a narrower RESPONSE shape, not a
+ * differently-computed one.
+ */
+export interface MemberConnectionSummaryView {
+  id: string;
+  createdAt: unknown;
+  other: {
+    uid: string;
+    firstName: string;
+    age: number | null;
+    city: string;
+    primaryPhoto: string | null;
+  } | null;
+  /** Present only for a Reconnect-originated introduction — see IntroductionDocument.eventLabel. */
+  eventLabel: string | null;
 }
 
 /**

@@ -143,6 +143,26 @@ service cloud.firestore {
     // only, Admin-SDK-only, no legitimate client read or write path — left
     // uncovered on purpose and falls through to the default-deny below.
 
+    // `eventBenefits/{cycleKey}` — one immutable-once-settled record per
+    // monthly Ticket Tailor event-benefit cycle (see
+    // src/lib/eventBenefits/lifecycle.ts). Owner-only read, same pattern
+    // as `proposals`/`introductions`; never client-writable — a member
+    // can never create a benefit for themself, change its percentage,
+    // manufacture a cycle key, or mark one active/invalidated. Every
+    // write is Admin SDK only (the webhook, the due-scan scheduler).
+    match /eventBenefits/{cycleKey} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow write: if false;
+    }
+
+    // eligibleTicketTailorEvents/{ticketTailorEventId}: admin-managed
+    // configuration of which Ticket Tailor events/ticket types
+    // participate in the member benefit — Admin-SDK-only (the admin
+    // dashboard's session-authorized API routes), no legitimate client
+    // read or write path at all — left uncovered on purpose, same
+    // treatment as `matchingCycles`/`legacyImports` above, and falls
+    // through to the default-deny below.
+
     // A member-facing proposal from the V1 matching engine. Recipient-only
     // read (matched against the uid the proposal was actually generated
     // for, snapshotted at creation time — see src/lib/matching/engine.ts).
@@ -186,6 +206,32 @@ service cloud.firestore {
     // server-side, never the client SDK, so this rule never needs to
     // grant a client any access at all; it falls through to the
     // default-deny below on purpose.
+
+    // eventParticipants/{eventParticipantId}: Ticket Tailor attendee →
+    // Reconnect consent/visibility records (see src/lib/eventReconnect/).
+    // Deliberately NOT given a client read rule, even an owner-only one
+    // like `profiles` or `introductions` get — this must never become a
+    // client-readable directory of who attended an event, since a single
+    // leaked read rule here would let any signed-in member enumerate
+    // attendees (consenting or not) via a hand-built query. Every legitimate
+    // read (search, gallery, "am I a participant") and every write
+    // (import, claim, activation, the requestsSent counter) goes exclusively
+    // through the purpose-built /api/member/reconnect and
+    // /api/admin/event-reconnect routes, all Admin SDK — this rule never
+    // needs to grant a client any access at all; left uncovered on purpose,
+    // same treatment as `matchingCycles`/`legacyImports` above, and falls
+    // through to the default-deny below.
+
+    // eventReconnectRequests/{eventReconnectRequestId}: Reconnect connection
+    // requests (see src/lib/eventReconnect/requests.ts) — same Admin-SDK-only
+    // treatment as `eventParticipants` above, for the same reason: a client
+    // read rule here (even recipient-only, like `invitations` gets) would
+    // let a member's own client query surface metadata about a request
+    // before the server has decided whether the caller is even allowed to
+    // know it exists. Every read (a member's own pending requests) and every
+    // write (create, accept, decline, lazy-expiry) is served by
+    // /api/member/reconnect routes only — left uncovered on purpose, falls
+    // through to the default-deny below.
 
     // Default-deny everything else.
     match /{document=**} {

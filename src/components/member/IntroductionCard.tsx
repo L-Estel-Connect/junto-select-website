@@ -30,11 +30,18 @@ export default function IntroductionCard({ introduction }: { introduction: Membe
 
   return (
     <div className="rounded-2xl border border-hairline bg-white p-6">
-      <p className={eyebrowClasses}>El interés es mutuo ✨</p>
+      <p className={eyebrowClasses}>{introduction.eventLabel ? "Os conocisteis en Junto Select" : "El interés es mutuo ✨"}</p>
       <p className="mt-3 max-w-[46ch] text-[18px] leading-snug text-ink">
         {name} también quiere conocerte.
       </p>
-      {date && <p className="mt-1 text-[13px] text-ink-soft">Introducción del {date}.</p>}
+      {introduction.eventLabel ? (
+        <p className="mt-1 text-[13px] text-ink-soft">
+          Os conocisteis en Junto Select · {introduction.eventLabel}
+          {date ? ` — introducción del ${date}.` : "."}
+        </p>
+      ) : (
+        date && <p className="mt-1 text-[13px] text-ink-soft">Introducción del {date}.</p>
+      )}
 
       <div className="mt-6">
         <PublicProfileCard profile={introduction.other} />

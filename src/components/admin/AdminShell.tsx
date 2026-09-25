@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: "/admin/introductions", label: "Introducciones" },
   { href: "/admin/review", label: "Revisión" },
   { href: "/admin/legacy", label: "Legacy" },
+  { href: "/admin/event-benefits", label: "Eventos" },
 ];
 
 const REFRESH_INTERVAL_MS = 45 * 60 * 1000;

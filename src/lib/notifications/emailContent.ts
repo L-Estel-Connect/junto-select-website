@@ -107,5 +107,24 @@ export function buildEmailContent(
         ),
       };
     }
+    // Content-free by design (see the audit's privacy/consent analysis):
+    // never says who is asking, never says how many people asked, never
+    // implies mutual interest. One per participant per event regardless
+    // of how many different people requested them (see
+    // EventParticipantDocument.invitationEmailSentAt) — never a re-ask
+    // that could feel like pressure.
+    case "event_reconnect_invite": {
+      const eventLabel = typeof data.eventLabel === "string" && data.eventLabel ? data.eventLabel : "el evento";
+      const eventId = typeof data.eventId === "string" ? data.eventId : "";
+      return {
+        subject: "Alguien que conociste quiere reconectar — Junto Select",
+        textContent: withFooter(
+          `Hola,\n\nAlguien que conociste en Junto Select · ${eventLabel} querría volver a conectar contigo.\n\n` +
+            "Activa tu perfil de Reconnect para verlo y decidir si quieres aceptar.",
+          appBaseUrl,
+          eventId ? `/reconnect/${eventId}` : "/reconnect",
+        ),
+      };
+    }
   }
 }

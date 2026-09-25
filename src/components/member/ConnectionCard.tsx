@@ -65,7 +65,7 @@ export default function ConnectionCard({ connection }: { connection: MemberConne
         </p>
         {city && <p className="mt-0.5 truncate text-[14px] text-ink-soft">{city}</p>}
         <p className="mt-2 text-[12px] font-medium uppercase tracking-[0.08em] text-ink-soft">
-          Interés mutuo
+          {connection.eventLabel ? `Os conocisteis en Junto Select · ${connection.eventLabel}` : "Interés mutuo"}
         </p>
         {date && <p className="mt-0.5 text-[11px] text-ink-soft">{date}</p>}
         <p className="mt-2 whitespace-nowrap text-[13px] font-medium text-ink">Ver conexión</p>
