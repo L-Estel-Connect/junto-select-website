@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ChangeEvent } from "react";
+import { useAuth } from "@/lib/firebase/useAuth";
 import { useSharedProfile } from "@/lib/introduction/profileCache";
 import { uploadPhoto } from "@/lib/introduction/photos";
 import { UnsupportedImageError } from "@/lib/introduction/imageProcessing";
@@ -44,6 +45,7 @@ export default function ReconnectActivationForm({
   eventId: string;
   onActivated: () => void;
 }) {
+  const { user } = useAuth();
   const { profile, error: profileError, refresh: refreshProfile, mutate } = useSharedProfile(uid);
   const [firstName, setFirstName] = useState("");
   const [photoPath, setPhotoPath] = useState<string | null>(null);
@@ -134,6 +136,11 @@ export default function ReconnectActivationForm({
           Solo se te mostrará a otras personas de este evento que también
           decidan activarse. Nadie ve tu perfil hasta que lo actives.
         </p>
+        {user?.email && (
+          <p className="mt-3 text-[13px] text-ink-soft">
+            Hemos encontrado tu entrada para este evento con el email <strong>{user.email}</strong>.
+          </p>
+        )}
       </div>
 
       {!hasFirstName && (
