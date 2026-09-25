@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminOrRespond } from "@/lib/admin/apiGuard";
+import { describeError } from "@/lib/admin/describeError";
 import { syncEligibleEvent } from "@/lib/eventBenefits/eligibleEvents";
 
 export const runtime = "nodejs";
@@ -34,6 +35,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "eligible_event_not_found" }, { status: 404 });
     }
     console.error("sync-event: failed", error);
-    return NextResponse.json({ ok: false, error: "sync_failed" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "sync_failed", detail: describeError(error) }, { status: 500 });
   }
 }
