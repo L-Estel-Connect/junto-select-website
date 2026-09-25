@@ -39,7 +39,7 @@ export async function adminFetch(path: string, init: RequestInit = {}): Promise<
 export async function adminFetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await adminFetch(path, init);
   const text = await res.text();
-  let data: { ok?: boolean; error?: string } & Record<string, unknown>;
+  let data: { ok?: boolean; error?: string; detail?: string } & Record<string, unknown>;
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
@@ -50,7 +50,14 @@ export async function adminFetchJson<T>(path: string, init?: RequestInit): Promi
     );
   }
   if (!res.ok || data.ok === false) {
-    throw new Error(data.error || `request_failed_${res.status}`);
+    // `detail` (see eligible-events/route.ts's describeError) carries the
+    // real underlying exception message/code for a server-side failure —
+    // shown here rather than only logged, since a failure that only
+    // reproduces against the real deployed backend (an IAM/Firestore
+    // provisioning issue, say) can't be inspected via Cloud Logging from
+    // wherever this code is being developed.
+    const message = data.detail ? `${data.error || "request_failed"}: ${data.detail}` : data.error || `request_failed_${res.status}`;
+    throw new Error(message);
   }
   return data as T;
 }

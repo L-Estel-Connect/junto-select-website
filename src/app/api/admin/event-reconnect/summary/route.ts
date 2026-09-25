@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminOrRespond } from "@/lib/admin/apiGuard";
+import { describeError } from "@/lib/admin/describeError";
 import { getReconnectAdminSummary } from "@/lib/eventReconnect/adminSummary";
 
 export const runtime = "nodejs";
@@ -16,6 +17,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, summary });
   } catch (error) {
     console.error("event-reconnect summary: failed", error);
-    return NextResponse.json({ ok: false, error: "failed_to_load_summary" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "failed_to_load_summary", detail: describeError(error) }, { status: 500 });
   }
 }

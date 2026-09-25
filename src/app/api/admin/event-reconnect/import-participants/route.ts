@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminOrRespond } from "@/lib/admin/apiGuard";
+import { describeError } from "@/lib/admin/describeError";
 import { importEventParticipants, type ImportEventParticipantRow } from "@/lib/eventReconnect/participants";
 
 export const runtime = "nodejs";
@@ -48,6 +49,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, result });
   } catch (error) {
     console.error("event-reconnect import-participants: failed", error);
-    return NextResponse.json({ ok: false, error: "failed_to_import_participants" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "failed_to_import_participants", detail: describeError(error) }, { status: 500 });
   }
 }

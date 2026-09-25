@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminOrRespond } from "@/lib/admin/apiGuard";
+import { describeError } from "@/lib/admin/describeError";
 import { listEligibleEvents, registerEligibleEvent } from "@/lib/eventBenefits/eligibleEvents";
 
 export const runtime = "nodejs";
@@ -20,6 +21,16 @@ export const runtime = "nodejs";
  * response body, which the admin UI's `res.json()` call then failed to
  * parse with a raw, undiagnosable browser error ("Unexpected end of JSON
  * input") instead of a real message.
+ *
+ * The caught error's own message/code is included in the JSON response
+ * (`detail`) as well as logged server-side — this route has no access to
+ * this deployment's Cloud Logging from where it's developed, so the
+ * response body itself is the only available diagnostic channel for a
+ * failure that only reproduces against the real deployed backend (e.g. a
+ * genuine Firestore IAM/permission or provisioning issue that an emulator
+ * can't reproduce at all, since the emulator enforces no IAM). Safe here:
+ * this route is already admin-authenticated, and a Firestore error message
+ * never contains secrets — at most a project id or resource path.
  */
 export async function GET(request: Request) {
   const admin = await requireAdminOrRespond(request);
@@ -30,7 +41,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, events });
   } catch (error) {
     console.error("eligible-events GET: failed", error);
-    return NextResponse.json({ ok: false, error: "failed_to_list_events" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "failed_to_list_events", detail: describeError(error) }, { status: 500 });
   }
 }
 
@@ -94,6 +105,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("eligible-events POST: failed to register event", error);
-    return NextResponse.json({ ok: false, error: "failed_to_register_event" }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "failed_to_register_event", detail: describeError(error) },
+      { status: 500 },
+    );
   }
 }

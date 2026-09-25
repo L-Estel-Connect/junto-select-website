@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminOrRespond } from "@/lib/admin/apiGuard";
+import { describeError } from "@/lib/admin/describeError";
 import { setReconnectForceClosed } from "@/lib/eventReconnect/eventConfig";
 
 export const runtime = "nodejs";
@@ -31,6 +32,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("event-reconnect force-close: failed", error);
-    return NextResponse.json({ ok: false, error: "failed_to_update_force_close" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "failed_to_update_force_close", detail: describeError(error) }, { status: 500 });
   }
 }
