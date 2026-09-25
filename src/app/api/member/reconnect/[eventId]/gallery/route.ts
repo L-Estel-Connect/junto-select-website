@@ -13,6 +13,11 @@ export const runtime = "nodejs";
  * server-side-only data path. Every returned item is name + one photo
  * only, by construction (ReconnectCandidateView has no other fields) — see
  * the audit for why this is deliberately not a richer "profile card."
+ *
+ * Deliberately includes the caller's own card (see search/route.ts's
+ * matching doc comment and ReconnectCandidateView.isSelf) — seeing
+ * themselves in the same gallery UI everyone else uses is the point, not
+ * an oversight.
  */
 export async function GET(request: Request, context: { params: Promise<{ eventId: string }> }) {
   const auth = await requireFirebaseUser(request);
@@ -30,8 +35,7 @@ export async function GET(request: Request, context: { params: Promise<{ eventId
     return NextResponse.json({ ok: false, error: "not_activated" }, { status: 403 });
   }
 
-  const results = await listReconnectGallery(eventId);
   const callerParticipantId = eventParticipantId(eventId, normalizeEmail(auth.email));
-  const filtered = results.filter((r) => r.participantId !== callerParticipantId);
-  return NextResponse.json({ ok: true, results: filtered });
+  const results = await listReconnectGallery(eventId, callerParticipantId);
+  return NextResponse.json({ ok: true, results });
 }

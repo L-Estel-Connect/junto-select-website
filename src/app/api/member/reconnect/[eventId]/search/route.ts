@@ -15,6 +15,12 @@ export const runtime = "nodejs";
  * currently open — both re-verified here independently of whatever the
  * client's own state view claims, so closed events can never be probed
  * through direct API calls (see the audit's security requirements).
+ *
+ * Deliberately does NOT filter the caller's own result out: they're meant
+ * to see themselves in search exactly as anyone else would (see
+ * ReconnectCandidateView.isSelf) — the client hides the request button for
+ * that one card, but the read itself, and the card rendering, are
+ * identical to any other participant's.
  */
 export async function GET(request: Request, context: { params: Promise<{ eventId: string }> }) {
   const auth = await requireFirebaseUser(request);
@@ -33,9 +39,7 @@ export async function GET(request: Request, context: { params: Promise<{ eventId
   }
 
   const name = new URL(request.url).searchParams.get("name") ?? "";
-  const results = await searchReconnectCandidatesByName(eventId, name);
-  // Never let someone find themselves in their own search results.
   const callerParticipantId = eventParticipantId(eventId, normalizeEmail(auth.email));
-  const filtered = results.filter((r) => r.participantId !== callerParticipantId);
-  return NextResponse.json({ ok: true, results: filtered });
+  const results = await searchReconnectCandidatesByName(eventId, name, callerParticipantId);
+  return NextResponse.json({ ok: true, results });
 }

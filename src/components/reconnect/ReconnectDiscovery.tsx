@@ -36,14 +36,24 @@ function CandidateCard({
         {candidate.firstName}
         {candidate.age ? `, ${candidate.age}` : ""}
       </p>
-      <button
-        type="button"
-        disabled={requested || disabled}
-        onClick={onRequest}
-        className="rounded-full border border-hairline px-4 py-2 text-[13px] text-ink transition-colors hover:border-rose disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {requested ? "Solicitud enviada" : "Solicitar conexión"}
-      </button>
+      {/* The caller's own card, shown deliberately (see discovery.ts's doc
+          comment) so they see exactly what others see — same card, no
+          separate "preview" UI. Only the action differs: never a request
+          button on your own profile, both because it makes no sense and
+          because createReconnectRequest independently refuses it
+          server-side (cannot_request_self) regardless of what the UI does. */}
+      {candidate.isSelf ? (
+        <span className="rounded-full border border-hairline px-4 py-2 text-center text-[13px] text-ink-soft">Tú</span>
+      ) : (
+        <button
+          type="button"
+          disabled={requested || disabled}
+          onClick={onRequest}
+          className="rounded-full border border-hairline px-4 py-2 text-[13px] text-ink transition-colors hover:border-rose disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {requested ? "Solicitud enviada" : "Solicitar conexión"}
+        </button>
+      )}
     </div>
   );
 }
