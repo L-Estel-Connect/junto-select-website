@@ -26,6 +26,13 @@ export default function EventBenefitsPage() {
   const [label, setLabel] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [reconnectEnabled, setReconnectEnabled] = useState(false);
+  // Defaults to true for a brand-new registration — the common case
+  // (registering an event for the 20% benefit) stays a single click, same
+  // as before this toggle existed. An admin who wants a Reconnect-only
+  // event unchecks it, which also lifts the ticket-type-ID requirement
+  // below — see the two independent switches this product decision calls
+  // for (an event can be either, both, or neither).
+  const [memberBenefitEnabled, setMemberBenefitEnabled] = useState(true);
   const [registering, setRegistering] = useState(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
@@ -37,8 +44,12 @@ export default function EventBenefitsPage() {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    if (!eventId.trim() || !label.trim() || ids.length === 0) {
-      setRegisterError("Completa el ID del evento, un nombre y al menos un ID de tipo de entrada.");
+    if (!eventId.trim() || !label.trim()) {
+      setRegisterError("Completa el ID del evento y un nombre descriptivo.");
+      return;
+    }
+    if (memberBenefitEnabled && ids.length === 0) {
+      setRegisterError("El beneficio -20% necesita al menos un ID de tipo de entrada.");
       return;
     }
     setRegistering(true);
@@ -51,6 +62,7 @@ export default function EventBenefitsPage() {
           label: label.trim(),
           eventDate: eventDate.trim() || null,
           reconnectEnabled,
+          memberBenefitEnabled,
         }),
       });
       setEventId("");
@@ -58,6 +70,7 @@ export default function EventBenefitsPage() {
       setLabel("");
       setEventDate("");
       setReconnectEnabled(false);
+      setMemberBenefitEnabled(true);
       eventsQuery.reload();
     } catch (err) {
       setRegisterError(err instanceof Error ? err.message : "No se ha podido registrar el evento.");
@@ -72,6 +85,12 @@ export default function EventBenefitsPage() {
     setLabel(event.label);
     setEventDate(event.eventDate ?? "");
     setReconnectEnabled(event.reconnectEnabled);
+    // A document written before this toggle existed has no
+    // memberBenefitEnabled field at all — treat that the same as `true`
+    // for display, mirroring getAllEligibleTicketTypeIds()'s own read-time
+    // compatibility rule, so an old event doesn't appear to have silently
+    // lost its benefit the first time someone opens it to edit.
+    setMemberBenefitEnabled(event.memberBenefitEnabled !== false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -123,10 +142,15 @@ export default function EventBenefitsPage() {
           />
           <input
             type="text"
-            placeholder="IDs de tipo de entrada (separados por comas)"
+            placeholder={
+              memberBenefitEnabled
+                ? "IDs de tipo de entrada (separados por comas)"
+                : "IDs de tipo de entrada (no necesario solo para Reconnect)"
+            }
             value={ticketTypeIds}
             onChange={(e) => setTicketTypeIds(e.target.value)}
-            className="rounded-md border border-hairline px-3 py-2 text-[13px]"
+            className="rounded-md border border-hairline px-3 py-2 text-[13px] disabled:bg-hairline/20 disabled:text-ink-soft"
+            disabled={!memberBenefitEnabled}
           />
           <input
             type="text"
@@ -138,13 +162,13 @@ export default function EventBenefitsPage() {
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-2 text-[13px] text-ink">
-            Fecha del evento
             <input
-              type="date"
-              value={eventDate}
-              onChange={(e) => setEventDate(e.target.value)}
-              className="rounded-md border border-hairline px-3 py-2 text-[13px]"
+              type="checkbox"
+              checked={memberBenefitEnabled}
+              onChange={(e) => setMemberBenefitEnabled(e.target.checked)}
+              className="h-4 w-4"
             />
+            Beneficio miembros -20%
           </label>
           <label className="flex items-center gap-2 text-[13px] text-ink">
             <input
@@ -155,7 +179,21 @@ export default function EventBenefitsPage() {
             />
             Reconnect activado
           </label>
+          <label className="flex items-center gap-2 text-[13px] text-ink">
+            Fecha del evento
+            <input
+              type="date"
+              value={eventDate}
+              onChange={(e) => setEventDate(e.target.value)}
+              className="rounded-md border border-hairline px-3 py-2 text-[13px]"
+            />
+          </label>
         </div>
+        <p className="mt-2 text-[12px] text-ink-soft">
+          Estos dos interruptores son completamente independientes: un evento puede tener el beneficio
+          -20%, Reconnect, ambos o ninguno. Los IDs de tipo de entrada solo son necesarios si el
+          beneficio -20% está activado — Reconnect no los usa para nada.
+        </p>
         <p className="mt-1 text-[12px] text-ink-soft">
           Reconnect se abre automáticamente a las 00:01 del día siguiente a la fecha del evento y se
           cierra 48 horas después — nunca se configura manualmente.
@@ -185,6 +223,10 @@ export default function EventBenefitsPage() {
                     <p className="text-[14px] text-ink">{event.label}</p>
                     <p className="text-[12px] text-ink-soft">
                       {event.ticketTailorEventId} · {event.ticketTailorTicketTypeIds.length} tipo(s) de entrada
+                    </p>
+                    <p className="mt-1 text-[12px] text-ink-soft">
+                      Beneficio -20%: {event.memberBenefitEnabled !== false ? "activado" : "desactivado"} · Reconnect:{" "}
+                      {event.reconnectEnabled ? "activado" : "desactivado"}
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-2">

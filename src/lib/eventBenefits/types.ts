@@ -103,4 +103,23 @@ export interface EligibleTicketTailorEventDocument {
   eventDate: string | null;
   reconnectEnabled: boolean;
   reconnectForceClosedAt: unknown | null;
+  /**
+   * Whether this event participates in the member 20% benefit — fully
+   * independent of `reconnectEnabled` (an event can be either, both, or
+   * neither). `ticketTailorTicketTypeIds` is only required (see the
+   * eligible-events route's validation) when this is `true`; it's `false`
+   * for a Reconnect-only event so `getAllEligibleTicketTypeIds()` never
+   * pulls that event's ticket types into the benefit's union.
+   *
+   * BACKWARD COMPATIBILITY: this field did not exist before this toggle
+   * was added, when every registered event implicitly participated in the
+   * benefit (that was the only thing this document was for). A document
+   * written before this field existed has it `undefined`, not `false` —
+   * `getAllEligibleTicketTypeIds()` deliberately treats "missing" the same
+   * as `true` (only an EXPLICIT `false` excludes it), so an already-active
+   * member benefit tied to a pre-existing event is never silently broken
+   * by this schema addition. New/edited registrations always write an
+   * explicit boolean (see the admin form's own default).
+   */
+  memberBenefitEnabled: boolean;
 }

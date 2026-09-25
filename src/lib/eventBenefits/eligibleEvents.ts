@@ -5,16 +5,23 @@ import type { EligibleTicketTailorEventDocument, EventBenefitDocument } from "./
 
 /**
  * Every currently-eligible ticket type id, flattened across every
- * registered eligible event — what a newly-granted monthly benefit is
- * associated with at creation time (see lifecycle.ts). Small collection,
- * read in full on every grant; no pagination needed at this scale (see
- * the Ticket Tailor API audit's scale findings).
+ * registered event that has the member benefit ENABLED — what a
+ * newly-granted monthly benefit is associated with at creation time (see
+ * lifecycle.ts). A Reconnect-only event (`memberBenefitEnabled: false`)
+ * never contributes its ticket types here, which is what keeps the two
+ * features genuinely independent rather than a Reconnect registration
+ * accidentally widening who gets the 20% discount. Missing the field
+ * entirely (a document written before this toggle existed) is treated the
+ * same as `true` — see EligibleTicketTailorEventDocument's own doc comment
+ * for why. Small collection, read in full on every grant; no pagination
+ * needed at this scale (see the Ticket Tailor API audit's scale findings).
  */
 export async function getAllEligibleTicketTypeIds(): Promise<string[]> {
   const snap = await adminDb.collection("eligibleTicketTailorEvents").get();
   const ids = new Set<string>();
   for (const doc of snap.docs) {
     const data = doc.data() as EligibleTicketTailorEventDocument;
+    if (data.memberBenefitEnabled === false) continue;
     for (const id of data.ticketTailorTicketTypeIds) ids.add(id);
   }
   return [...ids];
@@ -34,12 +41,19 @@ export async function listEligibleEvents(): Promise<EligibleTicketTailorEventDoc
  */
 export async function registerEligibleEvent(params: {
   ticketTailorEventId: string;
+  /**
+   * Only meaningful (and only required — see the route's validation) when
+   * `memberBenefitEnabled` is true. A Reconnect-only registration passes
+   * an empty array here.
+   */
   ticketTailorTicketTypeIds: string[];
   label: string;
   /** YYYY-MM-DD, Madrid-local — required for Reconnect to ever be available for this event; omit/null if unknown. */
   eventDate?: string | null;
-  /** Defaults to false — registering an event for the discount benefit must never implicitly enable Reconnect. */
+  /** Defaults to false — registering an event must never implicitly enable Reconnect. */
   reconnectEnabled?: boolean;
+  /** Defaults to false — fully independent of `reconnectEnabled`; see EligibleTicketTailorEventDocument's doc comment. */
+  memberBenefitEnabled?: boolean;
 }): Promise<void> {
   const now = new Date();
   const ref = adminDb.doc(`eligibleTicketTailorEvents/${params.ticketTailorEventId}`);
@@ -56,6 +70,7 @@ export async function registerEligibleEvent(params: {
       lastSyncResult: existing.exists ? (existingData?.lastSyncResult ?? null) : null,
       eventDate: params.eventDate ?? existingData?.eventDate ?? null,
       reconnectEnabled: params.reconnectEnabled ?? existingData?.reconnectEnabled ?? false,
+      memberBenefitEnabled: params.memberBenefitEnabled ?? existingData?.memberBenefitEnabled ?? false,
       // Never reset by re-registering the event — the force-close override
       // is a dedicated, separate admin action (see setReconnectForceClosed
       // in eventReconnect/eventConfig.ts) and must survive an unrelated
