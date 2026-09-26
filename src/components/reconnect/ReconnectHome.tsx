@@ -134,8 +134,9 @@ export default function ReconnectHome({ uid, eventId }: { uid: string; eventId: 
           <p className="font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">
             Reconnect · {state.eventLabel}
           </p>
-          <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-            ¿Conociste a alguien que te gustaría volver a ver?
+          <p className="mt-2 max-w-[52ch] text-[15px] leading-relaxed text-ink-soft">
+            Puedes conectar con hasta 3 personas que conociste durante la noche — ya sea por afinidad, amistad,
+            interés profesional o porque simplemente te gustaría volver a verlas.
           </p>
         </div>
         <ReconnectPhotoVisibilityToggle
