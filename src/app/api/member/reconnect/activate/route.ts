@@ -24,6 +24,7 @@ export async function POST(request: Request) {
     eventId?: unknown;
     firstName?: unknown;
     photoPath?: unknown;
+    showPhotoInReconnect?: unknown;
     birthDateISO?: unknown;
     contactMethod?: unknown;
     contactValue?: unknown;
@@ -48,6 +49,7 @@ export async function POST(request: Request) {
     verifiedEmail: auth.email,
     firstName: typeof body.firstName === "string" && body.firstName.trim() ? body.firstName.trim() : null,
     photoPath: typeof body.photoPath === "string" && body.photoPath.trim() ? body.photoPath.trim() : null,
+    showPhotoInReconnect: body.showPhotoInReconnect === true,
     birthDateISO: typeof body.birthDateISO === "string" && body.birthDateISO.trim() ? body.birthDateISO.trim() : null,
     contactMethod,
     contactValue: typeof body.contactValue === "string" && body.contactValue.trim() ? body.contactValue.trim() : null,

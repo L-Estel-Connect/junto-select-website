@@ -31,13 +31,21 @@ export type CreateReconnectRequestResult =
 /**
  * The ONLY write path that creates an EventReconnectRequest — everything
  * that matters is verified fresh, server-side, inside one transaction:
- * discovery window, target visibility/consent, the permanent 3-per-event
- * limit, and existing blocked-pair state. Mirrors MemberRunDocument's
+ * discovery window, target validity, the permanent 3-per-event limit, and
+ * (when resolvable) existing blocked-pair state. Mirrors MemberRunDocument's
  * proposalCount pattern (matching/types.ts) — "the only place the hard
  * max invariant is enforced against concurrent execution" — applied here
  * to the identical class of problem: a counter read-checked-and-incremented
  * inside the same transaction as the thing it gates, so two concurrent
  * requests from the same person can never both slip past the limit.
+ *
+ * The target does NOT need to have activated Reconnect yet — expressing
+ * interest in an imported-but-not-yet-activated attendee is exactly what
+ * the product spec calls for (see types.ts's EventReconnectRequestDocument
+ * doc comment for how that's represented: `recipientPersonId`/`recipientUid`
+ * stay null until the target activates). It still costs the requester
+ * exactly one of their 3 requests, identically to requesting an already-
+ * activated participant.
  */
 export async function createReconnectRequest(
   eventId: string,
@@ -49,25 +57,39 @@ export async function createReconnectRequest(
   const event = await getEligibleEvent(eventId);
   if (!event || reconnectWindowState(event) !== "open") return { ok: false, error: "discovery_closed" };
 
+  const requesterParticipantId = eventParticipantId(eventId, normalizeEmail(requesterVerifiedEmail));
+  // Compared as participant ids, not person ids — this must hold even
+  // before the target has activated (and therefore before it has a person
+  // id at all), so this is the one self-check that always works.
+  if (targetParticipantId === requesterParticipantId) return { ok: false, error: "cannot_request_self" };
+
   const target = await getEventParticipant(targetParticipantId);
-  if (!target || target.eventId !== eventId) return { ok: false, error: "target_not_found" };
-  if (!target.visibleForReconnect || !target.acceptsConnectionRequests || !target.claimedUid || !target.claimedPersonId) {
-    return { ok: false, error: "target_not_visible" };
+  if (!target || target.eventId !== eventId || target.status === "opted_out") {
+    return { ok: false, error: "target_not_found" };
   }
-  // Narrowed and re-bound to plain non-nullable locals here — the guard
-  // above already proved these non-null, but TypeScript's control-flow
-  // narrowing doesn't cross into the transaction callback closure below.
-  const targetPersonId = target.claimedPersonId;
-  const targetUid = target.claimedUid;
-  if (targetPersonId === requesterPersonId) return { ok: false, error: "cannot_request_self" };
 
-  const blockCheck = await getPairHistoryDocument(requesterPersonId, targetPersonId);
-  if (blockCheck?.state === "blocked") return { ok: false, error: "blocked" };
+  // Only an ALREADY-ACTIVATED target has a resolvable person id/uid and can
+  // be block-checked now; an unactivated target is re-checked for a block
+  // at decide time instead (see decideReconnectRequest), once their real
+  // identity is known.
+  let targetPersonId: string | null = null;
+  let targetUid: string | null = null;
+  if (target.visibleForReconnect) {
+    if (!target.acceptsConnectionRequests || !target.claimedUid || !target.claimedPersonId) {
+      return { ok: false, error: "target_not_visible" };
+    }
+    targetPersonId = target.claimedPersonId;
+    targetUid = target.claimedUid;
+    if (targetPersonId === requesterPersonId) return { ok: false, error: "cannot_request_self" };
 
-  const requesterParticipantRef = adminDb.doc(
-    `eventParticipants/${eventParticipantId(eventId, normalizeEmail(requesterVerifiedEmail))}`,
+    const blockCheck = await getPairHistoryDocument(requesterPersonId, targetPersonId);
+    if (blockCheck?.state === "blocked") return { ok: false, error: "blocked" };
+  }
+
+  const requesterParticipantRef = adminDb.doc(`eventParticipants/${requesterParticipantId}`);
+  const requestRef = adminDb.doc(
+    `eventReconnectRequests/${eventReconnectRequestId(eventId, requesterParticipantId, targetParticipantId)}`,
   );
-  const requestRef = adminDb.doc(`eventReconnectRequests/${eventReconnectRequestId(eventId, requesterPersonId, targetPersonId)}`);
 
   return adminDb.runTransaction(async (tx) => {
     const [requesterSnap, existingRequestSnap] = await Promise.all([tx.get(requesterParticipantRef), tx.get(requestRef)]);
@@ -91,10 +113,10 @@ export async function createReconnectRequest(
     const responseDeadline = Timestamp.fromMillis(Date.now() + RECONNECT_RESPONSE_WINDOW_HOURS * 3600 * 1000);
     const requestDoc: EventReconnectRequestDocument = {
       eventId,
-      personIdLow: [requesterPersonId, targetPersonId].sort()[0],
-      personIdHigh: [requesterPersonId, targetPersonId].sort()[1],
+      initiatorParticipantId: requesterParticipantId,
       initiatorPersonId: requesterPersonId,
       initiatorUid: requesterUid,
+      targetParticipantId,
       recipientPersonId: targetPersonId,
       recipientUid: targetUid,
       status: "pending",
@@ -110,20 +132,105 @@ export async function createReconnectRequest(
 }
 
 /**
+ * Called once, from activateReconnect, the moment a participant claims
+ * their event participant record — backfills `recipientPersonId`/
+ * `recipientUid` on every still-pending request that was sent to them
+ * BEFORE they activated (see createReconnectRequest: those fields start
+ * null for an unactivated target). Until this runs, such a request is
+ * invisible to `listPendingReconnectRequestsForMember` by construction —
+ * exactly the "can't see it until you activate" requirement. Idempotent:
+ * finds nothing to do on a second call (the query itself only matches
+ * still-null docs).
+ */
+export async function resolvePendingRequestsForActivatedParticipant(
+  participantId: string,
+  uid: string,
+  personId: string,
+): Promise<void> {
+  const snap = await adminDb
+    .collection("eventReconnectRequests")
+    .where("targetParticipantId", "==", participantId)
+    .where("status", "==", "pending")
+    .where("recipientPersonId", "==", null)
+    .get();
+  if (snap.empty) return;
+
+  const batch = adminDb.batch();
+  const now = FieldValue.serverTimestamp();
+  for (const doc of snap.docs) {
+    batch.update(doc.ref, { recipientPersonId: personId, recipientUid: uid, updatedAt: now });
+  }
+  await batch.commit();
+}
+
+/**
+ * Whether this (not-yet-activated) participant has a live incoming request
+ * — i.e. one still within its own 72h response deadline. Used only to let
+ * `getReconnectStateForCaller` allow activation even after the 48h
+ * discovery window has otherwise closed, so a request received late in
+ * that window doesn't strand its recipient (see the audit's timing-window
+ * analysis) — never used to widen anything else.
+ */
+export async function hasLivePendingIncomingRequest(participantId: string): Promise<boolean> {
+  const snap = await adminDb
+    .collection("eventReconnectRequests")
+    .where("targetParticipantId", "==", participantId)
+    .where("status", "==", "pending")
+    .get();
+  const now = Date.now();
+  return snap.docs.some((doc) => {
+    const deadline = (doc.data() as EventReconnectRequestDocument).responseDeadline as Timestamp;
+    return deadline.toMillis() > now;
+  });
+}
+
+/**
+ * Called when a participant explicitly opts out ("No quiero participar") —
+ * every request still pending FOR them is resolved as declined, exactly as
+ * if they had seen and declined it themselves: no connection, no contact
+ * reveal, and the initiator's already-spent allowance slot is (correctly,
+ * per the product rule) never refunded. A request they THEMSELVES sent to
+ * someone else is left untouched — opting out only removes this person
+ * from discovery and future requests, it doesn't retract what they already
+ * did.
+ */
+export async function cancelPendingRequestsForParticipant(participantId: string): Promise<void> {
+  const snap = await adminDb
+    .collection("eventReconnectRequests")
+    .where("targetParticipantId", "==", participantId)
+    .where("status", "==", "pending")
+    .get();
+  if (snap.empty) return;
+
+  const batch = adminDb.batch();
+  const now = FieldValue.serverTimestamp();
+  for (const doc of snap.docs) {
+    batch.update(doc.ref, { status: "declined", decidedAt: now });
+  }
+  await batch.commit();
+}
+
+/**
  * Every request still awaiting THIS caller's action or awaiting the OTHER
  * side's action — never a re-opening of the gallery/search, exactly the
- * distinction the audit calls for. Lazily expires anything past its own
- * responseDeadline at read time (no scheduler needed — see the audit):
- * a pending request past its deadline is transitioned to "expired" here
- * and simply excluded from the result, never surfaced as a live item to
- * either party.
+ * distinction the audit calls for. Queried directly by role (initiator/
+ * recipient) rather than a sorted-pair convention — a request is inherently
+ * directional (there's always exactly one initiator and one recipient), so
+ * there's no ambiguity to resolve by sorting. A request whose
+ * `recipientPersonId` is still null (the target hasn't activated yet) never
+ * matches either query for ANY personId, by construction — it only starts
+ * appearing here once resolvePendingRequestsForActivatedParticipant has
+ * run. Lazily expires anything past its own responseDeadline at read time
+ * (no scheduler needed — see the audit): a pending request past its
+ * deadline is transitioned to "expired" here and simply excluded from the
+ * result, never surfaced as a live item to either party.
  */
 export async function listPendingReconnectRequestsForMember(personId: string): Promise<PendingReconnectRequestView[]> {
-  const [asLow, asHigh] = await Promise.all([
-    adminDb.collection("eventReconnectRequests").where("personIdLow", "==", personId).where("status", "==", "pending").get(),
-    adminDb.collection("eventReconnectRequests").where("personIdHigh", "==", personId).where("status", "==", "pending").get(),
+  const [asInitiator, asRecipient] = await Promise.all([
+    adminDb.collection("eventReconnectRequests").where("initiatorPersonId", "==", personId).where("status", "==", "pending").get(),
+    adminDb.collection("eventReconnectRequests").where("recipientPersonId", "==", personId).where("status", "==", "pending").get(),
   ]);
-  const docs = [...asLow.docs, ...asHigh.docs];
+  const docs = [...asInitiator.docs, ...asRecipient.docs];
 
   const results: PendingReconnectRequestView[] = [];
   for (const doc of docs) {
@@ -137,8 +244,8 @@ export async function listPendingReconnectRequestsForMember(personId: string): P
     const isInitiator = data.initiatorPersonId === personId;
     const otherUid = isInitiator ? data.recipientUid : data.initiatorUid;
     const event = await getEligibleEvent(data.eventId);
-    const otherProfileSnap = await adminDb.doc(`profiles/${otherUid}`).get();
-    const otherFirstName = (otherProfileSnap.data()?.visible?.firstName as string | undefined) || "—";
+    const otherProfileSnap = otherUid ? await adminDb.doc(`profiles/${otherUid}`).get() : null;
+    const otherFirstName = (otherProfileSnap?.data()?.visible?.firstName as string | undefined) || "—";
 
     results.push({
       id: doc.id,
@@ -154,7 +261,7 @@ export async function listPendingReconnectRequestsForMember(personId: string): P
 
 export type DecideReconnectRequestResult =
   | { ok: true; status: "accepted" | "declined" }
-  | { ok: false; error: "not_found" | "not_your_request" | "already_decided" | "expired" };
+  | { ok: false; error: "not_found" | "not_your_request" | "already_decided" | "expired" | "blocked" };
 
 /**
  * Accept/decline — the recipient only (an initiator canceling their own
@@ -165,6 +272,12 @@ export type DecideReconnectRequestResult =
  * IntroductionDocument tagged source:"event" — from that point on this
  * pair is governed by the IDENTICAL Connexiones/contact-reveal pipeline as
  * an algorithmic introduction; nothing else about that pipeline changes.
+ *
+ * Re-checks blocked-pair state here (never checked at creation time for a
+ * request that targeted a not-yet-activated recipient, since their person
+ * id wasn't resolvable then) — the one point besides creation where it's
+ * guaranteed both person ids are now known, right before an introduction
+ * (and therefore eventual contact reveal) would otherwise be created.
  */
 export async function decideReconnectRequest(
   requestId: string,
@@ -194,11 +307,17 @@ export async function decideReconnectRequest(
       return { ok: true as const, status: "declined" as const };
     }
 
+    const blockCheck = await getPairHistoryDocument(data.initiatorPersonId, deciderPersonId);
+    if (blockCheck?.state === "blocked") {
+      tx.update(requestRef, { status: "declined", decidedAt: now });
+      return { ok: false, error: "blocked" as const };
+    }
+
     const event = await getEligibleEvent(data.eventId);
     const introductionRef = adminDb.doc(`introductions/${requestId}`);
     const introduction: IntroductionDocument = {
       personIdA: data.initiatorPersonId,
-      personIdB: data.recipientPersonId,
+      personIdB: deciderPersonId,
       uidA: data.initiatorUid,
       uidB: deciderUid,
       createdAt: now,

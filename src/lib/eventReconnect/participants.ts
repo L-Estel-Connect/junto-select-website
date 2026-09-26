@@ -73,6 +73,7 @@ export async function importEventParticipants(
       requestsSent: 0,
       importedAt: now,
       claimedAt: null,
+      optedOutAt: null,
       updatedAt: now,
     };
     await ref.create(doc);
@@ -141,6 +142,72 @@ export async function findEventParticipantByEmail(eventId: string, verifiedEmail
 export async function getEventParticipant(participantId: string): Promise<EventParticipantDocument | null> {
   const snap = await adminDb.doc(`eventParticipants/${participantId}`).get();
   return snap.exists ? (snap.data() as EventParticipantDocument) : null;
+}
+
+export type OptOutEventParticipantResult =
+  | { ok: true; participantId: string }
+  | { ok: false; error: "not_found" };
+
+/**
+ * "No quiero participar" — the destructive, explicit opt-out offered
+ * alongside "Activar Reconnect" on the activation landing screen. Never
+ * touches `profiles/{uid}` or the Firebase Auth account: this is scoped
+ * exclusively to this one event's Reconnect participation, exactly like
+ * `delete-profile`'s full-account deletion is a completely separate, only
+ * explicitly-requested action. Anonymizes the Ticket-Tailor-imported PII
+ * fields (never the participant document itself — its id must stay stable
+ * so a later corrected CSV re-import treats this email as already handled
+ * rather than re-creating a fresh, visible attendee — see
+ * importEventParticipants's "already imported" skip). Idempotent: opting
+ * out twice is a no-op success. Pending requests directed at this
+ * participant are resolved by the caller (see requests.ts's
+ * cancelPendingRequestsForParticipant) — this function only owns the
+ * participant record itself.
+ */
+export async function optOutEventParticipant(eventId: string, verifiedEmail: string): Promise<OptOutEventParticipantResult> {
+  const participantId = eventParticipantId(eventId, normalizeEmail(verifiedEmail));
+  const ref = adminDb.doc(`eventParticipants/${participantId}`);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: false, error: "not_found" };
+
+  await ref.update({
+    status: "opted_out",
+    visibleForReconnect: false,
+    acceptsConnectionRequests: false,
+    showPhotoInReconnect: false,
+    firstName: null,
+    lastName: null,
+    phone: null,
+    optedOutAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  return { ok: true, participantId };
+}
+
+export type SetShowPhotoInReconnectResult = { ok: true } | { ok: false; error: "not_found" | "not_activated" };
+
+/**
+ * The editable "Mostrar mi foto en Reconnect" ON/OFF preference — stored on
+ * the event participant record, never on the shared ProfileDocument, so
+ * flipping it can never affect Private Introductions' own photo. Requires
+ * the caller to already be an activated participant of this event; turning
+ * it back on doesn't re-upload anything, it just resumes reading
+ * `profile.photos[0]` in discovery.ts (see buildCandidateView).
+ */
+export async function setShowPhotoInReconnect(
+  eventId: string,
+  verifiedEmail: string,
+  show: boolean,
+): Promise<SetShowPhotoInReconnectResult> {
+  const participantId = eventParticipantId(eventId, normalizeEmail(verifiedEmail));
+  const ref = adminDb.doc(`eventParticipants/${participantId}`);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: false, error: "not_found" };
+  const data = snap.data() as EventParticipantDocument;
+  if (!data.visibleForReconnect) return { ok: false, error: "not_activated" };
+
+  await ref.update({ showPhotoInReconnect: show, updatedAt: FieldValue.serverTimestamp() });
+  return { ok: true };
 }
 
 /**

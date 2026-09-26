@@ -6,6 +6,7 @@ import { isEligibleAge } from "@/lib/introduction/age";
 import { resolvePersonId } from "@/lib/matching/identity";
 import { eventParticipantId, normalizeEmail } from "./identifiers";
 import { claimEventParticipant } from "./participants";
+import { resolvePendingRequestsForActivatedParticipant } from "./requests";
 import type { EventParticipantDocument } from "./types";
 
 export interface ActivateReconnectParams {
@@ -14,8 +15,21 @@ export interface ActivateReconnectParams {
   verifiedEmail: string;
   /** Only used if the profile doesn't already have one — never overwrites an existing name. */
   firstName: string | null;
-  /** A Storage path already uploaded via the existing uploadPhoto() client flow — never a raw file here. Only used if the profile has zero photos. */
+  /**
+   * A Storage path already uploaded via the existing uploadPhoto() client
+   * flow — never a raw file here. Entirely optional (see the product spec:
+   * a photo must never be required to activate Reconnect) — only used if
+   * the profile has zero photos and one was provided.
+   */
   photoPath: string | null;
+  /**
+   * Whether this participant wants their photo (existing or freshly
+   * uploaded, if any) shown in Reconnect for this event — stored on the
+   * event participant record only, never touching ProfileDocument.photos
+   * or Private Introductions. Meaningless (and ignored) when there ends up
+   * being no photo at all.
+   */
+  showPhotoInReconnect: boolean;
   /** Optional — see the doc comment below on why age is not required for V1. */
   birthDateISO: string | null;
   contactMethod: ContactMethod | null;
@@ -24,7 +38,7 @@ export interface ActivateReconnectParams {
 
 export type ActivateReconnectResult =
   | { ok: true }
-  | { ok: false; error: "event_not_participant" | "claimed_by_other" | "under_minimum_age" | "missing_first_name" | "missing_photo" | "missing_contact_method" };
+  | { ok: false; error: "event_not_participant" | "claimed_by_other" | "under_minimum_age" | "missing_first_name" | "missing_contact_method" };
 
 /**
  * The one write path for "activate Reconnect for this event" — deliberately
@@ -72,8 +86,11 @@ export async function activateReconnect(params: ActivateReconnectParams): Promis
   const finalFirstName = profile.visible.firstName || params.firstName?.trim() || "";
   if (!finalFirstName) return { ok: false, error: "missing_first_name" };
 
-  const finalPhotos = profile.photos.length > 0 ? profile.photos : params.photoPath ? [params.photoPath] : [];
-  if (finalPhotos.length === 0) return { ok: false, error: "missing_photo" };
+  // A photo is deliberately NOT required (see the product spec: activating
+  // Reconnect must never require displaying a personal photo) — the profile
+  // may legitimately end up with zero photos, in which case
+  // discovery.ts's buildCandidateView renders a neutral placeholder for
+  // this participant, exactly like an explicit showPhotoInReconnect: false.
 
   const finalContactMethod = profile.contactPreferences.preferredMethod ?? params.contactMethod;
   if (!finalContactMethod) return { ok: false, error: "missing_contact_method" };
@@ -133,8 +150,19 @@ export async function activateReconnect(params: ActivateReconnectParams): Promis
   await participantRef.update({
     visibleForReconnect: true,
     acceptsConnectionRequests: true,
+    // Meaningless with zero photos, but harmless to store as-given —
+    // buildCandidateView only ever consults it once there's an actual
+    // profile.photos[0] to gate.
+    showPhotoInReconnect: params.showPhotoInReconnect,
     activatedAt: now,
     updatedAt: now,
+  });
+
+  // Backfills recipientPersonId/recipientUid on any request sent to this
+  // participant BEFORE they activated — see requests.ts's doc comment.
+  // Never allowed to fail the activation itself if it errors.
+  await resolvePendingRequestsForActivatedParticipant(claim.participantId, params.uid, personId).catch((error) => {
+    console.error(`activateReconnect: failed to resolve pending requests for ${claim.participantId}`, error);
   });
 
   return { ok: true };

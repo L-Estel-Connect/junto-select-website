@@ -7,10 +7,17 @@ export function eventParticipantId(eventId: string, normalizedEmail: string): st
   return `${eventId}_${emailHash}`;
 }
 
-/** Sorted-pair id, mirroring pairHistory's personIdLow/personIdHigh convention — one doc per unordered pair per event, so either side "requesting" the other always resolves to the same document. */
-export function eventReconnectRequestId(eventId: string, personIdA: string, personIdB: string): string {
-  const [personIdLow, personIdHigh] = [personIdA, personIdB].sort();
-  return `${eventId}_${personIdLow}_${personIdHigh}`;
+/**
+ * Sorted-pair id, mirroring pairHistory's personIdLow/personIdHigh
+ * convention — one doc per unordered pair of PARTICIPANT ids per event
+ * (never person ids: a target may not have activated yet, and therefore may
+ * not have a person id at all — see types.ts's EventReconnectRequestDocument
+ * doc comment). Participant ids are already event-scoped, so no extra
+ * `eventId` prefix is needed for uniqueness, but one is kept for readability.
+ */
+export function eventReconnectRequestId(eventId: string, participantIdA: string, participantIdB: string): string {
+  const [participantIdLow, participantIdHigh] = [participantIdA, participantIdB].sort();
+  return `${eventId}_${participantIdLow}_${participantIdHigh}`;
 }
 
 export function normalizeEmail(email: string): string {

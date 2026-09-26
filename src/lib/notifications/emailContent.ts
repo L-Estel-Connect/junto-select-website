@@ -117,10 +117,12 @@ export function buildEmailContent(
       const eventLabel = typeof data.eventLabel === "string" && data.eventLabel ? data.eventLabel : "el evento";
       const eventId = typeof data.eventId === "string" ? data.eventId : "";
       return {
-        subject: "Alguien que conociste quiere reconectar — Junto Select",
+        subject: "Alguien de la última noche quiere volver a verte",
         textContent: withFooter(
-          `Hola,\n\nAlguien que conociste en Junto Select · ${eventLabel} querría volver a conectar contigo.\n\n` +
-            "Activa tu perfil de Reconnect para verlo y decidir si quieres aceptar.",
+          `Hola,\n\nAlguien que conociste en Junto Select · ${eventLabel} quiere volver a conectar contigo.\n\n` +
+            "Activa Reconnect para descubrir quién es y decidir si tú también quieres volver a verle.\n\n" +
+            "Tu participación es completamente opcional. Si prefieres no participar, también puedes eliminar tus " +
+            "datos de Reconnect desde el mismo enlace.",
           appBaseUrl,
           eventId ? `/reconnect/${eventId}` : "/reconnect",
         ),
