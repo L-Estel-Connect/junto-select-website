@@ -5,6 +5,7 @@ import type { EventParticipantDocument, EventReconnectRequestDocument } from "./
 export interface ReconnectAdminSummary {
   participantsImported: number;
   activated: number;
+  optedOut: number;
   requestsSent: number;
   accepted: number;
 }
@@ -22,8 +23,11 @@ export async function getReconnectAdminSummary(eventId: string): Promise<Reconne
   ]);
 
   let activated = 0;
+  let optedOut = 0;
   for (const doc of participantsSnap.docs) {
-    if ((doc.data() as EventParticipantDocument).visibleForReconnect) activated += 1;
+    const data = doc.data() as EventParticipantDocument;
+    if (data.visibleForReconnect) activated += 1;
+    if (data.status === "opted_out") optedOut += 1;
   }
 
   let accepted = 0;
@@ -34,6 +38,7 @@ export async function getReconnectAdminSummary(eventId: string): Promise<Reconne
   return {
     participantsImported: participantsSnap.size,
     activated,
+    optedOut,
     requestsSent: requestsSnap.size,
     accepted,
   };

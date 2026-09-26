@@ -161,8 +161,8 @@ export default function ReconnectEventControls({ event }: { event: EligibleTicke
       {summaryError && <p className="mt-2 text-[12px] text-[#8a3b3b]">{summaryError}</p>}
       {summary && (
         <p className="mt-2 text-[12px] text-ink-soft">
-          {summary.participantsImported} importados · {summary.activated} activados · {summary.requestsSent}{" "}
-          solicitudes enviadas · {summary.accepted} conexiones aceptadas.
+          {summary.participantsImported} importados · {summary.activated} activados · {summary.optedOut} no
+          participan · {summary.requestsSent} solicitudes enviadas · {summary.accepted} conexiones aceptadas.
         </p>
       )}
     </div>

@@ -10,6 +10,31 @@ const inputClasses =
 
 type Mode = "search" | "gallery";
 
+/**
+ * A tasteful, neutral placeholder for a photo that isn't shown — either
+ * because this attendee hasn't activated Reconnect yet, or because they
+ * activated and chose not to display a photo. Deliberately the same visual
+ * treatment for both cases (no "sin foto" label, no generic user icon) so
+ * an activated-but-photo-hidden participant never reads as incomplete or
+ * suspicious — only the status line below the card tells the two apart.
+ */
+function NeutralAvatarPlaceholder() {
+  return (
+    <div className="flex aspect-[3/4] w-full items-center justify-center rounded-md bg-rose-tint">
+      <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <circle cx="20" cy="15" r="7" stroke="currentColor" strokeWidth="1.5" className="text-rose-dark/50" />
+        <path
+          d="M6 34c1.5-8 7-12 14-12s12.5 4 14 12"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          className="text-rose-dark/50"
+        />
+      </svg>
+    </div>
+  );
+}
+
 function CandidateCard({
   candidate,
   requested,
@@ -24,18 +49,10 @@ function CandidateCard({
   return (
     <div className="flex flex-col gap-2">
       <div className="w-full overflow-hidden rounded-md">
-        {candidate.photoPath ? (
-          <PublicPhotoThumbnail path={candidate.photoPath} />
-        ) : (
-          <div className="flex aspect-[3/4] w-full items-center justify-center bg-hairline/40">
-            <span className="px-1 text-center text-[11px] text-ink-soft">Sin foto</span>
-          </div>
-        )}
+        {candidate.photoPath ? <PublicPhotoThumbnail path={candidate.photoPath} /> : <NeutralAvatarPlaceholder />}
       </div>
-      <p className="text-[15px] text-ink">
-        {candidate.firstName}
-        {candidate.age ? `, ${candidate.age}` : ""}
-      </p>
+      <p className="text-[15px] text-ink">{candidate.firstName}</p>
+      {!candidate.activated && <p className="text-[12px] text-ink-soft">Aún no ha activado Reconnect</p>}
       {/* The caller's own card, shown deliberately (see discovery.ts's doc
           comment) so they see exactly what others see — same card, no
           separate "preview" UI. Only the action differs: never a request
@@ -51,7 +68,7 @@ function CandidateCard({
           onClick={onRequest}
           className="rounded-full border border-hairline px-4 py-2 text-[13px] text-ink transition-colors hover:border-rose disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {requested ? "Solicitud enviada" : "Solicitar conexión"}
+          {requested ? "Solicitud enviada" : candidate.activated ? "Solicitar conexión" : "Quiero volver a verle"}
         </button>
       )}
     </div>
@@ -185,9 +202,7 @@ export default function ReconnectDiscovery({
       )}
 
       {mode === "gallery" && (
-        <p className="text-[13px] text-ink-soft">
-          Solo personas que también han activado su Reconnect para este evento.
-        </p>
+        <p className="text-[13px] text-ink-soft">Solo personas que también asistieron a este evento.</p>
       )}
 
       {loading && <p className="text-[14px] text-ink-soft">Cargando…</p>}
@@ -197,7 +212,7 @@ export default function ReconnectDiscovery({
         <p className="text-[14px] text-ink-soft">No hemos encontrado a nadie con ese nombre.</p>
       )}
       {!loading && results.length === 0 && mode === "gallery" && galleryLoaded && (
-        <p className="text-[14px] text-ink-soft">Todavía no hay nadie más activado en este evento.</p>
+        <p className="text-[14px] text-ink-soft">Todavía no hay nadie más en este evento.</p>
       )}
 
       {results.length > 0 && (

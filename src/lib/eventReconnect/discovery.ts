@@ -1,10 +1,10 @@
 import "server-only";
 import { adminDb } from "@/lib/firebase/admin";
 import { withProfileDefaults, type ProfileDocument } from "@/lib/introduction/types";
-import { getAge } from "@/lib/introduction/age";
 import { getEligibleEvent, reconnectWindowState } from "./eventConfig";
+import { eventParticipantId, normalizeEmail } from "./identifiers";
 import { findAllEventParticipantsByEmail, findEventParticipantByEmail } from "./participants";
-import { listPendingReconnectRequestsForMember } from "./requests";
+import { hasLivePendingIncomingRequest, listPendingReconnectRequestsForMember } from "./requests";
 import { MAX_RECONNECT_REQUESTS_PER_EVENT, type EventParticipantDocument } from "./types";
 import type { ActiveReconnectEventView, ReconnectCandidateView, ReconnectStateView } from "./types";
 
@@ -19,12 +19,21 @@ export async function getReconnectStateForCaller(eventId: string, verifiedEmail:
   if (!event) return { error: "event_not_found" };
 
   const participant = await findEventParticipantByEmail(eventId, verifiedEmail);
+  const participantId = eventParticipantId(eventId, normalizeEmail(verifiedEmail));
+  const hasPendingIncomingRequest =
+    !!participant && !participant.visibleForReconnect && participant.status !== "opted_out"
+      ? await hasLivePendingIncomingRequest(participantId)
+      : false;
+
   return {
     windowState: reconnectWindowState(event),
     eventLabel: event.label,
     requestsRemaining: participant ? Math.max(0, MAX_RECONNECT_REQUESTS_PER_EVENT - participant.requestsSent) : null,
     isParticipant: !!participant,
     isActivated: !!participant?.visibleForReconnect,
+    hasOptedOut: participant?.status === "opted_out",
+    showPhotoInReconnect: participant?.showPhotoInReconnect !== false,
+    hasPendingIncomingRequest,
   };
 }
 
@@ -60,39 +69,71 @@ export async function getActiveReconnectEventForMember(
   return null;
 }
 
+/**
+ * Builds one discovery card. Three distinct outcomes, all deliberate (see
+ * types.ts's ReconnectCandidateView doc comment):
+ *  - opted out: excluded entirely (returns null) — never findable again.
+ *  - not yet activated: `firstName` only, from Ticket Tailor's own imported
+ *    record — NEVER a photo, age, email, phone, or any other profile field,
+ *    since none of that has been consented to yet. A missing/blank imported
+ *    first name means this attendee simply can't be shown at all (there is
+ *    nothing safe to render), so it's excluded too.
+ *  - activated: the real `ProfileDocument` first name, and the real photo
+ *    ONLY if `showPhotoInReconnect` isn't explicitly `false` — otherwise
+ *    `photoPath: null`, which the client renders as a neutral placeholder,
+ *    never as the "not activated" status text (the `activated: true` flag
+ *    is what tells it which).
+ */
 async function buildCandidateView(
   participant: EventParticipantDocument,
   participantId: string,
   callerParticipantId: string,
 ): Promise<ReconnectCandidateView | null> {
-  if (!participant.claimedUid) return null;
+  if (participant.status === "opted_out") return null;
+  const isSelf = participantId === callerParticipantId;
+
+  if (!participant.visibleForReconnect || !participant.claimedUid) {
+    const firstName = participant.firstName?.trim();
+    if (!firstName) return null;
+    return { participantId, firstName, photoPath: null, activated: false, isSelf };
+  }
+
   const profileSnap = await adminDb.doc(`profiles/${participant.claimedUid}`).get();
   if (!profileSnap.exists) return null;
   const profile = withProfileDefaults(participant.claimedUid, profileSnap.data() as Partial<ProfileDocument>);
-  const age = profile.private.birthDate
-    ? getAge((profile.private.birthDate as unknown as { toDate: () => Date }).toDate().toISOString().slice(0, 10))
-    : null;
+  const photoPath = participant.showPhotoInReconnect !== false ? (profile.photos[0] ?? null) : null;
   return {
     participantId,
     firstName: profile.visible.firstName || "—",
-    age,
-    photoPath: profile.photos[0] ?? null,
-    isSelf: participantId === callerParticipantId,
+    photoPath,
+    activated: true,
+    isSelf,
   };
 }
 
 /**
  * Search is server-side, exact-prefix, case-insensitive, scoped to exactly
- * this event's activated+consenting participants — never a client-side
- * query against eventParticipants (see firestore.rules: that collection
- * has no client read path at all). A zero-match result and a "you're not
- * allowed here" result must look identical to the caller for events they
- * didn't attend — enforced by requiring the caller's own participant
- * record to exist (checked by the route, not duplicated here) before this
- * is ever called.
+ * this event's imported attendees (any status other than opted-out — see
+ * buildCandidateView) — never a client-side query against eventParticipants
+ * (see firestore.rules: that collection has no client read path at all). A
+ * zero-match result and a "you're not allowed here" result must look
+ * identical to the caller for events they didn't attend — enforced by
+ * requiring the caller's own participant record to exist (checked by the
+ * route, not duplicated here) before this is ever called.
  *
- * The caller's OWN activated profile is included here if it matches the
- * query, exactly like anyone else's — deliberately never filtered out (see
+ * Deliberately queries ALL of this event's participants, not only
+ * `visibleForReconnect == true` ones — an imported-but-not-yet-activated
+ * attendee is now findable by first name too (see the product spec:
+ * "allow event attendees who have not yet activated Reconnect to appear in
+ * a limited/locked state"); buildCandidateView is what actually decides
+ * what each one is allowed to reveal. Filtering happens in memory rather
+ * than via an extra Firestore inequality filter — the same "fetch this
+ * event's participants once, decide per-doc" shape getReconnectAdminSummary
+ * already uses, and one event's attendee list is never large enough for
+ * that to matter.
+ *
+ * The caller's OWN card is included here if it matches the query, exactly
+ * like anyone else's — deliberately never filtered out (see
  * ReconnectCandidateView.isSelf's doc comment: the product intent is that
  * a person can see themselves inside the exact same participant
  * experience others see, not a separate preview).
@@ -105,11 +146,7 @@ export async function searchReconnectCandidatesByName(
   const normalized = namePrefix.trim().toLowerCase();
   if (!normalized) return [];
 
-  const snap = await adminDb
-    .collection("eventParticipants")
-    .where("eventId", "==", eventId)
-    .where("visibleForReconnect", "==", true)
-    .get();
+  const snap = await adminDb.collection("eventParticipants").where("eventId", "==", eventId).get();
 
   const matches: ReconnectCandidateView[] = [];
   for (const doc of snap.docs) {
@@ -123,19 +160,17 @@ export async function searchReconnectCandidatesByName(
 }
 
 /**
- * The visual fallback — every activated+consenting participant for this
- * event, in neutral (insertion) order, never ranked/personalized/filtered
- * by any signal. Name + one photo only (see ReconnectCandidateView) — no
- * bio, no compatibility, nothing else, by construction (the view type
- * simply has no such fields to leak). Includes the caller's own card, same
- * reasoning as searchReconnectCandidatesByName above.
+ * The visual fallback — every non-opted-out participant for this event, in
+ * neutral (insertion) order, never ranked/personalized/filtered by any other
+ * signal. First name + (conditionally) one photo only (see
+ * ReconnectCandidateView) — no bio, no compatibility, no age, nothing else,
+ * by construction (the view type simply has no such fields to leak).
+ * Includes not-yet-activated attendees (name + neutral placeholder, see
+ * buildCandidateView) and the caller's own card, same reasoning as
+ * searchReconnectCandidatesByName above.
  */
 export async function listReconnectGallery(eventId: string, callerParticipantId: string): Promise<ReconnectCandidateView[]> {
-  const snap = await adminDb
-    .collection("eventParticipants")
-    .where("eventId", "==", eventId)
-    .where("visibleForReconnect", "==", true)
-    .get();
+  const snap = await adminDb.collection("eventParticipants").where("eventId", "==", eventId).get();
 
   const views: ReconnectCandidateView[] = [];
   for (const doc of snap.docs) {

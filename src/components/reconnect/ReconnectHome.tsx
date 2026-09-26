@@ -12,6 +12,7 @@ import type { PendingReconnectRequestView, ReconnectStateView } from "@/lib/even
 import ReconnectActivationForm from "./ReconnectActivationForm";
 import ReconnectDiscovery from "./ReconnectDiscovery";
 import ReconnectPendingList from "./ReconnectPendingList";
+import ReconnectPhotoVisibilityToggle from "./ReconnectPhotoVisibilityToggle";
 
 function NeutralMessage({ title, body }: { title: string; body: string }) {
   return (
@@ -83,10 +84,26 @@ export default function ReconnectHome({ uid, eventId }: { uid: string; eventId: 
     );
   }
 
+  if (state.hasOptedOut) {
+    return (
+      <NeutralMessage
+        title="Has decidido no participar en Reconnect"
+        body="Tus datos de Reconnect para este evento han sido eliminados. Esto no afecta a tu cuenta de Junto Select."
+      />
+    );
+  }
+
   const eventPending = pendingQuery.data?.results.filter((r) => r.eventId === eventId) ?? [];
 
   if (!state.isActivated) {
-    if (state.windowState !== "open") {
+    // Discovery being closed normally blocks activation too — except when
+    // this participant has a live incoming request whose own 72h response
+    // deadline hasn't passed yet (see the audit's timing-window analysis:
+    // a request received late in the 48h discovery window must not strand
+    // its recipient). Neither window's duration changes here — this only
+    // widens WHO can still reach the activation form, never search/gallery
+    // or new-request-creation, which stay governed by windowState alone.
+    if (state.windowState !== "open" && !state.hasPendingIncomingRequest) {
       return (
         <NeutralMessage
           title="Reconnect no está disponible ahora mismo"
@@ -99,6 +116,10 @@ export default function ReconnectHome({ uid, eventId }: { uid: string; eventId: 
         uid={uid}
         eventId={eventId}
         onActivated={() => {
+          stateQuery.reload();
+          pendingQuery.reload();
+        }}
+        onOptedOut={() => {
           stateQuery.reload();
           pendingQuery.reload();
         }}
@@ -117,6 +138,11 @@ export default function ReconnectHome({ uid, eventId }: { uid: string; eventId: 
             ¿Conociste a alguien que te gustaría volver a ver?
           </p>
         </div>
+        <ReconnectPhotoVisibilityToggle
+          eventId={eventId}
+          show={state.showPhotoInReconnect}
+          onChanged={() => stateQuery.reload()}
+        />
         {eventPending.length > 0 && (
           <ReconnectPendingList
             items={eventPending}

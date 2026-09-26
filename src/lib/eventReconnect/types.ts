@@ -8,19 +8,28 @@
 
 /**
  * `eventParticipants/{eventId}_{sha256(normalizedEmail).slice(0,32)}` — one
- * record per Ticket Tailor attendee of one event, created at import time,
+ * record per Ticket Tailor attendee of one event, created at import time.
  * NEVER client-readable (see firestore.rules). Buying a ticket only ever
- * produces `status: "imported"` with both consent flags false — visible to
- * no one, findable by no one, until the person explicitly activates.
+ * produces `status: "imported"` with both consent flags false.
+ *
+ * `imported` attendees ARE now potentially discoverable by first name (see
+ * discovery.ts) — but only by first name and the fact that they attended
+ * this event. `claimed` means they've explicitly activated and consented;
+ * only then is their real photo/profile data ever reachable. `opted_out` is
+ * the explicit, destructive "no quiero participar" choice (see
+ * participants.ts's optOutEventParticipant) — permanently excluded from
+ * discovery and from receiving further requests, distinct from simply never
+ * having activated.
  *
  * `firstName`/`lastName`/`phone` here are Ticket Tailor's OWN record of the
- * attendee, kept only for admin reference and for prefilling the
- * activation form — never shown to another member directly. What another
- * member actually sees always comes from the real `ProfileDocument`
- * (`visible.firstName`, `photos[0]`) once activation has written to it —
- * see activation.ts.
+ * attendee, kept for admin reference and for prefilling the activation
+ * form. `firstName` alone is also what an un-activated attendee's discovery
+ * card shows (see discovery.ts) — `lastName`/`phone` are never exposed to
+ * another member under any circumstance. What an ACTIVATED member sees
+ * always comes from the real `ProfileDocument` (`visible.firstName`,
+ * `photos[0]`) once activation has written to it — see activation.ts.
  */
-export type EventParticipantStatus = "imported" | "claimed";
+export type EventParticipantStatus = "imported" | "claimed" | "opted_out";
 
 export interface EventParticipantDocument {
   eventId: string;
@@ -45,6 +54,16 @@ export interface EventParticipantDocument {
   acceptsConnectionRequests: boolean;
   activatedAt: unknown | null;
   /**
+   * Photo-visibility preference for Reconnect ONLY — never touches
+   * `ProfileDocument.photos` or Private Introductions. Missing/undefined is
+   * treated as `true` (same "missing means the pre-existing behavior"
+   * convention as `EligibleTicketTailorEventDocument.memberBenefitEnabled`)
+   * so a participant activated before this field existed keeps showing
+   * their photo exactly as before. Only ever read once `visibleForReconnect`
+   * is true — meaningless (and never returned) before activation.
+   */
+  showPhotoInReconnect?: boolean;
+  /**
    * Set the first (and only) time a "someone wants to reconnect with you"
    * activation-invite email is queued for this participant — caps that
    * email at exactly one per event no matter how many different people
@@ -55,6 +74,8 @@ export interface EventParticipantDocument {
   requestsSent: number;
   importedAt: unknown;
   claimedAt: unknown | null;
+  /** Set the one time this participant explicitly chooses "No quiero participar" — see optOutEventParticipant. Never cleared; there is no re-activation path in V1. */
+  optedOutAt: unknown | null;
   updatedAt: unknown;
 }
 
@@ -67,27 +88,34 @@ export const RECONNECT_RESPONSE_WINDOW_HOURS = 72;
 export type ReconnectWindowState = "not_yet_open" | "open" | "discovery_closed";
 
 /**
- * `eventReconnectRequests/{eventId}_{personIdLow}_{personIdHigh}` — one
- * doc per UNORDERED pair per event (mirrors pairHistory's sorted-pair
- * convention), so a request already pending in one direction can never be
- * duplicated by the other side also trying to "request" — they see and
- * decide the existing one instead. `personId`, not raw uid, resolves
- * correctly through the existing duplicate-account merge machinery (see
- * identity.ts) — a uid is snapshotted alongside its personId purely for
- * display/notification, exactly like ProposalDocument/InvitationDocument
- * already do.
+ * `eventReconnectRequests/{sorted(initiatorParticipantId, targetParticipantId)}`
+ * — one doc per UNORDERED pair of PARTICIPANT ids per event (participant ids,
+ * not person ids: a participant id is derivable from event+email alone and
+ * exists for BOTH sides from the moment they're imported, regardless of
+ * whether either has activated — a person id only exists once someone has
+ * signed in and been resolved against a real profile, which an unactivated
+ * target may never have done). This is what makes it possible to send a
+ * request to someone who hasn't activated Reconnect yet.
+ *
+ * `recipientPersonId`/`recipientUid` are null until the target activates —
+ * see requests.ts's `resolvePendingRequestsForActivatedParticipant`, called
+ * from activation.ts, which backfills them once the target's real identity
+ * is known. Until then this request is invisible to
+ * `listPendingReconnectRequestsForMember` (which queries by person id), by
+ * construction — exactly the "David can't see it until he activates"
+ * requirement.
  */
 export type EventReconnectRequestStatus = "pending" | "accepted" | "declined" | "expired";
 
 export interface EventReconnectRequestDocument {
   eventId: string;
-  personIdLow: string;
-  personIdHigh: string;
-  /** Who actually sent it — the other of the pair is the recipient. */
+  initiatorParticipantId: string;
   initiatorPersonId: string;
   initiatorUid: string;
-  recipientPersonId: string;
-  recipientUid: string;
+  targetParticipantId: string;
+  /** Null until the target activates Reconnect for this event. */
+  recipientPersonId: string | null;
+  recipientUid: string | null;
   status: EventReconnectRequestStatus;
   createdAt: unknown;
   /** createdAt + RECONNECT_RESPONSE_WINDOW_HOURS — computed once at creation, never recomputed. */
@@ -110,6 +138,19 @@ export interface ReconnectStateView {
   requestsRemaining: number | null;
   isParticipant: boolean;
   isActivated: boolean;
+  /** True once this participant has explicitly chosen "No quiero participar" — a terminal state, distinct from simply never having activated. */
+  hasOptedOut: boolean;
+  /** Only meaningful once activated — the caller's current Reconnect photo-visibility preference, for the editable ON/OFF toggle. Missing/undefined on the underlying record is treated as `true`, same convention as everywhere else this field is read. */
+  showPhotoInReconnect: boolean;
+  /**
+   * True when this (not-yet-activated) participant has a live incoming
+   * request still within its own 72h response deadline — lets the UI allow
+   * activation even after the 48h discovery window has otherwise closed,
+   * so a request received late in that window doesn't strand its recipient.
+   * Never widens anything else: search/gallery/new-request-creation stay
+   * governed by `windowState` alone.
+   */
+  hasPendingIncomingRequest: boolean;
 }
 
 /**
@@ -119,12 +160,20 @@ export interface ReconnectStateView {
  * they can see exactly how they appear to other attendees, in the same
  * card UI — `isSelf` is what the client uses to hide the request button
  * and add a "Tú" label, never a signal to render a different component.
+ *
+ * `activated: false` means an imported-but-not-yet-activated attendee —
+ * `photoPath` is always null in that case (their personal data, including
+ * any photo, is never exposed pre-activation). `activated: true` with
+ * `photoPath: null` means they DID activate but chose not to display a
+ * photo (`showPhotoInReconnect: false`) or simply have none yet — the
+ * client renders a neutral elegant placeholder for that case, never the
+ * "not activated" status text.
  */
 export interface ReconnectCandidateView {
   participantId: string;
   firstName: string;
-  age: number | null;
   photoPath: string | null;
+  activated: boolean;
   isSelf: boolean;
 }
 
