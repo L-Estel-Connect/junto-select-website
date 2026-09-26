@@ -2,10 +2,10 @@ import "server-only";
 import { adminDb } from "@/lib/firebase/admin";
 import { withProfileDefaults, type ProfileDocument } from "@/lib/introduction/types";
 import { getEligibleEvent, reconnectWindowState } from "./eventConfig";
-import { eventParticipantId, normalizeEmail } from "./identifiers";
+import { eventParticipantId, eventReconnectRequestId, normalizeEmail } from "./identifiers";
 import { findAllEventParticipantsByEmail, findEventParticipantByEmail } from "./participants";
 import { hasLivePendingIncomingRequest, listPendingReconnectRequestsForMember } from "./requests";
-import { MAX_RECONNECT_REQUESTS_PER_EVENT, type EventParticipantDocument } from "./types";
+import { MAX_RECONNECT_REQUESTS_PER_EVENT, type EventParticipantDocument, type EventReconnectRequestDocument } from "./types";
 import type { ActiveReconnectEventView, ReconnectCandidateView, ReconnectStateView } from "./types";
 
 /**
@@ -83,19 +83,44 @@ export async function getActiveReconnectEventForMember(
  *    `photoPath: null`, which the client renders as a neutral placeholder,
  *    never as the "not activated" status text (the `activated: true` flag
  *    is what tells it which).
+ *
+ * Also resolves `requestStatus` — the caller's own relationship to this
+ * candidate — fresh from `eventReconnectRequests` every time, via the same
+ * deterministic sorted-participant-id doc id `createReconnectRequest`
+ * itself writes to (see identifiers.ts). This is what makes the gallery
+ * correctly show "✓ Conectados" after an acceptance, "Solicitud enviada"
+ * while pending, and a discreet closed state after a decline — server
+ * state, not a client-side guess that resets on reload (see the audit).
  */
+async function resolveRequestStatus(
+  eventId: string,
+  callerParticipantId: string,
+  candidateParticipantId: string,
+): Promise<ReconnectCandidateView["requestStatus"]> {
+  if (callerParticipantId === candidateParticipantId) return "none";
+  const id = eventReconnectRequestId(eventId, callerParticipantId, candidateParticipantId);
+  const snap = await adminDb.doc(`eventReconnectRequests/${id}`).get();
+  if (!snap.exists) return "none";
+  const status = (snap.data() as EventReconnectRequestDocument).status;
+  if (status === "accepted") return "accepted";
+  if (status === "pending") return "pending";
+  return "closed"; // declined or expired — never re-requestable either way
+}
+
 async function buildCandidateView(
+  eventId: string,
   participant: EventParticipantDocument,
   participantId: string,
   callerParticipantId: string,
 ): Promise<ReconnectCandidateView | null> {
   if (participant.status === "opted_out") return null;
   const isSelf = participantId === callerParticipantId;
+  const requestStatus = await resolveRequestStatus(eventId, callerParticipantId, participantId);
 
   if (!participant.visibleForReconnect || !participant.claimedUid) {
     const firstName = participant.firstName?.trim();
     if (!firstName) return null;
-    return { participantId, firstName, photoPath: null, activated: false, isSelf };
+    return { participantId, firstName, photoPath: null, activated: false, isSelf, requestStatus };
   }
 
   const profileSnap = await adminDb.doc(`profiles/${participant.claimedUid}`).get();
@@ -108,6 +133,7 @@ async function buildCandidateView(
     photoPath,
     activated: true,
     isSelf,
+    requestStatus,
   };
 }
 
@@ -151,7 +177,7 @@ export async function searchReconnectCandidatesByName(
   const matches: ReconnectCandidateView[] = [];
   for (const doc of snap.docs) {
     const participant = doc.data() as EventParticipantDocument;
-    const view = await buildCandidateView(participant, doc.id, callerParticipantId);
+    const view = await buildCandidateView(eventId, participant, doc.id, callerParticipantId);
     if (view && view.firstName.toLowerCase().startsWith(normalized)) {
       matches.push(view);
     }
@@ -174,7 +200,7 @@ export async function listReconnectGallery(eventId: string, callerParticipantId:
 
   const views: ReconnectCandidateView[] = [];
   for (const doc of snap.docs) {
-    const view = await buildCandidateView(doc.data() as EventParticipantDocument, doc.id, callerParticipantId);
+    const view = await buildCandidateView(eventId, doc.data() as EventParticipantDocument, doc.id, callerParticipantId);
     if (view) views.push(view);
   }
   return views;

@@ -128,5 +128,27 @@ export function buildEmailContent(
         ),
       };
     }
+    // Deliberate, second exception to this module's "never a first name"
+    // rule (see legacy_profile_activation above for the first): the
+    // recipient already saw the accepter's first name in-app, on their own
+    // pending-requests list, before this email is ever sent — naming them
+    // again here reveals nothing new. The CTA deliberately points at the
+    // lightweight `/reconnect/connections/...` surface rather than
+    // `/member/connections/...` — see src/app/reconnect/connections: it
+    // works identically for a finalized member and a Reconnect-only one,
+    // so this one email never needs to know which the recipient is.
+    case "event_reconnect_accepted": {
+      const otherFirstName = typeof data.otherFirstName === "string" && data.otherFirstName ? data.otherFirstName : "La otra persona";
+      const introductionId = typeof data.introductionId === "string" ? data.introductionId : "";
+      return {
+        subject: `${otherFirstName} ha aceptado tu solicitud de Reconnect`,
+        textContent: withFooter(
+          `Hola,\n\n${otherFirstName} también quiere seguir en contacto contigo.\n\n` +
+            "Ya podéis ver vuestros datos de contacto en Conexiones.",
+          appBaseUrl,
+          introductionId ? `/reconnect/connections/${introductionId}` : "/reconnect/connections",
+        ),
+      };
+    }
   }
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import PublicPhotoThumbnail from "@/components/member/PublicPhotoThumbnail";
+import ReconnectNeutralAvatarIcon from "./ReconnectNeutralAvatarIcon";
 import { memberFetchJson } from "@/lib/member/memberFetch";
 import { primaryButtonClasses } from "@/lib/styles";
 import type { PendingReconnectRequestView } from "@/lib/eventReconnect/types";
@@ -10,6 +12,29 @@ function formatDeadline(value: unknown): string {
   const date = ts?.toDate ? ts.toDate() : ts?._seconds ? new Date(ts._seconds * 1000) : null;
   if (!date) return "";
   return date.toLocaleDateString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+/**
+ * A small round avatar for the requester on an incoming request card — same
+ * privacy rule as the discovery gallery's cards (see
+ * PendingReconnectRequestView.otherPhotoPath's doc comment): never the raw
+ * ProfileDocument photo when the requester hasn't activated, or activated
+ * with their photo hidden. Reuses PublicPhotoThumbnail (the same
+ * server-authorized photo route every other cross-member photo goes
+ * through) rather than a new fetch path.
+ */
+function RequesterAvatar({ photoPath }: { photoPath: string | null }) {
+  return (
+    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full">
+      {photoPath ? (
+        <PublicPhotoThumbnail path={photoPath} />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-rose-tint">
+          <ReconnectNeutralAvatarIcon className="h-6 w-6 text-rose-dark/50" />
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -57,10 +82,15 @@ export default function ReconnectPendingList({
         <div key={item.id} className="rounded-2xl border border-hairline bg-white p-5">
           {item.direction === "received" ? (
             <>
-              <p className="text-[15px] text-ink">
-                <strong>{item.otherFirstName}</strong> quiere reconectar contigo.
-              </p>
-              <p className="mt-1 text-[13px] text-ink-soft">Responde antes del {formatDeadline(item.responseDeadline)}.</p>
+              <div className="flex items-center gap-3">
+                <RequesterAvatar photoPath={item.otherPhotoPath} />
+                <div>
+                  <p className="text-[15px] text-ink">
+                    <strong>{item.otherFirstName}</strong> quiere reconectar contigo.
+                  </p>
+                  <p className="mt-1 text-[13px] text-ink-soft">Responde antes del {formatDeadline(item.responseDeadline)}.</p>
+                </div>
+              </div>
               <div className="mt-4 flex gap-3">
                 <button
                   type="button"

@@ -18,12 +18,19 @@ const AUTH_STALL_TIMEOUT_MS = 12000;
  * all. See the audit: this is what makes it structurally impossible for an
  * incomplete Reconnect profile to get bounced into onboarding by a gate it
  * was never meant to pass.
+ *
+ * Shared by every page under `/reconnect/**` — the per-event Reconnect
+ * experience (`nextPath="/reconnect/{eventId}"`) and the lightweight
+ * accepted-connections surface (`nextPath="/reconnect/connections[...]"`,
+ * see src/app/reconnect/connections) alike. `nextPath` is always passed by
+ * the caller rather than built from an `eventId` here, since the
+ * connections surface has no single event to anchor it to.
  */
 export default function RequireReconnectAuth({
-  eventId,
+  nextPath,
   children,
 }: {
-  eventId: string;
+  nextPath: string;
   children: (uid: string) => React.ReactNode;
 }) {
   const { user, loading } = useAuth();
@@ -38,9 +45,9 @@ export default function RequireReconnectAuth({
 
   useEffect(() => {
     if (!loading && !user) {
-      router.replace(`/introduction?next=/reconnect/${eventId}`);
+      router.replace(`/introduction?next=${nextPath}`);
     }
-  }, [loading, user, router, eventId]);
+  }, [loading, user, router, nextPath]);
 
   if (stalled && loading) {
     return (

@@ -19,7 +19,9 @@ export type OutboundEmailType =
   | "mutual_introduction"
   | "legacy_profile_activation"
   /** One-time, content-free — see src/lib/eventReconnect: "someone you met wants to reconnect, activate to see who." Capped at one per participant per event regardless of how many different people request them — see EventParticipantDocument.invitationEmailSentAt. */
-  | "event_reconnect_invite";
+  | "event_reconnect_invite"
+  /** Queued to the ORIGINAL REQUESTER when the other party accepts — see decideReconnectRequest. Deliberately DOES name the accepter's first name (a second, deliberate exception to this module's "never a first name" rule — see emailContent.ts): the recipient already saw that same name in-app on their own pending-requests list, so this reveals nothing new. */
+  | "event_reconnect_accepted";
 
 export type OutboundEmailStatus = "pending" | "sending" | "sent" | "failed";
 

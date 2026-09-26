@@ -29,7 +29,13 @@ function formatShortDate(value: unknown): string | null {
  * are two separate lines rather than one joined string so the date can
  * never force that label to wrap mid-phrase in a narrower card.
  */
-export default function ConnectionCard({ connection }: { connection: MemberConnectionSummaryView }) {
+export default function ConnectionCard({
+  connection,
+  basePath = "/member/connections",
+}: {
+  connection: MemberConnectionSummaryView;
+  basePath?: string;
+}) {
   const date = formatShortDate(connection.createdAt);
 
   if (!connection.other) {
@@ -45,7 +51,7 @@ export default function ConnectionCard({ connection }: { connection: MemberConne
 
   return (
     <Link
-      href={`/member/connections/${connection.id}`}
+      href={`${basePath}/${connection.id}`}
       className="flex items-start gap-4 rounded-2xl border border-hairline bg-white p-5 transition-colors hover:border-rose"
     >
       <div className="w-24 shrink-0 overflow-hidden rounded-md">

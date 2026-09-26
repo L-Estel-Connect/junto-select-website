@@ -14,6 +14,8 @@ import ReconnectDiscovery from "./ReconnectDiscovery";
 import ReconnectPendingList from "./ReconnectPendingList";
 import ReconnectPhotoVisibilityToggle from "./ReconnectPhotoVisibilityToggle";
 
+const linkClasses = "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
+
 function NeutralMessage({ title, body }: { title: string; body: string }) {
   return (
     <div className="flex min-h-[50svh] flex-col items-center justify-center gap-3 px-6 text-center">
@@ -138,6 +140,9 @@ export default function ReconnectHome({ uid, eventId }: { uid: string; eventId: 
             Puedes conectar con hasta 3 personas que conociste durante la noche — ya sea por afinidad, amistad,
             interés profesional o porque simplemente te gustaría volver a verlas.
           </p>
+          <Link href="/reconnect/connections" className={`mt-3 inline-block text-[13px] ${linkClasses}`}>
+            Ver mis conexiones
+          </Link>
         </div>
         <ReconnectPhotoVisibilityToggle
           eventId={eventId}
@@ -168,7 +173,12 @@ export default function ReconnectHome({ uid, eventId }: { uid: string; eventId: 
   if (eventPending.length > 0) {
     return (
       <div className="flex flex-col gap-6">
-        <p className="font-serif text-[22px] font-normal leading-snug text-ink">Reconnect · {state.eventLabel}</p>
+        <div>
+          <p className="font-serif text-[22px] font-normal leading-snug text-ink">Reconnect · {state.eventLabel}</p>
+          <Link href="/reconnect/connections" className={`mt-2 inline-block text-[13px] ${linkClasses}`}>
+            Ver mis conexiones
+          </Link>
+        </div>
         <ReconnectPendingList
           items={eventPending}
           onDecided={() => {
@@ -183,17 +193,28 @@ export default function ReconnectHome({ uid, eventId }: { uid: string; eventId: 
   const profileIncomplete = profile ? !profile.meta.onboardingFinalized : false;
 
   if (profileIncomplete) {
+    // Connection access (top) is deliberately never gated behind the soft
+    // conversion CTA (bottom) — see the product rule: an accepted Reconnect
+    // connection must never be held behind Private Introductions
+    // onboarding. This link works identically here whether or not the
+    // signed-in participant has any accepted connections yet (see
+    // ReconnectConnectionsList's own empty state).
     return (
-      <div className="flex min-h-[50svh] flex-col items-center justify-center gap-4 px-6 text-center">
-        <p className="font-serif text-[22px] font-normal leading-snug text-ink">
-          ¿Quieres conocer a nuevas personas seleccionadas para ti?
-        </p>
-        <p className="max-w-[42ch] text-[15px] leading-relaxed text-ink-soft">
-          Completa tu perfil para acceder a Introducciones privadas.
-        </p>
-        <Link href="/introduction" className={`${primaryButtonClasses} mt-2`}>
-          Completar mi perfil
+      <div className="flex min-h-[50svh] flex-col items-center justify-center gap-8 px-6 text-center">
+        <Link href="/reconnect/connections" className={`text-[15px] ${linkClasses}`}>
+          Ver mis conexiones
         </Link>
+        <div className="flex flex-col items-center gap-4">
+          <p className="font-serif text-[22px] font-normal leading-snug text-ink">
+            ¿Quieres seguir conociendo gente más allá de este evento?
+          </p>
+          <p className="max-w-[42ch] text-[15px] leading-relaxed text-ink-soft">
+            Completa tu perfil y descubre las Introducciones privadas de Junto Select.
+          </p>
+          <Link href="/introduction" className={`${primaryButtonClasses} mt-2`}>
+            Completar mi perfil
+          </Link>
+        </div>
       </div>
     );
   }
