@@ -3,6 +3,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { getPairHistoryDocument } from "@/lib/matching/pairHistory";
 import type { IntroductionDocument } from "@/lib/matching/types";
+import { queueOutboundEmail } from "@/lib/notifications/outboundEmails";
 import { eventParticipantId, eventReconnectRequestId, normalizeEmail } from "./identifiers";
 import { getEligibleEvent, reconnectWindowState } from "./eventConfig";
 import { getEventParticipant } from "./participants";
@@ -243,9 +244,22 @@ export async function listPendingReconnectRequestsForMember(personId: string): P
 
     const isInitiator = data.initiatorPersonId === personId;
     const otherUid = isInitiator ? data.recipientUid : data.initiatorUid;
-    const event = await getEligibleEvent(data.eventId);
-    const otherProfileSnap = otherUid ? await adminDb.doc(`profiles/${otherUid}`).get() : null;
+    const otherParticipantId = isInitiator ? data.targetParticipantId : data.initiatorParticipantId;
+    const [event, otherProfileSnap, otherParticipantSnap] = await Promise.all([
+      getEligibleEvent(data.eventId),
+      otherUid ? adminDb.doc(`profiles/${otherUid}`).get() : Promise.resolve(null),
+      adminDb.doc(`eventParticipants/${otherParticipantId}`).get(),
+    ]);
     const otherFirstName = (otherProfileSnap?.data()?.visible?.firstName as string | undefined) || "—";
+
+    // Same privacy rule as discovery.ts's buildCandidateView — the requester's
+    // photo is only ever shown here if THEY chose to show it in Reconnect,
+    // never the raw ProfileDocument photo otherwise.
+    const otherParticipant = otherParticipantSnap.exists ? (otherParticipantSnap.data() as EventParticipantDocument) : null;
+    const otherPhotoPath =
+      otherParticipant?.visibleForReconnect && otherParticipant.showPhotoInReconnect !== false
+        ? ((otherProfileSnap?.data()?.photos as string[] | undefined)?.[0] ?? null)
+        : null;
 
     results.push({
       id: doc.id,
@@ -253,6 +267,7 @@ export async function listPendingReconnectRequestsForMember(personId: string): P
       eventLabel: event?.label ?? "",
       direction: isInitiator ? "sent" : "received",
       otherFirstName,
+      otherPhotoPath,
       responseDeadline: data.responseDeadline,
     });
   }
@@ -278,7 +293,20 @@ export type DecideReconnectRequestResult =
  * id wasn't resolvable then) — the one point besides creation where it's
  * guaranteed both person ids are now known, right before an introduction
  * (and therefore eventual contact reveal) would otherwise be created.
+ *
+ * On acceptance, best-effort queues an `event_reconnect_accepted` email to
+ * the ORIGINAL requester — never allowed to affect this decision's own
+ * success/failure, same pattern as every other notification queued from
+ * inside a lifecycle write (see pairHistory.ts's mutual_introduction
+ * queueing). The decider's first name is read inside the SAME transaction
+ * (before any write, as Firestore transactions require) so the email
+ * content is exactly consistent with what got accepted.
  */
+type DecideTxResult =
+  | { ok: false; error: "not_found" | "not_your_request" | "already_decided" | "expired" | "blocked" }
+  | { ok: true; status: "declined" }
+  | { ok: true; status: "accepted"; initiatorUid: string; deciderFirstName: string | null };
+
 export async function decideReconnectRequest(
   requestId: string,
   deciderUid: string,
@@ -287,31 +315,34 @@ export async function decideReconnectRequest(
 ): Promise<DecideReconnectRequestResult> {
   const requestRef = adminDb.doc(`eventReconnectRequests/${requestId}`);
 
-  return adminDb.runTransaction(async (tx) => {
+  const result = await adminDb.runTransaction<DecideTxResult>(async (tx) => {
     const snap = await tx.get(requestRef);
-    if (!snap.exists) return { ok: false, error: "not_found" as const };
+    if (!snap.exists) return { ok: false, error: "not_found" };
     const data = snap.data() as EventReconnectRequestDocument;
 
-    if (data.recipientPersonId !== deciderPersonId) return { ok: false, error: "not_your_request" as const };
-    if (data.status !== "pending") return { ok: false, error: "already_decided" as const };
+    if (data.recipientPersonId !== deciderPersonId) return { ok: false, error: "not_your_request" };
+    if (data.status !== "pending") return { ok: false, error: "already_decided" };
 
     const deadline = (data.responseDeadline as Timestamp).toMillis();
     if (Date.now() >= deadline) {
       tx.update(requestRef, { status: "expired", decidedAt: FieldValue.serverTimestamp() });
-      return { ok: false, error: "expired" as const };
+      return { ok: false, error: "expired" };
     }
 
     const now = FieldValue.serverTimestamp();
     if (decision === "decline") {
       tx.update(requestRef, { status: "declined", decidedAt: now });
-      return { ok: true as const, status: "declined" as const };
+      return { ok: true, status: "declined" };
     }
 
     const blockCheck = await getPairHistoryDocument(data.initiatorPersonId, deciderPersonId);
     if (blockCheck?.state === "blocked") {
       tx.update(requestRef, { status: "declined", decidedAt: now });
-      return { ok: false, error: "blocked" as const };
+      return { ok: false, error: "blocked" };
     }
+
+    const deciderProfileSnap = await tx.get(adminDb.doc(`profiles/${deciderUid}`));
+    const deciderFirstName = (deciderProfileSnap.data()?.visible?.firstName as string | undefined) || null;
 
     const event = await getEligibleEvent(data.eventId);
     const introductionRef = adminDb.doc(`introductions/${requestId}`);
@@ -328,6 +359,27 @@ export async function decideReconnectRequest(
     };
     tx.set(introductionRef, introduction);
     tx.update(requestRef, { status: "accepted", decidedAt: now });
-    return { ok: true as const, status: "accepted" as const };
+    return {
+      ok: true,
+      status: "accepted",
+      initiatorUid: data.initiatorUid,
+      deciderFirstName,
+    };
   });
+
+  if (result.ok && result.status === "accepted") {
+    queueOutboundEmail(
+      {
+        type: "event_reconnect_accepted",
+        uid: result.initiatorUid,
+        email: null,
+        data: { otherFirstName: result.deciderFirstName, introductionId: requestId },
+      },
+      `event_reconnect_accepted_${requestId}`,
+    ).catch((error) => {
+      console.error(`decideReconnectRequest: failed to queue acceptance email for request ${requestId}`, error);
+    });
+  }
+
+  return result;
 }

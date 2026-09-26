@@ -175,6 +175,21 @@ export interface ReconnectCandidateView {
   photoPath: string | null;
   activated: boolean;
   isSelf: boolean;
+  /**
+   * The caller's own relationship to this candidate, server-derived fresh
+   * on every read — never a client-side "I clicked this" guess. `"none"`:
+   * no request exists between them yet, in either direction — the normal
+   * request button applies. `"pending"`: an `eventReconnectRequests` doc
+   * exists between them and is still `"pending"`, regardless of who
+   * initiated it — the button is disabled either way, since sending
+   * another would just hit the existing doc's idempotency guard. `"accepted"`:
+   * they're already connected — never re-requestable. `"closed"`: the
+   * existing request was declined or expired — also never re-requestable
+   * (the doc's deterministic id means a repeat "request" call would just
+   * no-op against the same doc regardless), shown as a discreet neutral
+   * state rather than the normal button. Always `"none"` for `isSelf`.
+   */
+  requestStatus: "none" | "pending" | "accepted" | "closed";
 }
 
 /** The single most relevant Reconnect event for a member right now, if any — see getActiveReconnectEventForMember. */
@@ -190,5 +205,13 @@ export interface PendingReconnectRequestView {
   /** Whether the caller sent this one or received it. */
   direction: "sent" | "received";
   otherFirstName: string;
+  /**
+   * The other party's permitted Reconnect photo, or null — either because
+   * they haven't activated, or they activated with
+   * `showPhotoInReconnect: false`. Same privacy rule as
+   * ReconnectCandidateView.photoPath, computed the identical way — never
+   * the underlying ProfileDocument photo when that preference is off.
+   */
+  otherPhotoPath: string | null;
   responseDeadline: unknown;
 }

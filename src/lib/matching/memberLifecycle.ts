@@ -201,6 +201,22 @@ function toSummaryView(
  * two independently-ordered lists does not preserve a single total order.
  * No contact details and no Auth lookups happen here at all — see
  * getIntroductionDetailForMember for the full, single-introduction view.
+ *
+ * Deduplicated by other-party uid before returning: `introductions` is
+ * keyed by originating-flow id (a proposal/invitation id, or now a
+ * Reconnect request id — see EventReconnectRequestDocument), never by
+ * person-pair, so the SAME two people can legitimately have more than one
+ * introduction document (e.g. an earlier algorithmic mutual match, then a
+ * later Reconnect acceptance at an event). Nothing is deleted or merged —
+ * every underlying document is untouched and still individually reachable
+ * by its own id via getIntroductionDetailForMember — this only decides
+ * which ONE the OVERVIEW list shows per person, so a member never sees the
+ * same connection twice. The newest document for that person is kept as
+ * the representative (so a fresh Reconnect connection correctly surfaces
+ * its event context), but if an older document for the same pair carries
+ * an `eventLabel` the kept one lacks, that label is backfilled onto it too
+ * — the "you also met at this event" signal is never silently lost just
+ * because it happened to be the OLDER of the two documents.
  */
 export async function getIntroductionsForMember(uid: string): Promise<MemberConnectionSummaryView[]> {
   const [asA, asB] = await Promise.all([
@@ -216,8 +232,29 @@ export async function getIntroductionsForMember(uid: string): Promise<MemberConn
       return toSummaryView(d.id, data, party);
     }),
   );
+  summaries.sort((a, b) => createdAtMillis(b.createdAt) - createdAtMillis(a.createdAt));
 
-  return summaries.sort((a, b) => createdAtMillis(b.createdAt) - createdAtMillis(a.createdAt));
+  const seenOtherUids = new Set<string>();
+  const deduped: MemberConnectionSummaryView[] = [];
+  for (const summary of summaries) {
+    // No `other` at all (their profile was deleted) — nothing to key a
+    // dedup on, so every such entry is kept as its own card, exactly as
+    // before this change.
+    if (!summary.other) {
+      deduped.push(summary);
+      continue;
+    }
+    if (seenOtherUids.has(summary.other.uid)) {
+      const kept = deduped.find((s) => s.other?.uid === summary.other!.uid);
+      if (kept && !kept.eventLabel && summary.eventLabel) {
+        kept.eventLabel = summary.eventLabel;
+      }
+      continue;
+    }
+    seenOtherUids.add(summary.other.uid);
+    deduped.push(summary);
+  }
+  return deduped;
 }
 
 export type IntroductionDetailResult = { ok: true; introduction: MemberIntroductionView } | { ok: false; error: "not_found" };

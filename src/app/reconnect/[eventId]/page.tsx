@@ -10,7 +10,7 @@ export default function ReconnectEventPage() {
   const eventId = params.eventId;
 
   return (
-    <RequireReconnectAuth eventId={eventId}>
+    <RequireReconnectAuth nextPath={`/reconnect/${eventId}`}>
       {(uid) => (
         <Section as="main" size="sm">
           <ReconnectHome uid={uid} eventId={eventId} />
