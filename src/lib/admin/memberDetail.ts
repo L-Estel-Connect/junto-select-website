@@ -13,6 +13,8 @@ import { loadPairHistoryMapFor } from "@/lib/matching/pairHistory";
 import { explainIneligibility, isProfileInEligiblePool, type EligibilityDiagnosis } from "@/lib/matching/eligibility";
 import { getCurrentCycle } from "@/lib/admin/matchingCycles";
 import type { BillingDocument } from "@/lib/billing/types";
+import { listEventBenefitsForAdmin } from "@/lib/eventBenefits/lifecycle";
+import type { AdminEventBenefitView } from "@/lib/eventBenefits/types";
 import { ageOf, getProfileRow } from "./profiles";
 
 const MONTHS_ES = [
@@ -208,6 +210,8 @@ export interface MemberDetail {
   // a checkout — distinct from an explicit BillingDocument with
   // status: "none".
   billing: BillingDocument | null;
+  /** This member's 20% event benefits, one row per eligible event — see listEventBenefitsForAdmin. */
+  eventBenefits: AdminEventBenefitView[];
 }
 
 export async function getMemberDetail(uid: string): Promise<MemberDetail | null> {
@@ -216,12 +220,13 @@ export async function getMemberDetail(uid: string): Promise<MemberDetail | null>
   const { profile } = row;
   const personId = resolvePersonId(uid, profile);
 
-  const [asRecipientSnap, asCandidateSnap, pairHistoryMap, currentCycle, billingSnap] = await Promise.all([
+  const [asRecipientSnap, asCandidateSnap, pairHistoryMap, currentCycle, billingSnap, eventBenefits] = await Promise.all([
     adminDb.collection("proposals").where("recipientPersonId", "==", personId).get(),
     adminDb.collection("proposals").where("candidatePersonId", "==", personId).get(),
     loadPairHistoryMapFor(personId),
     getCurrentCycle(),
     adminDb.doc(`billing/${uid}`).get(),
+    listEventBenefitsForAdmin(uid),
   ]);
   const billing = billingSnap.exists ? (billingSnap.data() as BillingDocument) : null;
 
@@ -331,5 +336,6 @@ export async function getMemberDetail(uid: string): Promise<MemberDetail | null>
     interactions,
     currentCycle: currentCycleStatus,
     billing,
+    eventBenefits,
   };
 }

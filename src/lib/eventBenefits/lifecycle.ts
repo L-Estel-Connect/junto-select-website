@@ -1,150 +1,195 @@
 import "server-only";
 import { adminDb } from "@/lib/firebase/admin";
-import { Timestamp } from "firebase-admin/firestore";
-import { isEntitledStatus, type BillingDocument } from "@/lib/billing/types";
+import type { BillingDocument } from "@/lib/billing/types";
 import { getTicketTailorClient } from "@/lib/ticketTailor/client";
-import { getAllEligibleTicketTypeIds } from "./eligibleEvents";
 import { generateUniqueEventBenefitCode } from "./codeGeneration";
-import { eventBenefitCycleKey, eventBenefitPeriodDate } from "./anchor";
-import type { EventBenefitDocument, MemberEventBenefitView } from "./types";
+import { eventEndOfDayMadrid, isEventUpcoming, isMemberEligibleForEvent } from "./eligibility";
+import { listEligibleEvents } from "./eligibleEvents";
+import type {
+  AdminEventBenefitView,
+  EligibleTicketTailorEventDocument,
+  EventBenefitDocument,
+  MemberEventBenefitView,
+} from "./types";
 
 function toDate(value: unknown): Date | null {
-  if (value instanceof Timestamp) return value.toDate();
   if (value instanceof Date) return value;
-  return null;
+  const t = value as { toDate?: () => Date } | null | undefined;
+  return t?.toDate ? t.toDate() : null;
 }
 
 /**
- * Called from the Stripe webhook's syncSubscription, the SAME place the
- * matching anchor (matchingAnchorAt/matchingPeriodsProcessed/
- * nextMatchingDueAt) is seeded — but writing to `billing/{uid}` instead of
- * `profiles/{uid}.meta`, and using its own dedicated field names, exactly
- * so the event benefit's monthly lifecycle is never coupled to matching's.
- * Returns `null` when no change is needed (same subscription already
- * anchored — a routine status update, not a new/resubscribed
- * subscription), so the caller can decide whether to include these
- * fields in its own Firestore write rather than issuing a second one.
+ * `eventBenefits/{uid}_{ticketTailorEventId}` — the doc ID IS the
+ * idempotency key for one (member, event) pair, for the lifetime of that
+ * pair. See EventBenefitDocument's doc comment for why this replaces the
+ * old `{subscriptionId}:{periodIndex}` billing-cycle key.
  */
-export function computeEventBenefitAnchorUpdate(
-  existingSubscriptionId: string | null,
-  subscription: { id: string; start_date: number },
-): Partial<BillingDocument> | null {
-  if (existingSubscriptionId === subscription.id) return null;
-  if (typeof subscription.start_date !== "number") return null;
-  const anchor = new Date(subscription.start_date * 1000);
-  return {
-    eventBenefitAnchorAt: anchor,
-    eventBenefitSubscriptionId: subscription.id,
-    eventBenefitPeriodsIssued: 0,
-    nextEventBenefitDueAt: eventBenefitPeriodDate(anchor, 0),
-  } satisfies Partial<BillingDocument>;
+function benefitDocId(uid: string, ticketTailorEventId: string): string {
+  return `${uid}_${ticketTailorEventId}`;
 }
 
 /**
- * The member-facing read path — see /api/member/event-benefit. Deliberately
- * the ONLY thing the client ever learns: never the full eventBenefits
- * history, never ticketTailorDiscountId (internal bookkeeping), never
- * another member's record (the query is uid-scoped, and Firestore rules
- * independently enforce the same boundary for defense in depth).
+ * The member-facing read path — see /api/member/event-benefit. Returns
+ * every non-invalidated benefit this member currently has, one per
+ * eligible event, joined against that event's label/date/checkout URL so
+ * PlanSection.tsx never has to fetch the eligible-events registry itself
+ * (which has no legitimate client read path — see
+ * EligibleTicketTailorEventDocument's doc comment). Invalidated benefits
+ * are never returned to the member — showing a dead code was rejected in
+ * the architecture review the same way showing a fabricated "used" state
+ * was.
  */
-export async function getCurrentEventBenefitForMember(uid: string): Promise<MemberEventBenefitView | null> {
-  const snap = await adminDb.collection("eventBenefits").where("uid", "==", uid).where("status", "==", "active").limit(1).get();
-  if (snap.empty) return null;
-  const data = snap.docs[0].data() as EventBenefitDocument;
-  return { code: data.code, percentage: data.percentage, validUntil: data.validUntil };
+export async function listEventBenefitsForMember(uid: string): Promise<MemberEventBenefitView[]> {
+  const snap = await adminDb.collection("eventBenefits").where("uid", "==", uid).get();
+  const benefits = snap.docs.map((d) => d.data() as EventBenefitDocument).filter((b) => b.status !== "invalidated");
+  if (benefits.length === 0) return [];
+
+  const eventById = await loadEventsByIds(benefits.map((b) => b.ticketTailorEventId));
+
+  return benefits
+    .map((b) => {
+      const event = eventById.get(b.ticketTailorEventId);
+      const ready = b.status === "active";
+      return {
+        ticketTailorEventId: b.ticketTailorEventId,
+        eventLabel: event?.label ?? "Evento Junto Select",
+        eventDate: event?.eventDate ?? null,
+        checkoutUrl: event?.ticketTailorCheckoutUrl ?? null,
+        ready,
+        code: ready ? b.code : null,
+        percentage: b.percentage,
+        validUntil: ready ? b.validUntil : null,
+      } satisfies MemberEventBenefitView;
+    })
+    .sort((a, c) => (a.eventDate ?? "").localeCompare(c.eventDate ?? ""));
 }
 
 /**
- * Membership genuinely lost entitlement (active/trialing/past_due ->
- * canceled/unpaid/incomplete/etc.) — invalidate whatever is currently
- * active for this uid, if anything. Best-effort on the Ticket Tailor
- * side: a failure there is logged and swallowed, never allowed to stop
- * the Firestore-side invalidation (the member must stop seeing/using this
- * code in the Junto UI regardless of whether the external call succeeded)
- * — the audit trail (`invalidatedReason`) always reflects Junto's own,
- * authoritative decision, independent of Ticket Tailor's availability.
- * Idempotent: called again with nothing currently active is a no-op.
+ * The admin per-member read path — see the member-detail page. Unlike the
+ * member-facing view, nothing is filtered or masked: invalidated benefits
+ * are shown as their own state ("expirado/invalidado"), and the real code
+ * is always included, since this is already behind admin auth.
  */
-export async function invalidateCurrentEventBenefitForMember(uid: string): Promise<void> {
-  const snap = await adminDb.collection("eventBenefits").where("uid", "==", uid).where("status", "==", "active").limit(1).get();
-  if (snap.empty) return;
-  const doc = snap.docs[0];
-  const data = doc.data() as EventBenefitDocument;
+export async function listEventBenefitsForAdmin(uid: string): Promise<AdminEventBenefitView[]> {
+  const snap = await adminDb.collection("eventBenefits").where("uid", "==", uid).get();
+  const benefits = snap.docs.map((d) => d.data() as EventBenefitDocument);
+  if (benefits.length === 0) return [];
 
-  if (data.ticketTailorDiscountId) {
-    try {
-      await getTicketTailorClient().invalidateDiscount(data.ticketTailorDiscountId);
-    } catch (error) {
-      console.error(`invalidateCurrentEventBenefitForMember: Ticket Tailor invalidation failed for uid ${uid}`, error);
-    }
-  }
+  const eventById = await loadEventsByIds(benefits.map((b) => b.ticketTailorEventId));
 
-  await doc.ref.update({
-    status: "invalidated",
-    invalidatedAt: new Date(),
-    invalidatedReason: "membership_lapsed",
+  return benefits
+    .map((b) => {
+      const event = eventById.get(b.ticketTailorEventId);
+      return {
+        ticketTailorEventId: b.ticketTailorEventId,
+        eventLabel: event?.label ?? "Evento eliminado",
+        eventDate: event?.eventDate ?? null,
+        status: b.status,
+        code: b.code,
+        validUntil: b.validUntil,
+        invalidatedReason: b.invalidatedReason,
+      } satisfies AdminEventBenefitView;
+    })
+    .sort((a, c) => (a.eventDate ?? "").localeCompare(c.eventDate ?? ""));
+}
+
+async function loadEventsByIds(ticketTailorEventIds: string[]): Promise<Map<string, EligibleTicketTailorEventDocument>> {
+  const ids = [...new Set(ticketTailorEventIds)];
+  const snaps = await adminDb.getAll(...ids.map((id) => adminDb.doc(`eligibleTicketTailorEvents/${id}`)));
+  const byId = new Map<string, EligibleTicketTailorEventDocument>();
+  snaps.forEach((s) => {
+    if (s.exists) byId.set(s.id, s.data() as EligibleTicketTailorEventDocument);
   });
+  return byId;
 }
 
-export interface EventBenefitScanResult {
-  membersDue: number;
+/** How many (member, event) benefit docs exist for this one event — admin visibility only, see the event-benefits admin page. */
+export async function countEventBenefitsForEvent(ticketTailorEventId: string): Promise<number> {
+  const snap = await adminDb.collection("eventBenefits").where("ticketTailorEventId", "==", ticketTailorEventId).count().get();
+  return snap.data().count;
+}
+
+/**
+ * Real entitlement loss (active/trialing/past_due -> anything else) —
+ * invalidate every NOT-YET-OCCURRED benefit for this member. Unlike the
+ * old billing-cycle model's "at most one active benefit," a member can now
+ * hold several benefits at once (one per still-upcoming eligible event),
+ * so this may touch more than one doc. A benefit for an event that has
+ * ALREADY happened is left untouched either way — it's moot, not wrong.
+ * Best-effort on the Ticket Tailor side; the Firestore-side status flip is
+ * always authoritative regardless of whether the external call succeeds.
+ * Idempotent: called again with nothing left to invalidate is a no-op.
+ */
+export async function invalidateUpcomingEventBenefitsForMember(uid: string, now: Date = new Date()): Promise<void> {
+  const snap = await adminDb
+    .collection("eventBenefits")
+    .where("uid", "==", uid)
+    .where("status", "in", ["pending_external", "active", "external_sync_failed"])
+    .get();
+  if (snap.empty) return;
+
+  const benefits = snap.docs.map((d) => ({ ref: d.ref, data: d.data() as EventBenefitDocument }));
+  const eventById = await loadEventsByIds(benefits.map((b) => b.data.ticketTailorEventId));
+
+  for (const { ref, data: benefit } of benefits) {
+    const eventDate = eventById.get(benefit.ticketTailorEventId)?.eventDate ?? null;
+    // Only skip when we have concrete evidence the event already happened
+    // — an unknown/missing event date falls through and gets invalidated,
+    // which is the safe default.
+    if (eventDate && !isEventUpcoming(eventDate, now)) continue;
+
+    if (benefit.ticketTailorDiscountId) {
+      try {
+        await getTicketTailorClient().invalidateDiscount(benefit.ticketTailorDiscountId);
+      } catch (error) {
+        console.error(
+          `invalidateUpcomingEventBenefitsForMember: Ticket Tailor invalidation failed for uid ${uid}, event ${benefit.ticketTailorEventId}`,
+          error,
+        );
+      }
+    }
+    await ref.update({ status: "invalidated", invalidatedAt: now, invalidatedReason: "membership_lapsed" });
+  }
+}
+
+export interface EventReconcileResult {
+  checked: number;
   granted: number;
-  retryPending: number;
-  skippedNotEntitled: number;
   errors: number;
 }
 
-const DUE_SCAN_BATCH_SIZE = 500;
-
 /**
- * The automatic monthly event-benefit scheduler — the event-benefit
- * counterpart to dueScheduler.ts's runDueMatchingScan, following the same
- * proven shape: find everyone whose next period is due, advance exactly
- * ONE period per due member per call, leave anyone not fully completed
- * "due" so the next scan retries them, never skip and never double-grant.
- *
- * IDEMPOTENCY / EXTERNAL-SIDE-EFFECT STRATEGY (see also the final report):
- * 1. The Firestore record for a cycle is claimed via `.create()` on a
- *    DETERMINISTIC doc id (`{stripeSubscriptionId}:{periodIndex}`) —
- *    this alone makes "the same cycle is claimed twice" structurally
- *    impossible: a second `.create()` on the same id always fails.
- * 2. The one thing Firestore's own atomicity CANNOT cover is the
- *    Ticket-Tailor-side mutation itself (an external HTTP call can
- *    succeed while the process crashes before recording that success).
- *    To close that window without relying on any unconfirmed Ticket
- *    Tailor idempotency-key support: before ever calling
- *    `createDiscount`, this always calls `findDiscountByCode` first for
- *    this cycle's own already-known, already-unique `code` — if Ticket
- *    Tailor already has a discount with that code (a prior attempt that
- *    crashed after succeeding externally but before Firestore recorded
- *    it), that discount's id is adopted instead of creating a second
- *    one. This makes external creation genuinely idempotent from Junto's
- *    side regardless of how many times a given cycle's grant is retried.
- * 3. `billing/{uid}`'s own `nextEventBenefitDueAt`/`eventBenefitPeriodsIssued`
- *    are only ever advanced AFTER the benefit doc reaches `status:
- *    "active"` — so a crash at any earlier point simply leaves the
- *    member "due" at the same period, safely retried next scan.
+ * Grants THIS ONE event's benefit to every currently-entitled member who
+ * qualifies (isMemberEligibleForEvent) and doesn't already have a benefit
+ * doc for this event. Safe to call as often as you like — from the
+ * scheduler (looping over every eligible upcoming event) or from the
+ * admin "Sincronizar" button (one event, on demand): the deterministic
+ * `{uid}_{eventId}` doc id makes re-granting an existing pair structurally
+ * impossible, and `findDiscountByCode` closes the one gap Firestore's own
+ * atomicity can't cover (a Ticket Tailor call that succeeds right before a
+ * crash) — the same idempotency strategy the old billing-cycle scan used,
+ * just re-keyed to (member, event) instead of (subscription, period).
  */
-export async function runDueEventBenefitScan(now: Date = new Date()): Promise<EventBenefitScanResult> {
-  const snap = await adminDb.collection("billing").where("nextEventBenefitDueAt", "<=", now).limit(DUE_SCAN_BATCH_SIZE).get();
+export async function reconcileEventBenefitsForEvent(
+  event: EligibleTicketTailorEventDocument,
+  now: Date = new Date(),
+): Promise<EventReconcileResult> {
+  const result: EventReconcileResult = { checked: 0, granted: 0, errors: 0 };
+  if (event.memberBenefitEnabled === false) return result;
+  if (!event.eventDate || !isEventUpcoming(event.eventDate, now)) return result;
 
-  const result: EventBenefitScanResult = {
-    membersDue: snap.size,
-    granted: 0,
-    retryPending: 0,
-    skippedNotEntitled: 0,
-    errors: 0,
-  };
+  const entitledSnap = await adminDb.collection("billing").where("status", "in", ["active", "trialing", "past_due"]).get();
 
-  for (const billingDoc of snap.docs) {
-    const uid = billingDoc.id;
+  for (const doc of entitledSnap.docs) {
+    const uid = doc.id;
+    const billing = doc.data() as BillingDocument;
+    if (!isMemberEligibleForEvent(billing, event.eventDate)) continue;
+    result.checked += 1;
     try {
-      const outcome = await processDueMember(uid, billingDoc.data() as BillingDocument, now);
-      if (outcome === "granted") result.granted += 1;
-      else if (outcome === "skipped_not_entitled") result.skippedNotEntitled += 1;
-      else result.retryPending += 1;
+      const granted = await grantEventBenefit(uid, billing, event, now);
+      if (granted) result.granted += 1;
     } catch (error) {
-      console.error(`runDueEventBenefitScan: uid ${uid} failed`, error);
+      console.error(`reconcileEventBenefitsForEvent: uid ${uid}, event ${event.ticketTailorEventId} failed`, error);
       result.errors += 1;
     }
   }
@@ -152,42 +197,24 @@ export async function runDueEventBenefitScan(now: Date = new Date()): Promise<Ev
   return result;
 }
 
-type ProcessOutcome = "granted" | "skipped_not_entitled" | "retry_pending";
+/** Returns true only when a NEW benefit was actively granted this call — false for an already-settled (active/invalidated) pair, so callers can distinguish "nothing to do" from "just granted." */
+async function grantEventBenefit(
+  uid: string,
+  billing: BillingDocument,
+  event: EligibleTicketTailorEventDocument,
+  now: Date,
+): Promise<boolean> {
+  const ref = adminDb.doc(`eventBenefits/${benefitDocId(uid, event.ticketTailorEventId)}`);
+  let snap = await ref.get();
 
-async function processDueMember(uid: string, billing: BillingDocument, now: Date): Promise<ProcessOutcome> {
-  if (!isEntitledStatus(billing.status)) {
-    // No longer entitled — stop scheduling; the webhook's own
-    // entitled->not-entitled transition (invalidateCurrentEventBenefitForMember)
-    // is what actually invalidates any still-active benefit, not this scan.
-    await adminDb.doc(`billing/${uid}`).update({ nextEventBenefitDueAt: null });
-    return "skipped_not_entitled";
-  }
-
-  const anchor = toDate(billing.eventBenefitAnchorAt);
-  const subscriptionId = billing.eventBenefitSubscriptionId;
-  if (!anchor || !subscriptionId) {
-    // Shouldn't happen given the query (both are seeded together by the
-    // webhook) — never crash the whole scan over one malformed doc.
-    return "retry_pending";
-  }
-
-  const periodIndex = billing.eventBenefitPeriodsIssued ?? 0;
-  const cycleKey = eventBenefitCycleKey(subscriptionId, periodIndex);
-  const benefitRef = adminDb.doc(`eventBenefits/${cycleKey}`);
-
-  let benefitSnap = await benefitRef.get();
-  if (!benefitSnap.exists) {
+  if (!snap.exists) {
     const code = await generateUniqueEventBenefitCode();
-    const validFrom = eventBenefitPeriodDate(anchor, periodIndex);
-    const validUntil = eventBenefitPeriodDate(anchor, periodIndex + 1);
+    const validUntil = eventEndOfDayMadrid(event.eventDate as string);
     const newDoc: EventBenefitDocument = {
       uid,
-      stripeCustomerId: billing.stripeCustomerId,
-      stripeSubscriptionId: subscriptionId,
-      cycleKey,
-      periodIndex,
+      ticketTailorEventId: event.ticketTailorEventId,
+      stripeSubscriptionId: billing.stripeSubscriptionId,
       createdAt: now,
-      validFrom,
       validUntil,
       percentage: 20,
       ticketTailorDiscountId: null,
@@ -197,65 +224,74 @@ async function processDueMember(uid: string, billing: BillingDocument, now: Date
       invalidatedReason: null,
     };
     try {
-      await benefitRef.create(newDoc);
+      await ref.create(newDoc);
     } catch {
-      // Lost a race to a concurrent/overlapping scan claiming the same
-      // cycle — fine, just proceed with whatever the winner wrote.
+      // Lost a race to a concurrent/overlapping reconcile claiming the
+      // same (member, event) pair — fine, proceed with whatever the
+      // winner wrote.
     }
-    benefitSnap = await benefitRef.get();
+    snap = await ref.get();
   }
 
-  let benefit = benefitSnap.data() as EventBenefitDocument;
-
-  if (benefit.status === "pending_external" || benefit.status === "external_sync_failed") {
-    try {
-      const client = getTicketTailorClient();
-      const ticketTypeIds = await getAllEligibleTicketTypeIds();
-      const existing = await client.findDiscountByCode(benefit.code);
-      const discount =
-        existing ??
-        (await client.createDiscount({
-          code: benefit.code,
-          name: `Junto Select – ${benefit.code}`,
-          percentage: benefit.percentage,
-          maxRedemptions: 1,
-          ticketTypeIds,
-          expiresAt: toDate(benefit.validUntil) ?? now,
-        }));
-      await benefitRef.update({ ticketTailorDiscountId: discount.id, status: "active" });
-      benefit = { ...benefit, ticketTailorDiscountId: discount.id, status: "active" };
-    } catch (error) {
-      console.error(`processDueMember: Ticket Tailor create failed for uid ${uid}, cycle ${cycleKey}`, error);
-      await benefitRef.update({ status: "external_sync_failed" });
-      return "retry_pending";
-    }
+  const benefit = snap.data() as EventBenefitDocument;
+  if (benefit.status !== "pending_external" && benefit.status !== "external_sync_failed") {
+    // Already active or invalidated — nothing left to do, and no reason to
+    // re-hit Ticket Tailor for a pair that's already settled.
+    return false;
   }
 
-  // Supersede the previous cycle's benefit, if this isn't the first.
-  if (periodIndex > 0) {
-    const previousRef = adminDb.doc(`eventBenefits/${eventBenefitCycleKey(subscriptionId, periodIndex - 1)}`);
-    const previousSnap = await previousRef.get();
-    if (previousSnap.exists) {
-      const previous = previousSnap.data() as EventBenefitDocument;
-      if (previous.status === "active") {
-        // Routine monthly supersession relies solely on the previous
-        // discount's own `expires` (set at creation time to exactly this
-        // cycle boundary) — no DELETE call here. Ticket Tailor's
-        // documented DELETE is reserved exclusively for a genuine
-        // entitled -> non-entitled transition (see
-        // invalidateCurrentEventBenefitForMember); calling it here would
-        // permanently destroy the discount, which is unnecessary when
-        // expiry already does the job and is explicitly out of scope for
-        // routine supersession.
-        await previousRef.update({ status: "superseded", invalidatedAt: now, invalidatedReason: "superseded" });
-      }
-    }
+  try {
+    const client = getTicketTailorClient();
+    const existing = await client.findDiscountByCode(benefit.code);
+    const discount =
+      existing ??
+      (await client.createDiscount({
+        code: benefit.code,
+        name: `Junto Select – ${event.label}`,
+        percentage: benefit.percentage,
+        maxRedemptions: 1,
+        ticketTypeIds: event.ticketTailorTicketTypeIds,
+        expiresAt: toDate(benefit.validUntil) ?? eventEndOfDayMadrid(event.eventDate as string),
+      }));
+    await ref.update({ ticketTailorDiscountId: discount.id, status: "active" });
+    // true whenever THIS call is what activated the benefit — whether the
+    // doc was just created above or this is a retry of a previously
+    // pending/failed one. Only "already settled before this call" (the
+    // early return above) counts as false.
+    return true;
+  } catch (error) {
+    await ref.update({ status: "external_sync_failed" });
+    throw error;
   }
+}
 
-  await adminDb.doc(`billing/${uid}`).update({
-    eventBenefitPeriodsIssued: periodIndex + 1,
-    nextEventBenefitDueAt: toDate(benefit.validUntil) ?? eventBenefitPeriodDate(anchor, periodIndex + 1),
-  });
+export interface EventBenefitScanResult {
+  eventsChecked: number;
+  granted: number;
+  errors: number;
+}
 
-  return "granted";
+/**
+ * The automatic scheduler entry point — see
+ * /api/admin/billing/run-due-event-benefits. Simplest possible idempotent
+ * shape, per the approved architecture: (eligible, upcoming events) ×
+ * (currently entitled members) → grant any missing (member, event)
+ * benefit. This single cross-product is what makes a new member joining,
+ * a new event becoming eligible, and a renewal extending
+ * `currentPeriodEnd` all "just work" on the next scan pass, with no
+ * separate code path for any of the three.
+ */
+export async function runDueEventBenefitScan(now: Date = new Date()): Promise<EventBenefitScanResult> {
+  const events = await listEligibleEvents();
+  const upcoming = events.filter(
+    (e) => e.memberBenefitEnabled !== false && e.eventDate && isEventUpcoming(e.eventDate, now),
+  );
+
+  const result: EventBenefitScanResult = { eventsChecked: upcoming.length, granted: 0, errors: 0 };
+  for (const event of upcoming) {
+    const eventResult = await reconcileEventBenefitsForEvent(event, now);
+    result.granted += eventResult.granted;
+    result.errors += eventResult.errors;
+  }
+  return result;
 }

@@ -2,9 +2,15 @@
 
 import { useState } from "react";
 import { adminFetchJson } from "@/lib/admin/adminFetch";
-import type { EligibleTicketTailorEventDocument } from "@/lib/eventBenefits/types";
 import { useAdminQuery } from "@/lib/admin/useAdminQuery";
 import ReconnectEventControls from "@/components/admin/ReconnectEventControls";
+import type { EligibleEventWithStats } from "@/app/api/admin/event-benefits/eligible-events/route";
+
+function formatSyncedAt(value: unknown): string | null {
+  const ts = value as { toDate?: () => Date } | null | undefined;
+  const date = ts?.toDate ? ts.toDate() : null;
+  return date ? date.toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : null;
+}
 
 /**
  * V1's entire "event management" surface, deliberately minimal per spec:
@@ -17,7 +23,7 @@ import ReconnectEventControls from "@/components/admin/ReconnectEventControls";
  */
 export default function EventBenefitsPage() {
   const eventsQuery = useAdminQuery(
-    () => adminFetchJson<{ events: EligibleTicketTailorEventDocument[] }>("/api/admin/event-benefits/eligible-events"),
+    () => adminFetchJson<{ events: EligibleEventWithStats[] }>("/api/admin/event-benefits/eligible-events"),
     [],
   );
 
@@ -25,6 +31,7 @@ export default function EventBenefitsPage() {
   const [ticketTypeIds, setTicketTypeIds] = useState("");
   const [label, setLabel] = useState("");
   const [eventDate, setEventDate] = useState("");
+  const [checkoutUrl, setCheckoutUrl] = useState("");
   const [reconnectEnabled, setReconnectEnabled] = useState(false);
   // Defaults to true for a brand-new registration — the common case
   // (registering an event for the 20% benefit) stays a single click, same
@@ -52,6 +59,10 @@ export default function EventBenefitsPage() {
       setRegisterError("El beneficio -20% necesita al menos un ID de tipo de entrada.");
       return;
     }
+    if (memberBenefitEnabled && !eventDate.trim()) {
+      setRegisterError("El beneficio -20% necesita la fecha del evento — determina qué miembros son elegibles y cuándo caduca el código.");
+      return;
+    }
     setRegistering(true);
     try {
       await adminFetchJson("/api/admin/event-benefits/eligible-events", {
@@ -63,12 +74,14 @@ export default function EventBenefitsPage() {
           eventDate: eventDate.trim() || null,
           reconnectEnabled,
           memberBenefitEnabled,
+          ticketTailorCheckoutUrl: checkoutUrl.trim() || null,
         }),
       });
       setEventId("");
       setTicketTypeIds("");
       setLabel("");
       setEventDate("");
+      setCheckoutUrl("");
       setReconnectEnabled(false);
       setMemberBenefitEnabled(true);
       eventsQuery.reload();
@@ -79,17 +92,18 @@ export default function EventBenefitsPage() {
     }
   }
 
-  function handleEdit(event: EligibleTicketTailorEventDocument) {
+  function handleEdit(event: EligibleEventWithStats) {
     setEventId(event.ticketTailorEventId);
     setTicketTypeIds(event.ticketTailorTicketTypeIds.join(", "));
     setLabel(event.label);
     setEventDate(event.eventDate ?? "");
+    setCheckoutUrl(event.ticketTailorCheckoutUrl ?? "");
     setReconnectEnabled(event.reconnectEnabled);
     // A document written before this toggle existed has no
     // memberBenefitEnabled field at all — treat that the same as `true`
-    // for display, mirroring getAllEligibleTicketTypeIds()'s own read-time
-    // compatibility rule, so an old event doesn't appear to have silently
-    // lost its benefit the first time someone opens it to edit.
+    // for display, mirroring the read-time compatibility rule in
+    // reconcileEventBenefitsForEvent, so an old event doesn't appear to
+    // have silently lost its benefit the first time someone opens it to edit.
     setMemberBenefitEnabled(event.memberBenefitEnabled !== false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -98,14 +112,14 @@ export default function EventBenefitsPage() {
     setSyncingId(ticketTailorEventId);
     try {
       const { result } = await adminFetchJson<{
-        result: { attempted: number; succeeded: number; failed: number };
+        result: { checked: number; granted: number; errors: number };
       }>("/api/admin/event-benefits/sync-event", {
         method: "POST",
         body: JSON.stringify({ ticketTailorEventId }),
       });
       setSyncResults((prev) => ({
         ...prev,
-        [ticketTailorEventId]: `${result.succeeded}/${result.attempted} sincronizados${result.failed > 0 ? `, ${result.failed} fallidos` : ""}.`,
+        [ticketTailorEventId]: `${result.granted} nuevo(s) beneficio(s) concedido(s) de ${result.checked} miembro(s) elegible(s)${result.errors > 0 ? `, ${result.errors} error(es)` : ""}.`,
       }));
       eventsQuery.reload();
     } catch (err) {
@@ -124,10 +138,11 @@ export default function EventBenefitsPage() {
     <div className="max-w-4xl pb-16">
       <h1 className="font-serif text-[26px] text-ink">Eventos — beneficio Junto Select</h1>
       <p className="mt-2 max-w-[60ch] text-[13px] leading-relaxed text-ink-soft">
-        Registra aquí qué eventos/tipos de entrada de Ticket Tailor participan en el 20 % de descuento
-        mensual de los miembros. Después de crear un evento elegible en Ticket Tailor, usa
-        &ldquo;Sincronizar&rdquo; para asociar los descuentos actualmente activos de los miembros con sus
-        tipos de entrada.
+        Registra aquí qué eventos/tipos de entrada de Ticket Tailor participan en el 20 % de descuento de
+        los miembros. Cada miembro con membresía activa que cubra la fecha del evento recibe
+        automáticamente un código propio para ese evento — no es necesario hacer nada más.
+        &ldquo;Sincronizar&rdquo; solo sirve para forzar esa concesión ahora mismo en vez de esperar a la
+        siguiente ejecución automática.
       </p>
 
       <section className="mt-8 rounded-xl border border-hairline bg-white p-4">
@@ -180,7 +195,7 @@ export default function EventBenefitsPage() {
             Reconnect activado
           </label>
           <label className="flex items-center gap-2 text-[13px] text-ink">
-            Fecha del evento
+            Fecha del evento{memberBenefitEnabled ? " (obligatoria)" : ""}
             <input
               type="date"
               value={eventDate}
@@ -189,14 +204,22 @@ export default function EventBenefitsPage() {
             />
           </label>
         </div>
+        <input
+          type="text"
+          placeholder="URL de compra en Ticket Tailor (para el botón «Comprar entrada con -20%»)"
+          value={checkoutUrl}
+          onChange={(e) => setCheckoutUrl(e.target.value)}
+          className="mt-2 w-full rounded-md border border-hairline px-3 py-2 text-[13px]"
+        />
         <p className="mt-2 text-[12px] text-ink-soft">
           Estos dos interruptores son completamente independientes: un evento puede tener el beneficio
-          -20%, Reconnect, ambos o ninguno. Los IDs de tipo de entrada solo son necesarios si el
-          beneficio -20% está activado — Reconnect no los usa para nada.
+          -20%, Reconnect, ambos o ninguno. Los IDs de tipo de entrada y la fecha del evento solo son
+          obligatorios si el beneficio -20% está activado — Reconnect no los necesita.
         </p>
         <p className="mt-1 text-[12px] text-ink-soft">
-          Reconnect se abre automáticamente a las 00:01 del día siguiente a la fecha del evento y se
-          cierra 48 horas después — nunca se configura manualmente.
+          La fecha del evento determina qué miembros son elegibles (su membresía debe cubrir esa fecha) y
+          cuándo caduca el código de cada uno. Reconnect se abre automáticamente a las 00:01 del día
+          siguiente a la fecha del evento y se cierra 48 horas después — nunca se configura manualmente.
         </p>
         {registerError && <p className="mt-2 text-[12px] text-[#8a3b3b]">{registerError}</p>}
         <button
@@ -227,6 +250,13 @@ export default function EventBenefitsPage() {
                     <p className="mt-1 text-[12px] text-ink-soft">
                       Beneficio -20%: {event.memberBenefitEnabled !== false ? "activado" : "desactivado"} · Reconnect:{" "}
                       {event.reconnectEnabled ? "activado" : "desactivado"}
+                      {event.eventDate ? ` · ${event.eventDate}` : ""}
+                    </p>
+                    <p className="mt-1 text-[12px] text-ink-soft">
+                      {event.benefitCount} beneficio(s) de miembro generado(s)
+                      {!event.ticketTailorCheckoutUrl && event.memberBenefitEnabled !== false
+                        ? " · sin URL de compra configurada"
+                        : ""}
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-2">
@@ -249,6 +279,14 @@ export default function EventBenefitsPage() {
                 </div>
                 {syncResults[event.ticketTailorEventId] && (
                   <p className="mt-2 text-[12px] text-ink-soft">{syncResults[event.ticketTailorEventId]}</p>
+                )}
+                {!syncResults[event.ticketTailorEventId] && Boolean(event.lastSyncedAt) && (
+                  <p className="mt-2 text-[12px] text-ink-soft">
+                    Última sincronización: {formatSyncedAt(event.lastSyncedAt)}
+                    {event.lastSyncResult
+                      ? ` — ${event.lastSyncResult.granted} nuevo(s) de ${event.lastSyncResult.checked} elegible(s)${event.lastSyncResult.errors > 0 ? `, ${event.lastSyncResult.errors} error(es)` : ""}.`
+                      : "."}
+                  </p>
                 )}
                 <ReconnectEventControls event={event} />
               </div>

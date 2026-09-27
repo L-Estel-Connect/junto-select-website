@@ -11,6 +11,7 @@ import { isMarketAvailabilityEligible } from "@/lib/introduction/completion";
 import { memberFetchJson } from "@/lib/member/memberFetch";
 import { useMemberQuery } from "@/lib/member/useMemberQuery";
 import type { MemberEventBenefitView } from "@/lib/eventBenefits/types";
+import { primaryButtonClasses } from "@/lib/styles";
 
 const MARKET_NOT_AVAILABLE_MESSAGE =
   "Junto Select está disponible actualmente solo para Madrid. Para recibir selecciones, necesitas vivir en Madrid, cerca de Madrid o venir a Madrid con cierta frecuencia. Si tu situación cambia, podrás actualizar esta respuesta más adelante.";
@@ -37,13 +38,24 @@ function formatDate(value: unknown): string | null {
   return date.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
 }
 
+function formatEventDate(ymd: string | null): string | null {
+  if (!ymd) return null;
+  const [year, month, day] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("es-ES", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 const DISCLOSURES = [
   "El pago se realiza por adelantado, por la duración completa del plan elegido (1, 3 o 6 meses).",
   "Tu membresía se renueva automáticamente al finalizar ese periodo, por la misma duración y al mismo precio, hasta que la canceles.",
   "Puedes cancelar en cualquier momento desde «Gestionar mi membresía». La cancelación se hace efectiva al final del periodo ya pagado — no se hacen reembolsos por el tiempo restante.",
   "Una membresía activa te da derecho a recibir hasta 3 selecciones al mes. No se acumulan si no se usan, y ese límite no aumenta con planes de mayor duración.",
   "Recibir selecciones no está garantizado incluso con la membresía activa: solo se te presentan personas que cumplen tus requisitos imprescindibles y superan nuestro umbral de calidad. Un mes sin ninguna coincidencia adecuada es un resultado válido.",
-  "Cada mes de membresía activa, disfrutas de un 20 % de descuento en un evento Junto. Recibirás un código personal de un solo uso, que se renueva cada mes y no se acumula.",
+  "Como miembro activo, recibes un 20 % de descuento en una entrada para cada evento Junto Select elegible que tenga lugar durante tu membresía. Cada evento tiene su propio código personal de un solo uso — no se acumulan ni se comparten entre eventos.",
   "Junto Select Introduction está disponible únicamente para el mercado de Madrid en esta fase.",
   "Tu perfil debe estar completo (Sobre ti, Fotos y Lo que buscas) para poder recibir selecciones — la membresía activa por sí sola no lo sustituye.",
   "Los precios incluyen los impuestos aplicables según tu método de pago y ubicación, calculados por Stripe en el momento del cobro.",
@@ -92,24 +104,17 @@ function PlanCard({
 }
 
 /**
- * "Beneficio de evento" — the Ticket Tailor monthly discount, read ONLY
- * from /api/member/event-benefit (Firestore/Junto stays the read path;
- * the browser never talks to Ticket Tailor or sees its API key). No
+ * One event's benefit card — a real, redeemable code + "Comprar entrada
+ * con -20%" once `ready`, or a "preparing" placeholder otherwise. No
  * "Código ya utilizado" state exists on purpose: Ticket Tailor's
  * redemption/used state was not verified as reliable enough to surface
- * (see the Ticket Tailor API audit) — showing nothing false is safer
- * than showing an unverified claim.
+ * (see the Ticket Tailor API audit) — showing nothing false is safer than
+ * showing an unverified claim.
  */
-function EventBenefitSection({ uid }: { uid: string }) {
-  const benefitQuery = useMemberQuery(
-    () => memberFetchJson<{ benefit: MemberEventBenefitView | null }>("/api/member/event-benefit"),
-    [uid],
-  );
+function EventBenefitCard({ benefit }: { benefit: MemberEventBenefitView }) {
   const [copied, setCopied] = useState(false);
-
-  const loading = !benefitQuery.data && !benefitQuery.error;
-  const benefit = benefitQuery.data?.benefit ?? null;
-  const validUntil = formatDate(benefit?.validUntil);
+  const eventDate = formatEventDate(benefit.eventDate);
+  const validUntil = formatDate(benefit.validUntil);
 
   async function handleCopy(code: string) {
     try {
@@ -123,32 +128,82 @@ function EventBenefitSection({ uid }: { uid: string }) {
   }
 
   return (
-    <div className="mt-10 border-t border-hairline pt-8">
-      <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">Beneficio de evento</p>
-      {loading || benefitQuery.error ? (
-        <p className="mt-3 text-[14px] text-ink-soft">
-          {benefitQuery.error ? "No hemos podido cargar tu beneficio de evento." : "Cargando…"}
-        </p>
-      ) : benefit ? (
+    <div className="rounded-2xl border border-hairline bg-white p-5">
+      <p className="text-[15px] font-medium text-ink">{benefit.eventLabel}</p>
+      {eventDate && <p className="mt-0.5 text-[13px] text-ink-soft">{eventDate}</p>}
+      <p className="mt-2 text-[13px] text-ink">{benefit.percentage} % de descuento en una entrada</p>
+      {benefit.ready && benefit.code ? (
         <>
-          <p className="mt-2 text-[15px] text-ink">20 % de descuento en un evento Junto</p>
           <div className="mt-3 flex items-center gap-3">
             <span className="rounded-md border border-hairline bg-paper px-3 py-2 font-mono text-[15px] tracking-[0.08em] text-ink">
               {benefit.code}
             </span>
             <button
               type="button"
-              onClick={() => handleCopy(benefit.code)}
+              onClick={() => handleCopy(benefit.code as string)}
               className="text-[12px] font-medium uppercase tracking-[0.1em] text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink"
             >
               {copied ? "Copiado" : "Copiar código"}
             </button>
           </div>
           {validUntil && <p className="mt-2 text-[12px] text-ink-soft">Válido hasta el {validUntil}.</p>}
-          <p className="mt-3 text-[12px] leading-relaxed text-ink-soft">Tu código se renueva cada mes y no se acumula.</p>
+          {benefit.checkoutUrl && (
+            <a
+              href={benefit.checkoutUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${primaryButtonClasses} mt-4 inline-block`}
+            >
+              Comprar entrada con -20%
+            </a>
+          )}
         </>
       ) : (
-        <p className="mt-3 text-[14px] text-ink-soft">Estamos preparando tu código de este mes.</p>
+        <p className="mt-3 text-[13px] text-ink-soft">Estamos preparando tu código para este evento.</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * "Beneficio de evento" — one card per eligible Junto Select event
+ * covered by the member's current membership entitlement, read ONLY from
+ * /api/member/event-benefit (Firestore/Junto stays the read path; the
+ * browser never talks to Ticket Tailor or sees its API key). Each event
+ * has its own independent, single-use code — no accumulation, no code
+ * shared across events (see the architecture decision).
+ */
+function EventBenefitSection({ uid }: { uid: string }) {
+  const benefitQuery = useMemberQuery(
+    () => memberFetchJson<{ benefits: MemberEventBenefitView[] }>("/api/member/event-benefit"),
+    [uid],
+  );
+
+  const loading = !benefitQuery.data && !benefitQuery.error;
+  const benefits = benefitQuery.data?.benefits ?? [];
+
+  return (
+    <div className="mt-10 border-t border-hairline pt-8">
+      <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">Beneficio de evento</p>
+      <p className="mt-2 max-w-[46ch] text-[13px] leading-relaxed text-ink-soft">
+        Como miembro de Junto Select, recibes un 20 % de descuento en una entrada para cada evento Junto
+        Select elegible que tenga lugar durante tu membresía activa. Un código por evento — no se acumulan
+        ni se comparten entre eventos.
+      </p>
+      {loading || benefitQuery.error ? (
+        <p className="mt-4 text-[14px] text-ink-soft">
+          {benefitQuery.error ? "No hemos podido cargar tu beneficio de evento." : "Cargando…"}
+        </p>
+      ) : benefits.length === 0 ? (
+        <p className="mt-4 text-[14px] text-ink-soft">
+          Todavía no hay ningún evento con beneficio disponible para tu periodo de membresía actual.
+        </p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {benefits.map((benefit) => (
+            <EventBenefitCard key={benefit.ticketTailorEventId} benefit={benefit} />
+          ))}
+        </div>
       )}
     </div>
   );
