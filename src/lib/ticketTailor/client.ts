@@ -158,31 +158,44 @@ export function buildTicketTailorAuthHeader(apiKey: string): string {
  * comment. Exported purely so tests can assert the exact wire-format
  * fields Ticket Tailor documents, without needing
  * TICKET_TAILOR_INTEGRATION_VERIFIED or a real network call.
+ *
+ * Deliberately built as a plain string, NOT via `URLSearchParams`: its own
+ * `.toString()` percent-encodes `[` and `]` in KEYS (producing
+ * `ticket_types%5B%5D=...`), and a real, controlled test against
+ * production proved Ticket Tailor's own form parser does not recognize
+ * that as the `ticket_types` array field — it rejected the request with
+ * `VALIDATION_ERROR: ticket_types is either missing or does not start
+ * with the prefix tt_`, even though a valid `tt_...` value was genuinely
+ * present. A raw curl request with the identical value but an UNENCODED,
+ * literal `ticket_types[]=` key succeeded — curl's `--data-urlencode
+ * name=value` only ever encodes the value, never the key. Building the
+ * body manually keeps every key exactly as Ticket Tailor expects it,
+ * matching curl's behavior: only values are percent-encoded, keys never
+ * are.
  */
-export function buildCreateDiscountRequestBody(params: CreateDiscountParams): URLSearchParams {
-  const body = new URLSearchParams();
-  body.set("code", params.code);
-  body.set("name", params.name);
-  body.set("type", "percentage");
-  body.set("price_percent", String(params.percentage));
-  body.set("max_redemptions", String(params.maxRedemptions));
-  body.set("expires", String(Math.floor(params.expiresAt.getTime() / 1000)));
-  appendTicketTypes(body, params.ticketTypeIds);
-  return body;
+export function buildCreateDiscountRequestBody(params: CreateDiscountParams): string {
+  const parts = [
+    `code=${encodeURIComponent(params.code)}`,
+    `name=${encodeURIComponent(params.name)}`,
+    `type=percentage`,
+    `price_percent=${encodeURIComponent(String(params.percentage))}`,
+    `max_redemptions=${encodeURIComponent(String(params.maxRedemptions))}`,
+    `expires=${encodeURIComponent(String(Math.floor(params.expiresAt.getTime() / 1000)))}`,
+  ];
+  appendTicketTypes(parts, params.ticketTypeIds);
+  return parts.join("&");
 }
 
 /**
  * Ticket Tailor expects an array value as REPEATED `ticket_types[]`
- * fields — confirmed via a real request/response pair for both one and
- * two ticket types. A comma-joined or bare-scalar `ticket_types` value
- * was proven NOT to associate anything (the response came back with
- * `ticket_types: []`). Deduplicates via `Set` so a caller passing the
- * same id twice (e.g. a union that already contained it) never produces
- * duplicate `ticket_types[]` fields.
+ * fields, with the key kept LITERAL — never percent-encoded — see
+ * buildCreateDiscountRequestBody's doc comment for why. Deduplicates via
+ * `Set` so a caller passing the same id twice (e.g. a union that already
+ * contained it) never produces duplicate `ticket_types[]` fields.
  */
-function appendTicketTypes(body: URLSearchParams, ticketTypeIds: string[]): void {
+function appendTicketTypes(parts: string[], ticketTypeIds: string[]): void {
   for (const ticketTypeId of new Set(ticketTypeIds)) {
-    body.append("ticket_types[]", ticketTypeId);
+    parts.push(`ticket_types[]=${encodeURIComponent(ticketTypeId)}`);
   }
 }
 
