@@ -3,6 +3,7 @@ import { requireAdminOrRespond } from "@/lib/admin/apiGuard";
 import { describeError } from "@/lib/admin/describeError";
 import { listEligibleEvents, registerEligibleEvent } from "@/lib/eventBenefits/eligibleEvents";
 import { countEventBenefitsForEvent } from "@/lib/eventBenefits/lifecycle";
+import { isValidCheckoutUrl, validateTicketTypeIds } from "@/lib/eventBenefits/validation";
 import type { EligibleTicketTailorEventDocument } from "@/lib/eventBenefits/types";
 
 export const runtime = "nodejs";
@@ -120,15 +121,41 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "invalid_request" }, { status: 400 });
   }
 
+  // Format-validated regardless of whether the benefit is currently
+  // enabled — a malformed id must never be persisted even for an
+  // event that's momentarily Reconnect-only, since flipping the benefit
+  // toggle on later must never silently resurrect an unvalidated id (see
+  // the real incident: a Ticket Tailor EVENT id typed into this field).
+  const trimmedTicketTypeIds = ticketTypeIdsArray.map((id) => id.trim());
+  const ticketTypeValidation = validateTicketTypeIds(trimmedTicketTypeIds);
+  if (!ticketTypeValidation.valid) {
+    return NextResponse.json(
+      { ok: false, error: "invalid_ticket_type_id", detail: ticketTypeValidation.error },
+      { status: 400 },
+    );
+  }
+
+  const trimmedCheckoutUrl = typeof ticketTailorCheckoutUrl === "string" ? ticketTailorCheckoutUrl.trim() : "";
+  if (trimmedCheckoutUrl && !isValidCheckoutUrl(trimmedCheckoutUrl)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "invalid_checkout_url",
+        detail: "La URL de compra no es válida — debe ser una dirección completa que empiece por http:// o https://.",
+      },
+      { status: 400 },
+    );
+  }
+
   try {
     await registerEligibleEvent({
       ticketTailorEventId: ticketTailorEventId.trim(),
-      ticketTailorTicketTypeIds: ticketTypeIdsArray.map((id) => id.trim()),
+      ticketTailorTicketTypeIds: trimmedTicketTypeIds,
       label: label.trim(),
       eventDate: (eventDate as string | undefined) ?? null,
       reconnectEnabled: (reconnectEnabled as boolean | undefined) ?? false,
       memberBenefitEnabled: effectiveMemberBenefitEnabled,
-      ticketTailorCheckoutUrl: (ticketTailorCheckoutUrl as string | undefined)?.trim() || null,
+      ticketTailorCheckoutUrl: trimmedCheckoutUrl || null,
     });
     return NextResponse.json({ ok: true });
   } catch (error) {

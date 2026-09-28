@@ -86,7 +86,11 @@ export default function EventBenefitsPage() {
       setMemberBenefitEnabled(true);
       eventsQuery.reload();
     } catch (err) {
-      setRegisterError(err instanceof Error ? err.message : "No se ha podido registrar el evento.");
+      // The server prefixes a machine-readable code before ": " (e.g.
+      // "invalid_ticket_type_id: <spanish message>") — strip it so the
+      // admin sees only the actionable Spanish text, never an internal code.
+      const message = err instanceof Error ? err.message.replace(/^[a-z_]+: /, "") : "No se ha podido registrar el evento.";
+      setRegisterError(message);
     } finally {
       setRegistering(false);
     }
@@ -148,33 +152,53 @@ export default function EventBenefitsPage() {
       <section className="mt-8 rounded-xl border border-hairline bg-white p-4">
         <h2 className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">Registrar evento elegible</h2>
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
-          <input
-            type="text"
-            placeholder="ID de evento (Ticket Tailor)"
-            value={eventId}
-            onChange={(e) => setEventId(e.target.value)}
-            className="rounded-md border border-hairline px-3 py-2 text-[13px]"
-          />
-          <input
-            type="text"
-            placeholder={
-              memberBenefitEnabled
-                ? "IDs de tipo de entrada (separados por comas)"
-                : "IDs de tipo de entrada (no necesario solo para Reconnect)"
-            }
-            value={ticketTypeIds}
-            onChange={(e) => setTicketTypeIds(e.target.value)}
-            className="rounded-md border border-hairline px-3 py-2 text-[13px] disabled:bg-hairline/20 disabled:text-ink-soft"
-            disabled={!memberBenefitEnabled}
-          />
-          <input
-            type="text"
-            placeholder="Nombre descriptivo"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            className="rounded-md border border-hairline px-3 py-2 text-[13px]"
-          />
+          <div>
+            <label className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-soft">
+              ID de EVENTO (numérico)
+            </label>
+            <input
+              type="text"
+              placeholder="ej. 2442161"
+              value={eventId}
+              onChange={(e) => setEventId(e.target.value)}
+              className="mt-1 w-full rounded-md border border-hairline px-3 py-2 text-[13px]"
+            />
+          </div>
+          <div>
+            <label className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-soft">
+              IDs de TIPO DE ENTRADA (empiezan por tt_)
+            </label>
+            <input
+              type="text"
+              placeholder={
+                memberBenefitEnabled
+                  ? "ej. tt_6869922, tt_6869920"
+                  : "no necesario solo para Reconnect"
+              }
+              value={ticketTypeIds}
+              onChange={(e) => setTicketTypeIds(e.target.value)}
+              className="mt-1 w-full rounded-md border border-hairline px-3 py-2 text-[13px] disabled:bg-hairline/20 disabled:text-ink-soft"
+              disabled={!memberBenefitEnabled}
+            />
+          </div>
+          <div>
+            <label className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-soft">
+              Nombre descriptivo
+            </label>
+            <input
+              type="text"
+              placeholder="ej. Junto Select · Octubre"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              className="mt-1 w-full rounded-md border border-hairline px-3 py-2 text-[13px]"
+            />
+          </div>
         </div>
+        <p className="mt-2 text-[12px] font-medium text-[#8a3b3b]">
+          ⚠ No confundas los dos IDs: el ID de EVENTO es un número (ej. 2442161). Los IDs de TIPO DE ENTRADA
+          siempre empiezan por «tt_» (ej. tt_6869922) — un evento normal de Junto Select suele tener DOS,
+          uno para Mujer y otro para Hombre. Nunca pongas el ID del evento en el campo de tipo de entrada.
+        </p>
         <div className="mt-3 flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-2 text-[13px] text-ink">
             <input
@@ -204,13 +228,24 @@ export default function EventBenefitsPage() {
             />
           </label>
         </div>
-        <input
-          type="text"
-          placeholder="URL de compra en Ticket Tailor (para el botón «Comprar entrada con -20%»)"
-          value={checkoutUrl}
-          onChange={(e) => setCheckoutUrl(e.target.value)}
-          className="mt-2 w-full rounded-md border border-hairline px-3 py-2 text-[13px]"
-        />
+        <div className="mt-2">
+          <label className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-soft">
+            URL pública de compra en Ticket Tailor
+          </label>
+          <input
+            type="text"
+            placeholder="https://www.tickettailor.com/events/..."
+            value={checkoutUrl}
+            onChange={(e) => setCheckoutUrl(e.target.value)}
+            className="mt-1 w-full rounded-md border border-hairline px-3 py-2 text-[13px]"
+          />
+          <p className="mt-1 text-[12px] text-ink-soft">
+            Pega aquí el enlace público del evento en Ticket Tailor (en tu panel de Ticket Tailor, botón
+            «Ver evento» / «View event») — es la página donde cualquiera puede comprar una entrada. Esto
+            activa el botón «Comprar entrada con -20%» en la app del miembro. El código de descuento se
+            sigue mostrando aparte para copiar; no hace falta que esté dentro de esta URL.
+          </p>
+        </div>
         <p className="mt-2 text-[12px] text-ink-soft">
           Estos dos interruptores son completamente independientes: un evento puede tener el beneficio
           -20%, Reconnect, ambos o ninguno. Los IDs de tipo de entrada y la fecha del evento solo son
@@ -245,7 +280,10 @@ export default function EventBenefitsPage() {
                   <div>
                     <p className="text-[14px] text-ink">{event.label}</p>
                     <p className="text-[12px] text-ink-soft">
-                      {event.ticketTailorEventId} · {event.ticketTailorTicketTypeIds.length} tipo(s) de entrada
+                      ID de evento: {event.ticketTailorEventId} · Tipos de entrada:{" "}
+                      {event.ticketTailorTicketTypeIds.length > 0
+                        ? event.ticketTailorTicketTypeIds.join(", ")
+                        : "ninguno"}
                     </p>
                     <p className="mt-1 text-[12px] text-ink-soft">
                       Beneficio -20%: {event.memberBenefitEnabled !== false ? "activado" : "desactivado"} · Reconnect:{" "}
