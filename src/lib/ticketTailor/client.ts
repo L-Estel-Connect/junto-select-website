@@ -25,16 +25,26 @@ import "server-only";
  * write field — and `expires` comes back as a structured object whose
  * Unix value is at `.expires.unix`, never a bare number.
  *
- * Despite the contract now being empirically verified end-to-end (auth,
- * create, single- and multi-ticket-type association, the
- * price_percent/face_value_percentage write/read asymmetry,
- * max_redemptions, expiry, GET-by-ID, GET-by-code, update/union
- * semantics, and delete), `TICKET_TAILOR_INTEGRATION_VERIFIED` is kept
- * `false` below by deliberate product decision: activating the real
- * integration is a separate, explicit rollout step, not an automatic
- * consequence of the contract being correct.
+ * A THIRD real, controlled verification pass was run end-to-end against
+ * production on a dedicated, non-customer-facing test event
+ * (ticketTailorEventId 2442161, ticket type tt_6869922): discount
+ * creation, scoping to exactly one ticket type, a real checkout applying
+ * exactly 20%, a second redemption correctly rejected once
+ * `max_redemptions: 1` was reached, an already-expired discount correctly
+ * rejected with a distinct "expired" error (never confused with the
+ * redemption-limit error), and cleanup (both temporary discounts
+ * deleted). This is what `TICKET_TAILOR_INTEGRATION_VERIFIED` below now
+ * reflects — activation is a deliberate rollout step taken only after
+ * this verification passed, not an automatic consequence of the earlier
+ * contract-correctness tests alone.
+ *
+ * IMPORTANT: the real API key used for that verification was exposed to a
+ * local shell during manual testing and MUST be rotated in Secret Manager
+ * before any real customer-facing use of this integration — see the
+ * engagement's test report. Rotating a key does not require touching this
+ * flag or any code here.
  */
-export const TICKET_TAILOR_INTEGRATION_VERIFIED = false as const;
+export const TICKET_TAILOR_INTEGRATION_VERIFIED = true as const;
 
 const TICKET_TAILOR_API_BASE = "https://api.tickettailor.com";
 
