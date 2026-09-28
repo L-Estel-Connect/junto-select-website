@@ -212,7 +212,15 @@ class LiveTicketTailorClient implements TicketTailorClient {
       headers: this.headers({ "Content-Type": "application/x-www-form-urlencoded" }),
       body: buildCreateDiscountRequestBody(params),
     });
-    if (!res.ok) throw new Error(`ticket_tailor_create_discount_failed_${res.status}`);
+    if (!res.ok) {
+      // Ticket Tailor's own error response — safe to log in full: it is
+      // THEIR description of what was wrong with the request, never an
+      // echo of anything we sent (the Authorization header, in particular,
+      // never appears in a response body). Truncated defensively in case
+      // of an unexpectedly large error page, not for sanitization.
+      const body = await res.text().catch(() => "<failed to read response body>");
+      throw new Error(`ticket_tailor_create_discount_failed_${res.status}: ${body.slice(0, 2000)}`);
+    }
     const data = (await res.json()) as TicketTailorDiscountResponse;
     return parseDiscount(data);
   }
