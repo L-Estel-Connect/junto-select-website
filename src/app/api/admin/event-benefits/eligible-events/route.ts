@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireAdminOrRespond } from "@/lib/admin/apiGuard";
 import { describeError } from "@/lib/admin/describeError";
 import { listEligibleEvents, registerEligibleEvent } from "@/lib/eventBenefits/eligibleEvents";
+import { countEventBenefitsForEvent } from "@/lib/eventBenefits/lifecycle";
+import type { EligibleTicketTailorEventDocument } from "@/lib/eventBenefits/types";
 
 export const runtime = "nodejs";
 
@@ -32,13 +34,24 @@ export const runtime = "nodejs";
  * this route is already admin-authenticated, and a Firestore error message
  * never contains secrets — at most a project id or resource path.
  */
+export interface EligibleEventWithStats extends EligibleTicketTailorEventDocument {
+  /** How many (member, event) benefit docs exist for this event — admin visibility only, see the event-benefits admin page. */
+  benefitCount: number;
+}
+
 export async function GET(request: Request) {
   const admin = await requireAdminOrRespond(request);
   if (admin instanceof NextResponse) return admin;
 
   try {
     const events = await listEligibleEvents();
-    return NextResponse.json({ ok: true, events });
+    const eventsWithStats: EligibleEventWithStats[] = await Promise.all(
+      events.map(async (event) => ({
+        ...event,
+        benefitCount: await countEventBenefitsForEvent(event.ticketTailorEventId),
+      })),
+    );
+    return NextResponse.json({ ok: true, events: eventsWithStats });
   } catch (error) {
     console.error("eligible-events GET: failed", error);
     return NextResponse.json({ ok: false, error: "failed_to_list_events", detail: describeError(error) }, { status: 500 });
@@ -56,6 +69,7 @@ export async function POST(request: Request) {
     eventDate?: unknown;
     reconnectEnabled?: unknown;
     memberBenefitEnabled?: unknown;
+    ticketTailorCheckoutUrl?: unknown;
   };
   try {
     body = await request.json();
@@ -63,20 +77,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 });
   }
 
-  const { ticketTailorEventId, ticketTailorTicketTypeIds, label, eventDate, reconnectEnabled, memberBenefitEnabled } = body;
+  const {
+    ticketTailorEventId,
+    ticketTailorTicketTypeIds,
+    label,
+    eventDate,
+    reconnectEnabled,
+    memberBenefitEnabled,
+    ticketTailorCheckoutUrl,
+  } = body;
 
   // The 20% member benefit and Reconnect are fully independent switches on
   // the same event — see the product clarification: an event can have
-  // either, both, or neither. Ticket type IDs are what the 20% benefit
-  // needs (they scope which tickets a member's discount code applies to);
-  // Reconnect needs none of that, so they're only REQUIRED when the
-  // benefit toggle is on, never just to enable Reconnect. Missing the
-  // toggle entirely defaults to `true` here (not in the library function),
-  // preserving the pre-existing behavior for any caller that predates this
-  // field: "register with ticket types" used to always mean "benefit on."
+  // either, both, or neither. Ticket type IDs and eventDate are what the
+  // 20% benefit needs (they scope which tickets a code applies to, and
+  // drive both eligibility and expiry — see eligibility.ts); Reconnect
+  // needs neither, so both are only REQUIRED when the benefit toggle is
+  // on, never just to enable Reconnect. Missing the toggle entirely
+  // defaults to `true` here (not in the library function), preserving the
+  // pre-existing behavior for any caller that predates this field:
+  // "register with ticket types" used to always mean "benefit on."
   const effectiveMemberBenefitEnabled = typeof memberBenefitEnabled === "boolean" ? memberBenefitEnabled : true;
   const ticketTypeIdsArray = Array.isArray(ticketTailorTicketTypeIds) ? ticketTailorTicketTypeIds : [];
   const ticketTypeIdsAreValidStrings = ticketTypeIdsArray.every((id) => typeof id === "string" && id.trim());
+  const eventDateIsValid =
+    eventDate === undefined || eventDate === null || (typeof eventDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(eventDate));
 
   if (
     typeof ticketTailorEventId !== "string" ||
@@ -86,9 +111,11 @@ export async function POST(request: Request) {
     !Array.isArray(ticketTailorTicketTypeIds) ||
     !ticketTypeIdsAreValidStrings ||
     (effectiveMemberBenefitEnabled && ticketTypeIdsArray.length === 0) ||
-    (eventDate !== undefined && eventDate !== null && (typeof eventDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate))) ||
+    !eventDateIsValid ||
+    (effectiveMemberBenefitEnabled && (!eventDate || typeof eventDate !== "string")) ||
     (reconnectEnabled !== undefined && typeof reconnectEnabled !== "boolean") ||
-    (memberBenefitEnabled !== undefined && typeof memberBenefitEnabled !== "boolean")
+    (memberBenefitEnabled !== undefined && typeof memberBenefitEnabled !== "boolean") ||
+    (ticketTailorCheckoutUrl !== undefined && ticketTailorCheckoutUrl !== null && typeof ticketTailorCheckoutUrl !== "string")
   ) {
     return NextResponse.json({ ok: false, error: "invalid_request" }, { status: 400 });
   }
@@ -101,6 +128,7 @@ export async function POST(request: Request) {
       eventDate: (eventDate as string | undefined) ?? null,
       reconnectEnabled: (reconnectEnabled as boolean | undefined) ?? false,
       memberBenefitEnabled: effectiveMemberBenefitEnabled,
+      ticketTailorCheckoutUrl: (ticketTailorCheckoutUrl as string | undefined)?.trim() || null,
     });
     return NextResponse.json({ ok: true });
   } catch (error) {

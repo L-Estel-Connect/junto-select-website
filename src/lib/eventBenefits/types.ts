@@ -5,48 +5,48 @@
  */
 
 /**
- * `active`: the current, redeemable monthly benefit — at most ONE per
- * uid at any time (enforced by lifecycle.ts, never by a client).
- * `pending_external`: the Firestore record exists (so the cycle key is
- * already claimed and can never double-grant) but the Ticket Tailor
- * discount hasn't been created yet — a transient state, or the result of
- * a Ticket Tailor create call that failed and is awaiting retry.
- * `external_sync_failed`: a Ticket Tailor create/associate call failed
- * after at least one attempt — distinct from `pending_external` only for
+ * `active`: a real, redeemable discount for this member/event pair.
+ * `pending_external`: the Firestore record exists (so this member/event
+ * pair is already claimed and can never double-grant) but the Ticket
+ * Tailor discount hasn't been created yet — transient, or a create call
+ * that failed and is awaiting retry.
+ * `external_sync_failed`: a Ticket Tailor create call failed after at
+ * least one attempt — distinct from `pending_external` only for
  * observability (how long has this actually been stuck vs. never tried).
- * `superseded`: a later monthly cycle replaced this one (expected,
- * routine end of life).
- * `invalidated`: membership entitlement ended before the next monthly
- * cycle would have superseded this one naturally.
+ * `invalidated`: the member's entitlement ended before this event took
+ * place (see invalidateUpcomingEventBenefitsForMember).
  *
- * Deliberately no `used` status in V1 — Ticket Tailor's redemption state
- * was not verified as reliable enough to surface (see the Ticket Tailor
- * API audit). Never infer or fabricate a used state.
+ * Deliberately no `used`/`redeemed` status — Ticket Tailor's redemption
+ * state was not verified as reliable enough to surface (see the Ticket
+ * Tailor API audit). Never infer or fabricate a used state. There is also
+ * no `superseded` status in this event-keyed model — nothing supersedes a
+ * per-event benefit the way one billing cycle used to supersede the last;
+ * a benefit is simply used, expired, or invalidated.
  */
-export type EventBenefitStatus = "pending_external" | "active" | "external_sync_failed" | "superseded" | "invalidated";
+export type EventBenefitStatus = "pending_external" | "active" | "external_sync_failed" | "invalidated";
 
-export type EventBenefitInvalidationReason = "superseded" | "membership_lapsed" | null;
+export type EventBenefitInvalidationReason = "membership_lapsed" | null;
 
 /**
- * `eventBenefits/{cycleKey}` — one immutable-once-settled record per
- * monthly benefit cycle, never overwritten with a different cycle's data
- * (see lifecycle.ts's doc comment for why the doc ID IS the idempotency
- * key). Deliberately a dedicated collection, not a mutable array on
- * `profiles/{uid}` or `billing/{uid}` — mirrors the `introductions`/
- * `proposals` precedent: one doc per event, owner-uid field for the
- * Firestore rule, natural audit trail via a query on `uid`.
+ * `eventBenefits/{uid}_{ticketTailorEventId}` — one record per (member,
+ * eligible event) pair, EVER, for the lifetime of that pair — the doc ID
+ * itself is the idempotency key (see lifecycle.ts), which is what makes
+ * "the same member gets two benefits for the same event" structurally
+ * impossible, the same way the old `{subscriptionId}:{periodIndex}` key
+ * made double-granting a billing cycle impossible. Deliberately keyed on
+ * `uid`, not `stripeSubscriptionId` — a member who cancels and resubscribes
+ * must never be granted a second benefit for an event they already got one
+ * for the first time around.
  */
 export interface EventBenefitDocument {
   uid: string;
-  stripeCustomerId: string | null;
-  stripeSubscriptionId: string;
-  /** `{stripeSubscriptionId}:{periodIndex}` — see anchor.ts. Also this doc's own Firestore id. */
-  cycleKey: string;
-  /** 0-indexed count of monthly cycles granted so far for this subscription. */
-  periodIndex: number;
+  /** Also embedded in the doc ID — kept as its own field so `eventBenefits` can be queried/counted by event without parsing the ID. */
+  ticketTailorEventId: string;
+  /** The subscription active at grant time — audit/display only, never part of the key. */
+  stripeSubscriptionId: string | null;
   createdAt: unknown; // Firestore Timestamp
-  validFrom: unknown; // Firestore Timestamp — this cycle's own due date
-  validUntil: unknown; // Firestore Timestamp — the next cycle's due date (when this one is naturally superseded)
+  /** This event's own expiry boundary (end-of-day Madrid-local on the event's date) — see eligibility.ts. */
+  validUntil: unknown; // Firestore Timestamp
   percentage: 20;
   /** Null until the Ticket Tailor create call actually succeeds. */
   ticketTailorDiscountId: string | null;
@@ -57,11 +57,41 @@ export interface EventBenefitDocument {
   invalidatedReason: EventBenefitInvalidationReason;
 }
 
-/** The narrow shape actually returned to the member — see getCurrentEventBenefitForMember. */
+/**
+ * The narrow, per-event shape returned to the member — see
+ * listEventBenefitsForMember. Deliberately never includes
+ * ticketTailorDiscountId (internal bookkeeping) or another member's
+ * record (every query is uid-scoped server-side, and Firestore rules
+ * independently enforce the same boundary for defense in depth).
+ * `code`/`validUntil` are `null` while `ready` is `false` — the member
+ * never sees a code that isn't confirmed live yet.
+ */
 export interface MemberEventBenefitView {
-  code: string;
+  ticketTailorEventId: string;
+  eventLabel: string;
+  eventDate: string | null;
+  checkoutUrl: string | null;
+  ready: boolean;
+  code: string | null;
   percentage: number;
+  validUntil: unknown | null;
+}
+
+/**
+ * The per-event row shown on the admin member-detail page — see
+ * listEventBenefitsForAdmin. Unlike MemberEventBenefitView, this is never
+ * filtered (invalidated benefits are shown too, so Lara can see "expired/
+ * invalidated" as its own state) and always includes the real code and
+ * status, since this is an admin-only, already-authenticated view.
+ */
+export interface AdminEventBenefitView {
+  ticketTailorEventId: string;
+  eventLabel: string;
+  eventDate: string | null;
+  status: EventBenefitStatus;
+  code: string;
   validUntil: unknown;
+  invalidatedReason: EventBenefitInvalidationReason;
 }
 
 /**
@@ -82,7 +112,7 @@ export interface EligibleTicketTailorEventDocument {
   updatedAt: unknown; // Firestore Timestamp
   /** Bookkeeping only — when a sync last ran and what it found, for admin visibility/debugging. */
   lastSyncedAt: unknown | null;
-  lastSyncResult: { attempted: number; succeeded: number; failed: number } | null;
+  lastSyncResult: { checked: number; granted: number; errors: number } | null;
   /**
    * Reconnect (see src/lib/eventReconnect/) extends this SAME document
    * rather than a second event registry — both features key off the same
@@ -91,8 +121,11 @@ export interface EligibleTicketTailorEventDocument {
    * lists for the event (YYYY-MM-DD, Madrid-local) — Reconnect's open/close
    * window is always COMPUTED from it (see eventConfig.ts), never stored
    * separately, so these two timestamps can never drift from the event
-   * date. `null` for an event that predates Reconnect or was never given a
-   * date — Reconnect is simply unavailable for it. `reconnectEnabled`
+   * date. The 20% benefit ALSO derives both eligibility and expiry from
+   * this same field (see eligibility.ts) — required whenever
+   * `memberBenefitEnabled` is true (see the eligible-events route's
+   * validation), even though the type keeps it nullable for a
+   * Reconnect-only or not-yet-dated registration. `reconnectEnabled`
    * defaults to `false`: registering an event for the discount benefit
    * must never implicitly turn on Reconnect for it too. `reconnectForceClosedAt`
    * is the one manual safety override (see the audit) — set, it closes
@@ -106,20 +139,26 @@ export interface EligibleTicketTailorEventDocument {
   /**
    * Whether this event participates in the member 20% benefit — fully
    * independent of `reconnectEnabled` (an event can be either, both, or
-   * neither). `ticketTailorTicketTypeIds` is only required (see the
-   * eligible-events route's validation) when this is `true`; it's `false`
-   * for a Reconnect-only event so `getAllEligibleTicketTypeIds()` never
-   * pulls that event's ticket types into the benefit's union.
+   * neither). `ticketTailorTicketTypeIds` and `eventDate` are only
+   * required (see the eligible-events route's validation) when this is
+   * `true`; both are irrelevant for a Reconnect-only event.
    *
    * BACKWARD COMPATIBILITY: this field did not exist before this toggle
    * was added, when every registered event implicitly participated in the
-   * benefit (that was the only thing this document was for). A document
-   * written before this field existed has it `undefined`, not `false` —
-   * `getAllEligibleTicketTypeIds()` deliberately treats "missing" the same
-   * as `true` (only an EXPLICIT `false` excludes it), so an already-active
-   * member benefit tied to a pre-existing event is never silently broken
-   * by this schema addition. New/edited registrations always write an
-   * explicit boolean (see the admin form's own default).
+   * benefit. A document written before this field existed has it
+   * `undefined`, not `false` — read paths treat "missing" the same as
+   * `true` (only an EXPLICIT `false` excludes it). New/edited
+   * registrations always write an explicit boolean (see the admin form's
+   * own default).
    */
   memberBenefitEnabled: boolean;
+  /**
+   * The real Ticket Tailor purchase page for this event — the ONLY thing
+   * that lets the member-facing "Comprar entrada con -20%" CTA link
+   * anywhere real (see PlanSection.tsx's EventBenefitSection). `null`
+   * until Lara fills it in; the CTA simply doesn't render without it — the
+   * code and discount are still fully valid either way, this only affects
+   * whether there's a one-click link to it.
+   */
+  ticketTailorCheckoutUrl: string | null;
 }

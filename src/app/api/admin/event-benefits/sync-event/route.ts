@@ -1,16 +1,22 @@
 import { NextResponse } from "next/server";
 import { requireAdminOrRespond } from "@/lib/admin/apiGuard";
 import { describeError } from "@/lib/admin/describeError";
-import { syncEligibleEvent } from "@/lib/eventBenefits/eligibleEvents";
+import { adminDb } from "@/lib/firebase/admin";
+import { reconcileEventBenefitsForEvent } from "@/lib/eventBenefits/lifecycle";
+import { recordEventBenefitSyncResult } from "@/lib/eventBenefits/eligibleEvents";
+import type { EligibleTicketTailorEventDocument } from "@/lib/eventBenefits/types";
 
 export const runtime = "nodejs";
 
 /**
- * "Sync member discounts to this event" — the V1, admin-triggered,
- * explicit alternative to a Ticket Tailor event.created webhook (see the
- * implementation report for why this launch-simplicity choice was made
- * over a webhook-driven design). Idempotent and safe to click again: see
- * syncEligibleEvent's own doc comment.
+ * "Sincronizar" — an optional, immediate, per-event reconciliation, never
+ * a required operational step (the scheduler already does this
+ * automatically for every eligible upcoming event — see
+ * runDueEventBenefitScan). Useful right after registering/editing an
+ * event, when Lara wants currently-entitled members granted their benefit
+ * without waiting for the next scheduled pass. Idempotent and safe to
+ * click repeatedly: reconcileEventBenefitsForEvent only ever creates a
+ * missing (member, event) pair, never re-touches an already-settled one.
  */
 export async function POST(request: Request) {
   const admin = await requireAdminOrRespond(request);
@@ -26,14 +32,18 @@ export async function POST(request: Request) {
   if (typeof body.ticketTailorEventId !== "string" || !body.ticketTailorEventId.trim()) {
     return NextResponse.json({ ok: false, error: "invalid_request" }, { status: 400 });
   }
+  const ticketTailorEventId = body.ticketTailorEventId.trim();
 
   try {
-    const result = await syncEligibleEvent(body.ticketTailorEventId.trim());
-    return NextResponse.json({ ok: true, result });
-  } catch (error) {
-    if (error instanceof Error && error.message === "eligible_event_not_found") {
+    const eventSnap = await adminDb.doc(`eligibleTicketTailorEvents/${ticketTailorEventId}`).get();
+    if (!eventSnap.exists) {
       return NextResponse.json({ ok: false, error: "eligible_event_not_found" }, { status: 404 });
     }
+    const event = eventSnap.data() as EligibleTicketTailorEventDocument;
+    const result = await reconcileEventBenefitsForEvent(event);
+    await recordEventBenefitSyncResult(ticketTailorEventId, result);
+    return NextResponse.json({ ok: true, result });
+  } catch (error) {
     console.error("sync-event: failed", error);
     return NextResponse.json({ ok: false, error: "sync_failed", detail: describeError(error) }, { status: 500 });
   }

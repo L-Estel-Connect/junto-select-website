@@ -25,16 +25,26 @@ import "server-only";
  * write field — and `expires` comes back as a structured object whose
  * Unix value is at `.expires.unix`, never a bare number.
  *
- * Despite the contract now being empirically verified end-to-end (auth,
- * create, single- and multi-ticket-type association, the
- * price_percent/face_value_percentage write/read asymmetry,
- * max_redemptions, expiry, GET-by-ID, GET-by-code, update/union
- * semantics, and delete), `TICKET_TAILOR_INTEGRATION_VERIFIED` is kept
- * `false` below by deliberate product decision: activating the real
- * integration is a separate, explicit rollout step, not an automatic
- * consequence of the contract being correct.
+ * A THIRD real, controlled verification pass was run end-to-end against
+ * production on a dedicated, non-customer-facing test event
+ * (ticketTailorEventId 2442161, ticket type tt_6869922): discount
+ * creation, scoping to exactly one ticket type, a real checkout applying
+ * exactly 20%, a second redemption correctly rejected once
+ * `max_redemptions: 1` was reached, an already-expired discount correctly
+ * rejected with a distinct "expired" error (never confused with the
+ * redemption-limit error), and cleanup (both temporary discounts
+ * deleted). This is what `TICKET_TAILOR_INTEGRATION_VERIFIED` below now
+ * reflects — activation is a deliberate rollout step taken only after
+ * this verification passed, not an automatic consequence of the earlier
+ * contract-correctness tests alone.
+ *
+ * IMPORTANT: the real API key used for that verification was exposed to a
+ * local shell during manual testing and MUST be rotated in Secret Manager
+ * before any real customer-facing use of this integration — see the
+ * engagement's test report. Rotating a key does not require touching this
+ * flag or any code here.
  */
-export const TICKET_TAILOR_INTEGRATION_VERIFIED = false as const;
+export const TICKET_TAILOR_INTEGRATION_VERIFIED = true as const;
 
 const TICKET_TAILOR_API_BASE = "https://api.tickettailor.com";
 
@@ -98,24 +108,13 @@ export interface TicketTailorClient {
    * when no such discount exists.
    */
   findDiscountByCode(code: string): Promise<TicketTailorDiscount | null>;
-  /** Reads a discount's current state — used to union-merge ticket_types before an update, never to drive a blind overwrite. */
-  getDiscount(discountId: string): Promise<TicketTailorDiscount>;
   /**
-   * Genuine entitlement-loss invalidation ONLY (never routine monthly
-   * supersession, which relies solely on the discount's own `expires`).
-   * Permanent/irreversible on Ticket Tailor's side. Best-effort from a
-   * caller's perspective — callers must treat a thrown error as "external
-   * sync failed," never as a reason to skip the Firestore-side
-   * invalidation.
+   * Genuine entitlement-loss invalidation ONLY. Permanent/irreversible on
+   * Ticket Tailor's side. Best-effort from a caller's perspective —
+   * callers must treat a thrown error as "external sync failed," never as
+   * a reason to skip the Firestore-side invalidation.
    */
   invalidateDiscount(discountId: string): Promise<void>;
-  /**
-   * Idempotent, non-destructive: reads the discount's currently
-   * associated ticket types, unions them with `ticketTypeIds`, and only
-   * ever grows the associated set — safe to call repeatedly and safe to
-   * call for an event whose ticket types were already associated.
-   */
-  associateDiscountWithTicketTypes(discountId: string, ticketTypeIds: string[]): Promise<void>;
 }
 
 interface TicketTailorDiscountResponse {
@@ -156,10 +155,9 @@ export function buildTicketTailorAuthHeader(apiKey: string): string {
 
 /**
  * Verified against a real request/response pair — see the file-level doc
- * comment. Exported (alongside `buildTicketTypesUpdateRequestBody`)
- * purely so tests can assert the exact wire-format fields Ticket Tailor
- * documents, without needing TICKET_TAILOR_INTEGRATION_VERIFIED or a real
- * network call.
+ * comment. Exported purely so tests can assert the exact wire-format
+ * fields Ticket Tailor documents, without needing
+ * TICKET_TAILOR_INTEGRATION_VERIFIED or a real network call.
  */
 export function buildCreateDiscountRequestBody(params: CreateDiscountParams): URLSearchParams {
   const body = new URLSearchParams();
@@ -170,12 +168,6 @@ export function buildCreateDiscountRequestBody(params: CreateDiscountParams): UR
   body.set("max_redemptions", String(params.maxRedemptions));
   body.set("expires", String(Math.floor(params.expiresAt.getTime() / 1000)));
   appendTicketTypes(body, params.ticketTypeIds);
-  return body;
-}
-
-export function buildTicketTypesUpdateRequestBody(ticketTypeIds: string[]): URLSearchParams {
-  const body = new URLSearchParams();
-  appendTicketTypes(body, ticketTypeIds);
   return body;
 }
 
@@ -236,16 +228,6 @@ class LiveTicketTailorClient implements TicketTailorClient {
     return match ? parseDiscount(match) : null;
   }
 
-  async getDiscount(discountId: string): Promise<TicketTailorDiscount> {
-    this.assertVerified("getDiscount");
-    const res = await fetch(`${TICKET_TAILOR_API_BASE}/v1/discounts/${discountId}`, {
-      headers: this.headers(),
-    });
-    if (!res.ok) throw new Error(`ticket_tailor_get_discount_failed_${res.status}`);
-    const data = (await res.json()) as TicketTailorDiscountResponse;
-    return parseDiscount(data);
-  }
-
   async invalidateDiscount(discountId: string): Promise<void> {
     this.assertVerified("invalidateDiscount");
     const res = await fetch(`${TICKET_TAILOR_API_BASE}/v1/discounts/${discountId}`, {
@@ -253,22 +235,6 @@ class LiveTicketTailorClient implements TicketTailorClient {
       headers: this.headers(),
     });
     if (!res.ok) throw new Error(`ticket_tailor_invalidate_discount_failed_${res.status}`);
-  }
-
-  async associateDiscountWithTicketTypes(discountId: string, ticketTypeIds: string[]): Promise<void> {
-    this.assertVerified("associateDiscountWithTicketTypes");
-    // Ticket Tailor has no separate association endpoint — this reads the
-    // discount's currently associated ticket types first and updates with
-    // the UNION, so syncing a newly eligible event never accidentally
-    // drops a ticket type already associated from an earlier sync.
-    const current = await this.getDiscount(discountId);
-    const union = new Set([...current.ticketTypeIds, ...ticketTypeIds]);
-    const res = await fetch(`${TICKET_TAILOR_API_BASE}/v1/discounts/${discountId}`, {
-      method: "POST",
-      headers: this.headers({ "Content-Type": "application/x-www-form-urlencoded" }),
-      body: buildTicketTypesUpdateRequestBody([...union]),
-    });
-    if (!res.ok) throw new Error(`ticket_tailor_associate_ticket_types_failed_${res.status}`);
   }
 }
 

@@ -137,10 +137,6 @@ export async function POST(request: Request) {
       cancelAtPeriodEnd: billing?.cancelAtPeriodEnd ?? false,
       canceledAt: billing?.canceledAt ?? null,
       lastPaymentFailedAt: billing?.lastPaymentFailedAt ?? null,
-      eventBenefitAnchorAt: billing?.eventBenefitAnchorAt ?? null,
-      eventBenefitSubscriptionId: billing?.eventBenefitSubscriptionId ?? null,
-      eventBenefitPeriodsIssued: billing?.eventBenefitPeriodsIssued ?? 0,
-      nextEventBenefitDueAt: billing?.nextEventBenefitDueAt ?? null,
     } satisfies BillingDocument,
     { merge: true },
   );

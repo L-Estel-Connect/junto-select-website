@@ -28,6 +28,13 @@ import {
 import type { MemberDetail } from "@/lib/admin/memberDetail";
 import { PLAN_DISPLAY } from "@/lib/billing/plans";
 
+const EVENT_BENEFIT_STATUS_LABELS: Record<string, string> = {
+  pending_external: "Preparando código",
+  active: "Activo",
+  external_sync_failed: "Error de sincronización con Ticket Tailor",
+  invalidated: "Expirado / invalidado",
+};
+
 const BILLING_STATUS_LABELS: Record<string, string> = {
   none: "Sin membresía",
   active: "Activa",
@@ -161,6 +168,35 @@ export default function MemberDetailPage({ params }: { params: Promise<{ uid: st
           cancelación o reembolso se gestiona en el Stripe Dashboard, nunca desde aquí.
         </p>
       </section>
+
+      {/* Beneficio de evento (-20%) — uno por evento elegible, nunca un estado "usado" fabricado */}
+      {member.eventBenefits.length > 0 && (
+        <section className="mt-10">
+          <SectionHeading>Beneficio de evento (-20%)</SectionHeading>
+          <div className="mt-3 space-y-2">
+            {member.eventBenefits.map((b) => (
+              <div
+                key={b.ticketTailorEventId}
+                className="flex items-center justify-between gap-4 rounded-xl border border-hairline bg-white px-4 py-3"
+              >
+                <div>
+                  <p className="text-[14px] text-ink">
+                    {b.eventLabel} {b.eventDate ? `· ${b.eventDate}` : ""}
+                  </p>
+                  {b.status === "active" && <p className="mt-0.5 font-mono text-[12px] text-ink-soft">{b.code}</p>}
+                </div>
+                <Badge tone={b.status === "active" ? "positive" : b.status === "invalidated" ? "muted" : "warning"}>
+                  {EVENT_BENEFIT_STATUS_LABELS[b.status] ?? b.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[12px] text-ink-soft">
+            Ticket Tailor no expone de forma fiable si un código ya se ha canjeado — este estado nunca se
+            inventa aquí, solo se muestra lo que Junto sabe con certeza.
+          </p>
+        </section>
+      )}
 
       {/* Elegibilidad para matching — el motivo exacto, no solo el resultado */}
       {!eligibility.eligible && (
