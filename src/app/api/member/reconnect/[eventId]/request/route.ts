@@ -39,7 +39,10 @@ export async function POST(request: Request, context: { params: Promise<{ eventI
 
   const result = await createReconnectRequest(eventId, auth.uid, personId, auth.email, body.targetParticipantId.trim());
   if (!result.ok) {
-    const status = result.error === "limit_reached" || result.error === "discovery_closed" ? 403 : 400;
+    const status =
+      result.error === "limit_reached" || result.error === "discovery_closed" || result.error === "requester_not_activated"
+        ? 403
+        : 400;
     return NextResponse.json({ ok: false, error: result.error }, { status });
   }
 
