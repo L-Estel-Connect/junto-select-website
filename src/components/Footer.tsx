@@ -11,6 +11,9 @@ export default function Footer() {
       <div className="flex flex-col items-center gap-3 text-center">
         <Wordmark className="text-base text-ink-soft" />
         <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs">
+          <Link href="/colaboraciones" className={legalLinkClasses}>
+            Colaboraciones
+          </Link>
           <Link href="/terminos" className={legalLinkClasses}>
             Términos y Condiciones
           </Link>

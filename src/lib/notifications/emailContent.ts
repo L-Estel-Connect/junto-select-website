@@ -150,5 +150,30 @@ export function buildEmailContent(
         ),
       };
     }
+    // Internal ops notification, not a member email — see
+    // OutboundEmailType's doc comment. No withFooter/app link: there is
+    // nothing in the app for Lara to click through to, only the inquiry
+    // itself, in full, right here.
+    case "collaboration_proposal": {
+      const str = (key: string) => (typeof data[key] === "string" ? (data[key] as string) : "");
+      const nombre = str("nombre") || "(sin nombre)";
+      const marca = str("marca") || "(sin marca)";
+      const email = str("email") || "(sin email)";
+      const instagramOWeb = str("instagramOWeb");
+      const tipoColaboracionLabel = str("tipoColaboracionLabel") || "(sin especificar)";
+      const mensaje = str("mensaje") || "(sin mensaje)";
+      return {
+        subject: `Nueva propuesta de colaboración — ${marca}`,
+        textContent:
+          `Nueva propuesta recibida desde /colaboraciones:\n\n` +
+          `Nombre: ${nombre}\n` +
+          `Marca / Empresa: ${marca}\n` +
+          `Email: ${email}\n` +
+          (instagramOWeb ? `Instagram o web: ${instagramOWeb}\n` : "") +
+          `Tipo de colaboración: ${tipoColaboracionLabel}\n\n` +
+          `Mensaje:\n${mensaje}\n\n` +
+          "Junto Select",
+      };
+    }
   }
 }
