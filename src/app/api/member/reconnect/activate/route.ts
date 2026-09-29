@@ -56,7 +56,12 @@ export async function POST(request: Request) {
   });
 
   if (!result.ok) {
-    const status = result.error === "claimed_by_other" ? 409 : result.error === "event_not_participant" ? 404 : 400;
+    const status =
+      result.error === "claimed_by_other" || result.error === "opted_out"
+        ? 409
+        : result.error === "event_not_participant"
+          ? 404
+          : 400;
     return NextResponse.json({ ok: false, error: result.error }, { status });
   }
   return NextResponse.json({ ok: true });

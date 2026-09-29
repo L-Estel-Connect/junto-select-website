@@ -38,7 +38,16 @@ export interface ActivateReconnectParams {
 
 export type ActivateReconnectResult =
   | { ok: true }
-  | { ok: false; error: "event_not_participant" | "claimed_by_other" | "under_minimum_age" | "missing_first_name" | "missing_contact_method" };
+  | {
+      ok: false;
+      error:
+        | "event_not_participant"
+        | "claimed_by_other"
+        | "opted_out"
+        | "under_minimum_age"
+        | "missing_first_name"
+        | "missing_contact_method";
+    };
 
 /**
  * The one write path for "activate Reconnect for this event" — deliberately
@@ -71,6 +80,14 @@ export async function activateReconnect(params: ActivateReconnectParams): Promis
   const participantSnap = await participantRef.get();
   if (!participantSnap.exists) return { ok: false, error: "event_not_participant" };
   const participant = participantSnap.data() as EventParticipantDocument;
+  // Terminal state machine, enforced here (not just in the UI): imported ->
+  // activate or imported -> opt-out, never opted_out -> activate. A retry
+  // by the SAME uid that already activated is still allowed through below
+  // (claimEventParticipant's own idempotent no-op) — only a genuine
+  // opted-out participant is rejected.
+  if (participant.status === "opted_out") {
+    return { ok: false, error: "opted_out" };
+  }
   if (participant.claimedUid && participant.claimedUid !== params.uid) {
     return { ok: false, error: "claimed_by_other" };
   }

@@ -146,7 +146,7 @@ export async function getEventParticipant(participantId: string): Promise<EventP
 
 export type OptOutEventParticipantResult =
   | { ok: true; participantId: string }
-  | { ok: false; error: "not_found" };
+  | { ok: false; error: "not_found" | "already_activated" };
 
 /**
  * "No quiero participar" — the destructive, explicit opt-out offered
@@ -163,12 +163,31 @@ export type OptOutEventParticipantResult =
  * participant are resolved by the caller (see requests.ts's
  * cancelPendingRequestsForParticipant) — this function only owns the
  * participant record itself.
+ *
+ * Terminal state machine, enforced here: only reachable from `"imported"`
+ * (undecided) — an already-`"claimed"` (activated) participant is rejected
+ * with `already_activated` rather than allowed to retract. Once someone has
+ * activated Reconnect for this event, the product decision is final for
+ * that event's cycle; there is deliberately no "change my mind" path. This
+ * is also what makes it structurally impossible for an opted-out
+ * participant to ever have sent a Reconnect request (sending requires
+ * activation — see requests.ts's createReconnectRequest), so no
+ * outgoing-pending-request cleanup is needed on this path.
  */
 export async function optOutEventParticipant(eventId: string, verifiedEmail: string): Promise<OptOutEventParticipantResult> {
   const participantId = eventParticipantId(eventId, normalizeEmail(verifiedEmail));
   const ref = adminDb.doc(`eventParticipants/${participantId}`);
   const snap = await ref.get();
   if (!snap.exists) return { ok: false, error: "not_found" };
+  const participant = snap.data() as EventParticipantDocument;
+
+  if (participant.status === "opted_out") {
+    // Idempotent: opting out twice is a no-op success, same end state.
+    return { ok: true, participantId };
+  }
+  if (participant.status === "claimed") {
+    return { ok: false, error: "already_activated" };
+  }
 
   await ref.update({
     status: "opted_out",
@@ -178,6 +197,7 @@ export async function optOutEventParticipant(eventId: string, verifiedEmail: str
     firstName: null,
     lastName: null,
     phone: null,
+    ticketTailorOrderId: null,
     optedOutAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });

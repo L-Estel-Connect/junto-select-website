@@ -21,6 +21,7 @@ export type CreateReconnectRequestResult =
       ok: false;
       error:
         | "discovery_closed"
+        | "requester_not_activated"
         | "target_not_found"
         | "target_not_visible"
         | "cannot_request_self"
@@ -47,6 +48,13 @@ export type CreateReconnectRequestResult =
  * stay null until the target activates). It still costs the requester
  * exactly one of their 3 requests, identically to requesting an already-
  * activated participant.
+ *
+ * The REQUESTER, unlike the target, DOES need to already be activated
+ * (`status === "claimed"`) — checked inside the transaction below. The
+ * product's consent state machine requires deciding (activate or opt out)
+ * before touching discovery/requests at all; this is the server-side
+ * enforcement of that, not just the UI only showing the request button
+ * post-activation.
  */
 export async function createReconnectRequest(
   eventId: string,
@@ -96,6 +104,19 @@ export async function createReconnectRequest(
     const [requesterSnap, existingRequestSnap] = await Promise.all([tx.get(requesterParticipantRef), tx.get(requestRef)]);
     if (!requesterSnap.exists) return { ok: false, error: "target_not_found" as const };
     const requester = requesterSnap.data() as EventParticipantDocument;
+
+    // The requester must have already decided (activated) for THIS event —
+    // enforced here, server-side, not just by the UI only rendering the
+    // request button post-activation (see the audit: a direct API call must
+    // never be able to send a request as a still-"imported"/undecided
+    // participant). This is also the invariant that makes an opted-out
+    // participant's outgoing requests structurally impossible: sending
+    // requires "claimed", and "claimed" can never transition to
+    // "opted_out" (see optOutEventParticipant) — so no separate
+    // outgoing-request cleanup is needed anywhere in this file.
+    if (requester.status !== "claimed" || !requester.visibleForReconnect) {
+      return { ok: false, error: "requester_not_activated" as const };
+    }
 
     if (existingRequestSnap.exists) {
       // Idempotent: a retried click on the same target never creates a
