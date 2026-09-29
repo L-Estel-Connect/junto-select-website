@@ -12,7 +12,6 @@ export default function CollaborationsHero() {
     >
       <div className="flex flex-col gap-6">
         <div className="space-y-1">
-          <p className={eyebrowClasses}>Brand partnerships in Madrid</p>
           <p className={eyebrowClasses}>Colaboraciones de marca en Madrid</p>
         </div>
 
@@ -23,13 +22,13 @@ export default function CollaborationsHero() {
         <div className="max-w-[48ch] space-y-3 text-[15px] leading-relaxed text-ink-soft">
           <p>
             Junto Select organiza encuentros cuidadosamente seleccionados en
-            Madrid para una comunidad adulta en torno a los 50 años, con
-            trayectoria propia, poder adquisitivo, vida social activa y un
-            interés real por descubrir experiencias y marcas nuevas.
+            Madrid para una comunidad definida y difícil de alcanzar a través
+            de canales generalistas: personas en torno a los 50 años, con
+            trayectoria propia, poder adquisitivo, vida social activa y
+            afinidad con nuevas experiencias y marcas.
           </p>
           <p className="font-medium text-ink">
-            No es un medio de gran alcance. Es una comunidad concreta, con
-            relación directa — y encuentros reales en Madrid.
+            Una relación directa que continúa en encuentros reales en Madrid.
           </p>
         </div>
 

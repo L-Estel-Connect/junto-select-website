@@ -24,12 +24,10 @@ export default function WhyThisCommunity() {
         Más que visibilidad
       </p>
       <p className="mt-5 max-w-[62ch] text-[15px] leading-relaxed text-ink-soft">
-        Junto Select no compite por alcance. Vuestra marca puede conectar con
-        una comunidad concreta de tres formas a la vez: en nuestras
-        comunicaciones directas, en nuestro contenido de Instagram, y de
-        forma física durante uno de nuestros encuentros en Madrid — una
-        comunidad que también se encuentra en la vida real, y no solo en una
-        pantalla.
+        No se trata solo de visibilidad: Junto Select permite a las marcas
+        conectar con una comunidad muy definida a través de nuestros canales
+        directos, nuestro contenido en redes y, sobre todo, encuentros
+        presenciales en Madrid.
       </p>
 
       <div className="mt-12 grid grid-cols-1 items-start gap-10 border-t border-hairline pt-10 lg:grid-cols-[5fr_6fr] lg:gap-16">

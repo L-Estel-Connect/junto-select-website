@@ -4,7 +4,7 @@ import { eyebrowClasses } from "@/lib/styles";
 const deliverables = [
   "Presencia de la marca en la comunicación del encuentro",
   "Comunicación a nuestra comunidad de +600 contactos directos",
-  "Hasta 3 Instagram Stories, visibles para nuestra comunidad de ≈3.000 seguidores",
+  "Hasta 3 Instagram Stories para una comunidad de ≈3.000 seguidores",
   "Mención como “Junto Select en colaboración con [Marca]”",
   "Presencia discreta y elegante de la marca durante el encuentro",
   "Posibilidad de integrar un producto, cata, regalo o activación, cuando el espacio anfitrión lo permita y apruebe",
@@ -24,10 +24,8 @@ export default function PartnershipOffer() {
           </p>
           <p className="mt-2 text-[15px] text-ink-soft">por evento</p>
           <p className="mt-6 max-w-[46ch] text-[14px] leading-relaxed text-ink-soft">
-            Esta cuota de colaboración se abona a Junto Select y es
-            independiente de la relación con el espacio anfitrión —
-            consumición, alquiler del espacio o acuerdos propios del venue
-            siguen su curso habitual.
+            La colaboración con Junto Select es independiente de cualquier
+            acuerdo o consumo con el espacio anfitrión.
           </p>
         </div>
 
