@@ -217,9 +217,6 @@ function ActiveMembership({
 }) {
   const plan = billing.planKey ? PLAN_DISPLAY[billing.planKey] : null;
   const renewalDate = formatDate(billing.currentPeriodEnd);
-  // Three explicit states — never a single generic "Activa" label that
-  // hides whether renewal is actually scheduled to happen.
-  const estado = billing.cancelAtPeriodEnd && renewalDate ? `Activa hasta ${renewalDate}` : "Activa";
 
   return (
     <>
@@ -237,11 +234,11 @@ function ActiveMembership({
         </div>
         <div className="flex items-center justify-between border-b border-hairline py-4">
           <span className="text-[15px] text-ink">Estado</span>
-          <span className="text-[13px] text-ink-soft">{estado}</span>
+          <span className="text-[13px] text-ink-soft">Activa</span>
         </div>
-        {renewalDate && !billing.cancelAtPeriodEnd && (
+        {renewalDate && (
           <div className="flex items-center justify-between border-b border-hairline py-4">
-            <span className="text-[15px] text-ink">Próxima renovación</span>
+            <span className="text-[15px] text-ink">{billing.cancelAtPeriodEnd ? "Finaliza el" : "Próxima renovación"}</span>
             <span className="text-[13px] text-ink-soft">{renewalDate}</span>
           </div>
         )}
@@ -249,10 +246,10 @@ function ActiveMembership({
 
       <EventBenefitSection uid={uid} />
 
-      {billing.cancelAtPeriodEnd && renewalDate ? (
+      {billing.cancelAtPeriodEnd ? (
         <p className="mt-4 text-[13px] leading-relaxed text-ink-soft">
-          Tu membresía seguirá activa hasta el {renewalDate}. Después, tu perfil volverá automáticamente
-          al modo pasivo.
+          Tu renovación automática está cancelada. Podrás seguir disfrutando de tu membresía hasta el final
+          del periodo ya pagado.
         </p>
       ) : (
         <p className="mt-4 text-[13px] leading-relaxed text-ink-soft">
@@ -285,8 +282,9 @@ function ActiveMembership({
         </p>
       )}
       <p className="mt-3 text-[12px] text-ink-soft">
-        Ambos botones abren el portal seguro de Stripe, donde puedes actualizar tu método de pago, ver
-        tus recibos o cancelar la renovación automática.
+        Ambos botones abren el portal seguro de Stripe en una pestaña nueva, donde puedes actualizar tu
+        método de pago, ver tus recibos o cancelar la renovación automática. Junto Select permanece abierto
+        y se actualizará solo en cuanto confirmes el cambio.
       </p>
     </>
   );
@@ -373,11 +371,25 @@ export default function PlanSection({ uid }: { uid: string }) {
   async function handleManage() {
     setManageError(null);
     setSubmitting(true);
+    // Opened synchronously, before the async fetch below, so it still
+    // counts as a direct response to the click (some browsers block
+    // `window.open` calls made after an `await`) — then pointed at the
+    // real portal URL once it's fetched, keeping Junto Select open in the
+    // original tab. `newTab` is null if the browser blocked the popup
+    // outright, in which case we fall back to a same-tab redirect so the
+    // action still works.
+    const newTab = window.open("", "_blank", "noopener,noreferrer");
     try {
       const url = await authedFetch("/api/billing/create-portal-session");
-      window.location.href = url;
+      if (newTab) {
+        newTab.location.href = url;
+      } else {
+        window.location.href = url;
+      }
     } catch {
+      newTab?.close();
       setManageError("No hemos podido abrir la gestión de tu membresía. Inténtalo de nuevo.");
+    } finally {
       setSubmitting(false);
     }
   }
