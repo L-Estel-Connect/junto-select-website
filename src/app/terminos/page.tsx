@@ -232,9 +232,9 @@ export default function TerminosPage() {
             </li>
             <li>
               Salvo que la normativa de consumo aplicable disponga otra cosa, cancelar la renovación{" "}
-              <strong>no genera un reembolso proporcional</strong> por el tiempo restante de un periodo
-              de facturación ya iniciado. Esto no constituye una renuncia a ningún derecho legal de
-              desistimiento — ver el apartado B.
+              <strong>no implica el reembolso del periodo ya pagado</strong>: la membresía permanece
+              activa hasta su fecha de finalización, sin perjuicio de los derechos legales de
+              desistimiento que resulten aplicables — ver el apartado B.
             </li>
           </ul>
 

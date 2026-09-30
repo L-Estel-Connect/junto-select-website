@@ -50,17 +50,10 @@ function formatEventDate(ymd: string | null): string | null {
 }
 
 const DISCLOSURES = [
-  "El pago se realiza por adelantado, por la duración completa del plan elegido (1, 3 o 6 meses).",
-  "Tu membresía se renueva automáticamente al finalizar ese periodo, por la misma duración y al mismo precio, hasta que la canceles.",
-  "Puedes cancelar en cualquier momento desde «Gestionar mi membresía». La cancelación se hace efectiva al final del periodo ya pagado — no se hacen reembolsos por el tiempo restante.",
-  "Una membresía activa te da derecho a recibir hasta 3 selecciones al mes. No se acumulan si no se usan, y ese límite no aumenta con planes de mayor duración.",
-  "Recibir selecciones no está garantizado incluso con la membresía activa: solo se te presentan personas que cumplen tus requisitos imprescindibles y superan nuestro umbral de calidad. Un mes sin ninguna coincidencia adecuada es un resultado válido.",
-  "Como miembro activo, recibes un 20 % de descuento en una entrada para cada evento Junto Select elegible que tenga lugar durante tu membresía. Cada evento tiene su propio código personal de un solo uso — no se acumulan ni se comparten entre eventos.",
-  "Junto Select Introduction está disponible únicamente para el mercado de Madrid en esta fase.",
-  "Tu perfil debe estar completo (Sobre ti, Fotos y Lo que buscas) para poder recibir selecciones — la membresía activa por sí sola no lo sustituye.",
-  "Los precios incluyen los impuestos aplicables según tu método de pago y ubicación, calculados por Stripe en el momento del cobro.",
-  "El pago se procesa de forma segura por Stripe. Junto Select no almacena los datos de tu tarjeta.",
-  "Al confirmar el pago aceptas nuestros Términos y condiciones y nuestra Política de privacidad.",
+  "Tu membresía se paga por adelantado por el periodo elegido y se renueva automáticamente por la misma duración hasta que la canceles.",
+  "Puedes cancelar la renovación en cualquier momento desde «Gestionar mi membresía». La cancelación se hará efectiva al finalizar el periodo ya pagado.",
+  "La membresía activa tu búsqueda y te permite recibir hasta 3 selecciones al mes, siempre que existan perfiles compatibles con tus criterios. Las selecciones no utilizadas no se acumulan.",
+  "Como miembro activo, también disfrutas de un 20 % de descuento en una entrada para cada evento Junto Select elegible celebrado durante tu membresía.",
 ];
 
 function chargeFrequencyLabel(durationMonths: number): string {
@@ -481,7 +474,7 @@ export default function PlanSection({ uid }: { uid: string }) {
               <a href="/privacidad" target="_blank" className="underline decoration-hairline underline-offset-4">
                 Política de privacidad
               </a>
-              , incluyendo la renovación automática descrita arriba.
+              , incluida la renovación automática.
             </span>
           </label>
 
@@ -493,10 +486,8 @@ export default function PlanSection({ uid }: { uid: string }) {
               className="mt-0.5 h-4 w-4 shrink-0"
             />
             <span>
-              Solicito expresamente que la prestación de mi membresía y búsqueda activa comience
-              inmediatamente, antes de que finalice el plazo legal de desistimiento de 14 días. Entiendo
-              que, si desisto después de que el servicio haya comenzado, podré tener que abonar un
-              importe proporcional al servicio ya prestado, conforme a los{" "}
+              Solicito que mi membresía y búsqueda activa comiencen inmediatamente. He leído y acepto
+              las condiciones aplicables al desistimiento recogidas en los{" "}
               <a href="/terminos" target="_blank" className="underline decoration-hairline underline-offset-4">
                 Términos y condiciones
               </a>
