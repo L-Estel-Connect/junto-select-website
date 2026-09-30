@@ -194,18 +194,20 @@ env:
   # these; the client can never supply a Price ID or amount directly. Not
   # secrets (a Price ID alone can't charge anything without the secret key
   # above), so plain `value`s, same treatment as ADMIN_ALLOWLIST_EMAILS.
-  # TEST MODE Price IDs, created in the Stripe Dashboard (test mode) —
-  # replace with LIVE Price IDs only after explicit sign-off to go live.
+  # LIVE MODE Price IDs (Test -> Live cutover) — 49 EUR/1mo, 129 EUR/3mo,
+  # 234 EUR/6mo. Paired with the LIVE STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET
+  # versions already set in Secret Manager and the LIVE webhook endpoint
+  # already registered in the Stripe Dashboard.
   - variable: STRIPE_PRICE_MONTHLY
-    value: "price_1UFH9qGlmEAMyuMwsK1ZAJXq"
+    value: "price_1ULPTyGlmEAMyuMwO4w81mFG"
     availability:
       - RUNTIME
   - variable: STRIPE_PRICE_THREE_MONTH
-    value: "price_1UFHCWGlmEAMyuMwupyRVcWp"
+    value: "price_1ULPUoGlmEAMyuMw1X7NfqH7"
     availability:
       - RUNTIME
   - variable: STRIPE_PRICE_SIX_MONTH
-    value: "price_1UFHD2GlmEAMyuMwRWxOlFjl"
+    value: "price_1ULPV3GlmEAMyuMwzUq7a1UR"
     availability:
       - RUNTIME
 
