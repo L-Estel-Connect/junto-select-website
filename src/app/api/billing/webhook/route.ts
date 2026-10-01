@@ -191,6 +191,14 @@ async function syncSubscription(subscription: Stripe.Subscription): Promise<void
   const priceId = item ? (typeof item.price === "string" ? item.price : item.price.id) : null;
   const status = mapStripeStatus(subscription.status);
   const now = new Date();
+  // Stripe has two independent ways to schedule a subscription's
+  // cancellation — the classic `cancel_at_period_end` flag, and a
+  // free-standing `cancel_at` timestamp (what this account's Customer
+  // Portal config actually uses, confirmed against a real cancellation:
+  // `cancel_at_period_end` stayed `false` while `cancel_at` was set to the
+  // current period's end). Both mean the same thing to a member — "this
+  // active subscription will not renew" — so either one marks it here.
+  const willNotRenew = subscription.cancel_at_period_end || subscription.cancel_at != null;
 
   const billingRef = adminDb.doc(`billing/${uid}`);
   const previousBillingSnap = await billingRef.get();
@@ -204,7 +212,7 @@ async function syncSubscription(subscription: Stripe.Subscription): Promise<void
       status,
       planKey: priceId ? planKeyForPriceId(priceId) : null,
       currentPeriodEnd: item ? new Date(item.current_period_end * 1000) : null,
-      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      cancelAtPeriodEnd: willNotRenew,
       canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null,
       updatedAt: now,
     } satisfies Partial<BillingDocument>,

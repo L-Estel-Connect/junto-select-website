@@ -375,15 +375,22 @@ export default function PlanSection({ uid }: { uid: string }) {
     // counts as a direct response to the click (some browsers block
     // `window.open` calls made after an `await`) — then pointed at the
     // real portal URL once it's fetched, keeping Junto Select open in the
-    // original tab. `newTab` is null if the browser blocked the popup
-    // outright, in which case we fall back to a same-tab redirect so the
-    // action still works.
-    const newTab = window.open("", "_blank", "noopener,noreferrer");
+    // original tab. Deliberately NOT passing "noopener"/"noreferrer" here:
+    // either one makes window.open() return null even when the tab opens
+    // successfully (there's no way to tell that apart from a real
+    // popup-block), which is what previously sent the browser into the
+    // "blocked" fallback below and navigated THIS tab to Stripe instead.
+    // `newTab.opener = null` right after achieves the same
+    // reverse-tabnabbing protection using the reference we already have.
+    const newTab = window.open("", "_blank");
     try {
       const url = await authedFetch("/api/billing/create-portal-session");
       if (newTab) {
+        newTab.opener = null;
         newTab.location.href = url;
       } else {
+        // A real popup block (newTab is only null here now) — same-tab
+        // redirect so the action still works.
         window.location.href = url;
       }
     } catch {
