@@ -58,7 +58,8 @@ export default function ReconnectActivationForm({
             Reconnect está disponible para este evento
           </h1>
           <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-            Puedes activar tu perfil para volver a ver a quien conociste, o decidir no participar.
+            Reconnect te permite volver a conectar de forma privada con personas que conociste en este
+            evento.
           </p>
         </div>
         <div className="flex flex-col items-center gap-3">

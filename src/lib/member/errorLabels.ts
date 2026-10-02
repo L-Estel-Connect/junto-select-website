@@ -6,9 +6,9 @@
  * src/lib/admin/labels.ts's manualSuggestionErrorLabel for the admin side.
  */
 const MEMBER_DECISION_ERROR_LABELS: Record<string, string> = {
-  not_found: "Esta propuesta ya no está disponible.",
-  not_your_proposal: "No tienes permiso para responder a esta propuesta.",
-  cannot_decide: "Ya habías respondido a esta propuesta con una decisión distinta.",
+  not_found: "Esta selección ya no está disponible.",
+  not_your_proposal: "No tienes permiso para responder a esta selección.",
+  cannot_decide: "Ya habías respondido a esta selección con una decisión distinta.",
   // Deliberately generic — never names which field or whose dealbreaker
   // changed; see stillReciprocallyCompatible in pairHistory.ts.
   no_longer_compatible: "Esta selección ya no está disponible porque la compatibilidad del perfil ha cambiado.",

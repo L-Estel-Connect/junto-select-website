@@ -283,7 +283,7 @@ export default function PrivacidadPage() {
         <section className="space-y-3">
           <H2>9. Eliminación de cuenta</H2>
           <p>
-            Puedes eliminar tu perfil en cualquier momento desde Ajustes → Zona sensible → Eliminar
+            Puedes eliminar tu perfil en cualquier momento desde Ajustes → Eliminar cuenta → Eliminar
             perfil. La eliminación es permanente e inmediata: tu perfil deja de ser candidato para
             futuras propuestas, tus fotografías se eliminan de nuestro almacenamiento, y tu acceso de
             inicio de sesión se revoca. Si tienes una membresía de pago activa, se cancela de inmediato

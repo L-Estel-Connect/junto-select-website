@@ -76,7 +76,7 @@ function RequestButton({
       onClick={onRequest}
       className="rounded-full border border-hairline px-4 py-2 text-[13px] text-ink transition-colors hover:border-rose disabled:cursor-not-allowed disabled:opacity-60"
     >
-      {candidate.activated ? "Solicitar conexión" : "Quiero volver a verle"}
+      {candidate.activated ? "Solicitar conexión" : "Quiero reconectar"}
     </button>
   );
 }

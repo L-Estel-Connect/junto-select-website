@@ -183,7 +183,7 @@ export default function PresentationSection({ uid }: { uid: string }) {
           {generating
             ? "Generando…"
             : hasDraft
-              ? "Generar de nuevo"
+              ? "Generar de nuevo con IA"
               : "Generar mi presentación"}
         </button>
       )}

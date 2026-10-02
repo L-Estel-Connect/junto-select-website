@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Wordmark from "@/components/Wordmark";
-import { signOutUser } from "@/lib/firebase/auth";
 import { memberFetchJson } from "@/lib/member/memberFetch";
 import { useMemberQuery } from "@/lib/member/useMemberQuery";
 import { useMemberUid } from "./MemberContext";
@@ -19,7 +18,7 @@ import type { MemberLifecycleSummary } from "@/lib/matching/memberLifecycleTypes
 const NAV_ITEMS = [
   { href: "/member", label: "Inicio" },
   { href: "/member/profile", label: "Mi perfil" },
-  { href: "/member/proposals", label: "Mis selecciones" },
+  { href: "/member/proposals", label: "Selecciones" },
   { href: "/member/connections", label: "Conexiones" },
   { href: "/member/plan", label: "Mi plan" },
   { href: "/member/settings", label: "Ajustes" },
@@ -29,11 +28,6 @@ const NAV_ITEMS = [
 function AttentionDot() {
   return <span aria-hidden className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-rose-dark align-middle" />;
 }
-
-const SECONDARY_ITEMS = [
-  { href: "/privacidad", label: "Privacidad" },
-  { href: "/terminos", label: "Términos de uso" },
-];
 
 function isActivePath(pathname: string, href: string): boolean {
   const base = href.split("#")[0];
@@ -100,28 +94,6 @@ export default function MemberNav() {
               {attentionFor(item.href) && <AttentionDot />}
             </Link>
           ))}
-          <button
-            type="button"
-            onClick={() => signOutUser()}
-            className="whitespace-nowrap text-[11px] uppercase tracking-[0.1em] text-ink-soft hover:text-ink"
-          >
-            Cerrar sesión
-          </button>
-          {/* Same legal links the mobile drawer shows below — kept small
-              and muted so they don't compete with the primary nav items,
-              but reachable in one click on desktop too, not just via
-              Ajustes. */}
-          <span className="flex items-center gap-3 border-l border-hairline pl-5">
-            {SECONDARY_ITEMS.map((item) => (
-              <Link
-                key={item.label}
-                href={item.href}
-                className="whitespace-nowrap text-[11px] text-ink-soft hover:text-ink"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </span>
         </nav>
 
         <button
@@ -171,29 +143,6 @@ export default function MemberNav() {
                 </Link>
               ))}
             </nav>
-
-            <div className="mt-6 flex flex-col gap-1">
-              {SECONDARY_ITEMS.map((item) => (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className="py-2 text-[13px] text-ink-soft"
-                >
-                  {item.label}
-                </Link>
-              ))}
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  signOutUser();
-                }}
-                className="py-2 text-left text-[13px] text-ink-soft"
-              >
-                Cerrar sesión
-              </button>
-            </div>
           </div>
         </div>
       )}

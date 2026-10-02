@@ -79,7 +79,7 @@ export default function ReconnectHome({ uid, eventId }: { uid: string; eventId: 
         title="No hemos encontrado tu entrada para este evento"
         body={
           user?.email
-            ? `No hay ninguna entrada importada para este evento asociada a ${user.email}. Si compraste tu entrada con otro email, inicia sesión con esa cuenta.`
+            ? `No encontramos ninguna entrada para este evento asociada a ${user.email}. Si compraste tu entrada con otro email, inicia sesión con esa cuenta.`
             : "Comprueba que has iniciado sesión con el mismo email con el que compraste tu entrada."
         }
       />

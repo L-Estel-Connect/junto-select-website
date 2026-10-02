@@ -122,9 +122,9 @@ export default function ProposalsSection({ uid }: { uid: string }) {
       ) : (
         <>
           <div className="mt-14 flex flex-col items-center text-center">
-            <p className="text-[16px] text-ink">Tu perfil está en modo pasivo</p>
+            <p className="text-[16px] text-ink">Junto Select no está buscando activamente por ti.</p>
             <p className="mt-2 max-w-[42ch] text-[15px] leading-relaxed text-ink-soft">
-              Puedes ser seleccionado por otros miembros y responder a sus invitaciones sin pagar.
+              Tu perfil puede seguir siendo seleccionado por otros miembros.
             </p>
           </div>
 

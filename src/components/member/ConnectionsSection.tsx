@@ -62,9 +62,9 @@ export default function ConnectionsSection({ uid }: { uid: string }) {
         </div>
       ) : (
         <div className="mt-14 flex min-h-[30svh] flex-col items-center justify-center text-center">
-          <p className="text-[16px] text-ink">Todavía no tienes ninguna introducción.</p>
+          <p className="text-[16px] text-ink">Todavía no tienes ninguna conexión.</p>
           <p className="mt-2 max-w-[38ch] text-[15px] leading-relaxed text-ink-soft">
-            Cuando tú y otra persona os interesa mutuamente, aparecerá aquí.
+            Cuando el interés sea mutuo, aparecerá aquí.
           </p>
         </div>
       )}

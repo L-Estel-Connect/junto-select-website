@@ -50,10 +50,8 @@ function formatEventDate(ymd: string | null): string | null {
 }
 
 const DISCLOSURES = [
-  "Tu membresía se paga por adelantado por el periodo elegido y se renueva automáticamente por la misma duración hasta que la canceles.",
-  "Puedes cancelar la renovación en cualquier momento desde «Gestionar mi membresía». La cancelación se hará efectiva al finalizar el periodo ya pagado.",
-  "La membresía activa tu búsqueda y te permite recibir hasta 3 selecciones al mes, siempre que existan perfiles compatibles con tus criterios. Las selecciones no utilizadas no se acumulan.",
-  "Como miembro activo, también disfrutas de un 20 % de descuento en una entrada para cada evento Junto Select elegible celebrado durante tu membresía.",
+  "Recibe hasta 3 selecciones cuidadosas al mes — las que no uses no se acumulan.",
+  "Como miembro, también tienes un 20 % de descuento en cada evento Junto Select elegible.",
 ];
 
 function chargeFrequencyLabel(durationMonths: number): string {
@@ -347,7 +345,7 @@ export default function PlanSection({ uid }: { uid: string }) {
       return;
     }
     if (!immediateServiceRequested) {
-      setCheckoutError("Debes confirmar el inicio inmediato del servicio para continuar.");
+      setCheckoutError("Debes confirmar que quieres empezar ya para continuar.");
       return;
     }
     setSubmitting(true);
@@ -421,7 +419,7 @@ export default function PlanSection({ uid }: { uid: string }) {
         <>
           <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
             Tu membresía está activa: Junto Select está buscando por ti y recibirás hasta 3 selecciones
-            al mes, siempre que tu perfil siga cumpliendo los requisitos de la bolsa de Madrid.
+            al mes, siempre que encontremos perfiles compatibles con tus criterios en Madrid.
           </p>
           {!marketEligible && (
             <div className="mt-4 rounded-xl border border-hairline bg-white p-4 text-[14px] text-ink-soft">
@@ -445,15 +443,15 @@ export default function PlanSection({ uid }: { uid: string }) {
       ) : (
         <>
           <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-            Formar parte de Junto Select es gratuito: tu perfil permanece en nuestra base privada y puede
-            ser considerado como candidatura para las selecciones de otros miembros. Para recibir tú
-            mismo/a hasta 3 selecciones al mes, hazte miembro.
+            Formar parte de Junto Select es gratuito: tu perfil permanece en nuestra base privada y
+            puede aparecer como una posible selección para otros miembros. Para recibir tú mismo/a
+            hasta 3 selecciones al mes, hazte miembro.
           </p>
 
           <div className="mt-10 border-t border-hairline">
             <div className="flex items-center justify-between border-b border-hairline py-4">
               <span className="text-[15px] text-ink">Estado</span>
-              <span className="text-[13px] text-ink-soft">Perfil pasivo</span>
+              <span className="text-[13px] text-ink-soft">No activa</span>
             </div>
           </div>
 

@@ -37,10 +37,10 @@ export default function IntroductionCard({ introduction }: { introduction: Membe
       {introduction.eventLabel ? (
         <p className="mt-1 text-[13px] text-ink-soft">
           Os conocisteis en Junto Select · {introduction.eventLabel}
-          {date ? ` — introducción del ${date}.` : "."}
+          {date ? ` — conexión desde el ${date}.` : "."}
         </p>
       ) : (
-        date && <p className="mt-1 text-[13px] text-ink-soft">Introducción del {date}.</p>
+        date && <p className="mt-1 text-[13px] text-ink-soft">Conexión desde el {date}.</p>
       )}
 
       <div className="mt-6">
@@ -50,7 +50,7 @@ export default function IntroductionCard({ introduction }: { introduction: Membe
       <div className="mt-6 border-t border-hairline pt-6">
         <p className="text-[15px] text-ink">
           Ya podéis poneros en contacto directamente. Junto Select no tiene chat interno, así que estos
-          son el modo de continuar — úsalos únicamente para esta introducción y con respeto a la
+          son el modo de continuar — úsalos únicamente para esta conexión y con respeto a la
           privacidad de {name}.
         </p>
         {introduction.contacts.length > 0 ? (

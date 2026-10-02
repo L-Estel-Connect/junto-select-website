@@ -18,7 +18,7 @@ export default function ConfirmEmailForLink({
   return (
     <div className="w-full space-y-3 text-left">
       <p className="text-center text-[15px] text-ink-soft">
-        Confirma tu email para completar el acceso.
+        Confirma tu email para continuar.
       </p>
       <input
         type="email"

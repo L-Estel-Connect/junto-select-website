@@ -11,8 +11,7 @@ export default function IneligibleAge() {
         adelante.
       </h1>
       <p className="mt-4 max-w-[42ch] text-[15px] leading-relaxed text-ink-soft">
-        Gracias por tu interés. En este momento no podemos continuar con la
-        creación de tu perfil.
+        Gracias por tu interés. En este momento no podemos crear tu perfil.
       </p>
       <Link href="/" className={`${primaryButtonClasses} mt-8`}>
         Volver a Junto Select

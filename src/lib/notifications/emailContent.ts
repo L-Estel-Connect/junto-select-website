@@ -77,7 +77,7 @@ export function buildEmailContent(
       return {
         subject: "El interés es mutuo — Junto Select",
         textContent: withFooter(
-          "Hola,\n\nEl interés es mutuo. Inicia sesión para ver vuestra introducción y los datos de contacto.",
+          "Hola,\n\nEl interés es mutuo. Inicia sesión para ver vuestra conexión y los datos de contacto.",
           appBaseUrl,
           "/member/connections",
         ),

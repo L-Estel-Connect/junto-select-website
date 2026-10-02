@@ -83,18 +83,9 @@ function DeleteProfileModal({
           Eliminar tu perfil
         </h2>
         <p className="mt-3 text-[14px] leading-relaxed text-ink-soft">
-          Esta acción es <strong className="text-ink">permanente</strong> y no se puede deshacer. Al
-          eliminar tu perfil:
+          Eliminaremos de forma permanente tu perfil, tus fotografías y tu acceso, y cancelaremos
+          cualquier membresía activa sin volver a cobrarte.
         </p>
-        <ul className="mt-3 space-y-1.5 text-[13px] leading-relaxed text-ink-soft">
-          <li>— Dejarás de aparecer como candidato/a en futuras selecciones.</li>
-          <li>— Tus fotografías se eliminarán de forma permanente.</li>
-          <li>
-            — Si tienes una membresía de pago activa, se cancelará de inmediato: no se te volverá a
-            cobrar.
-          </li>
-          <li>— Cerraremos tu sesión y no podrás volver a acceder con esta cuenta.</li>
-        </ul>
         <label className="mt-5 flex items-start gap-3 text-[13px] leading-relaxed text-ink">
           <input
             type="checkbox"
@@ -102,7 +93,7 @@ function DeleteProfileModal({
             onChange={(e) => setConfirmed(e.target.checked)}
             className="mt-0.5 h-4 w-4 shrink-0"
           />
-          <span>Entiendo que esta acción es permanente y no se puede deshacer.</span>
+          <span>Confirmo que quiero eliminar mi perfil de forma permanente.</span>
         </label>
         {error && (
           <p role="alert" className="mt-3 text-[13px] text-[#8a3b3b]">
@@ -160,6 +151,11 @@ export default function SettingsSection({ uid }: { uid: string }) {
             Preferencias de contacto
           </Link>
         </div>
+        <div className="border-b border-hairline py-4">
+          <Link href="/member/plan" className={`text-[14px] ${linkClasses}`}>
+            Gestionar mi membresía
+          </Link>
+        </div>
       </SettingsGroup>
 
       <SettingsGroup title="Privacidad">
@@ -196,7 +192,7 @@ export default function SettingsSection({ uid }: { uid: string }) {
         </div>
       </SettingsGroup>
 
-      <SettingsGroup title="Zona sensible">
+      <SettingsGroup title="Eliminar cuenta">
         <div className="border-b border-hairline py-4">
           <button
             type="button"

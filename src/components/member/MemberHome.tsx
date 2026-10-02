@@ -66,7 +66,7 @@ export default function MemberHome({ uid }: { uid: string }) {
   }
 
   const summary = summaryQuery.data?.summary ?? null;
-  const searchLabel = billingLoading || !billing ? "…" : isEntitledStatus(billing.status) ? "Activa" : "Pasiva";
+  const searchLabel = billingLoading || !billing ? "…" : isEntitledStatus(billing.status) ? "Activa" : "No activa";
 
   const pendingCount = summary
     ? summary.proposalsWaitingForDecision + summary.invitationsWaitingForDecision
@@ -101,7 +101,7 @@ export default function MemberHome({ uid }: { uid: string }) {
 
       {!hasPending && hasIntroductions && (
         <div className="mt-8 rounded-2xl border border-hairline bg-white p-6">
-          <p className="text-[15px] font-medium text-ink">Tienes una introducción mutua.</p>
+          <p className="text-[15px] font-medium text-ink">Tienes una conexión mutua.</p>
           <Link href="/member/connections" className={`mt-3 inline-block text-sm ${linkClasses}`}>
             Ver mi conexión
           </Link>

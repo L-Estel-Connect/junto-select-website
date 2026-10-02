@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/firebase/useAuth";
 import { IntroductionError, IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
@@ -8,6 +9,27 @@ import DebugOverlay from "@/components/introduction/DebugOverlay";
 import { logDebugEvent } from "@/lib/introduction/onboardingDebug";
 import { MemberUidProvider } from "./MemberContext";
 import MemberNav from "./MemberNav";
+
+/**
+ * Privacidad/Términos moved out of the primary header nav (which should
+ * only show product destinations) and down here, same footer-style
+ * treatment as the public site's own Footer.tsx — reachable on every
+ * /member/** page without competing with the main nav for attention.
+ */
+function MemberFooter() {
+  return (
+    <footer className="border-t border-hairline">
+      <div className="mx-auto flex max-w-[1100px] items-center gap-4 px-6 py-6 sm:px-10">
+        <Link href="/privacidad" className="text-[12px] text-ink-soft hover:text-ink">
+          Privacidad
+        </Link>
+        <Link href="/terminos" className="text-[12px] text-ink-soft hover:text-ink">
+          Términos de uso
+        </Link>
+      </div>
+    </footer>
+  );
+}
 
 // See RequireIntroductionAuth.tsx — same defensive timeout, applied to
 // the /member tree's own independent auth guard.
@@ -71,6 +93,7 @@ export default function MemberShell({ children }: { children: ReactNode }) {
       <div className="flex min-h-svh flex-col">
         <MemberNav />
         <div className="flex-1">{children}</div>
+        <MemberFooter />
       </div>
     </MemberUidProvider>
   );
