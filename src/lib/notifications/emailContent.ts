@@ -93,15 +93,15 @@ export function buildEmailContent(
       const firstName = typeof data.firstName === "string" && data.firstName.trim() ? data.firstName.trim() : null;
       const greeting = firstName ? `Hola ${firstName},` : "Hola,";
       return {
-        subject: "Tu perfil de Junto Select está listo",
+        subject: "Junto Select Matchmaking ha evolucionado",
         textContent: withFooter(
           `${greeting}\n\n` +
-            "Hace un tiempo nos compartiste tus datos para formar parte de Junto Select.\n\n" +
-            "Ahora hemos creado una plataforma privada para gestionar las presentaciones de una forma más sencilla y segura.\n\n" +
-            "Hemos precompletado tu perfil únicamente con la información que ya nos habías facilitado.\n\n" +
-            "Tu perfil todavía no está activo y no será presentado a otros miembros hasta que tú decidas revisarlo, completarlo y activarlo.\n\n" +
-            "Podrás revisar y modificar toda la información antes de activar tu perfil.\n\n" +
-            "Si no quieres continuar, no tienes que activar nada. También puedes solicitar la eliminación de tus datos respondiendo a este email.",
+            "Hace un tiempo compartiste tus datos con nosotros a través de un formulario para formar parte de Junto Select Matchmaking.\n\n" +
+            "Desde entonces, Junto Select Matchmaking ha evolucionado y hoy se convierte en Junto Select Introducciones, una plataforma privada de presentaciones pensada para conocer personas compatibles de una forma más cuidada y personal.\n\n" +
+            "Si te apetece seguir formando parte de Junto Select, puedes retomar tu información, completar tu perfil y decidir si quieres activarlo.\n\n" +
+            "No hemos activado ningún perfil en tu nombre y nada será visible hasta que tú decidas continuar.\n\n" +
+            "Si prefieres no seguir, no tienes que hacer nada.\n\n" +
+            "Completar mi perfil:",
           appBaseUrl,
           "/introduction/legacy",
         ),
