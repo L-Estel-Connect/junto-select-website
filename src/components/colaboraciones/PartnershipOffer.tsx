@@ -3,7 +3,7 @@ import { eyebrowClasses } from "@/lib/styles";
 
 const deliverables = [
   "Presencia de la marca en la comunicación del encuentro",
-  "Comunicación a nuestra comunidad de +600 contactos directos",
+  "Comunicación a nuestra comunidad de +700 contactos directos",
   "Hasta 3 Instagram Stories para una comunidad de ≈3.000 seguidores",
   "Mención como “Junto Select en colaboración con [Marca]”",
   "Presencia discreta y elegante de la marca durante el encuentro",

@@ -57,13 +57,13 @@ export default function InvitationSection() {
       <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[5fr_6fr] lg:gap-16">
         <div>
           <p className="font-serif text-[52px] font-normal leading-none text-ink sm:text-[64px]">
-            500+
+            700+
           </p>
           <p className="mt-3 text-lg text-ink">
             people have already requested an invitation.
           </p>
           <p className="mt-1.5 text-lg italic font-light text-ink-soft">
-            Más de 500 personas ya han solicitado una invitación.
+            Más de 700 personas ya han solicitado una invitación.
           </p>
 
           <div className="mt-6 max-w-[46ch] space-y-4 text-[15px] leading-relaxed text-ink-soft">

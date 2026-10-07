@@ -7,7 +7,7 @@ const otherMetrics = [
     description: "seguidores en Instagram.",
   },
   {
-    label: "+600",
+    label: "+700",
     description: "contactos directos en nuestra comunidad/email.",
   },
   {
