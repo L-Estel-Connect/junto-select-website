@@ -10,7 +10,7 @@ import { isEntitledStatus, type BillingDocument } from "@/lib/billing/types";
 import { isMarketAvailabilityEligible } from "@/lib/introduction/completion";
 import { memberFetchJson } from "@/lib/member/memberFetch";
 import { useMemberQuery } from "@/lib/member/useMemberQuery";
-import type { MemberEventBenefitView } from "@/lib/eventBenefits/types";
+import type { MemberEventBenefitState, MemberEventBenefitView } from "@/lib/eventBenefits/types";
 import { primaryButtonClasses } from "@/lib/styles";
 
 const MARKET_NOT_AVAILABLE_MESSAGE =
@@ -51,7 +51,7 @@ function formatEventDate(ymd: string | null): string | null {
 
 const DISCLOSURES = [
   "Recibe hasta 3 selecciones cuidadosas al mes — las que no uses no se acumulan.",
-  "Como miembro, también tienes un 20 % de descuento en cada evento Junto Select elegible.",
+  "Como miembro, también recibes un código personal del 20 % por ciclo mensual para un encuentro Junto Select elegible.",
 ];
 
 function chargeFrequencyLabel(durationMonths: number): string {
@@ -156,45 +156,128 @@ function EventBenefitCard({ benefit }: { benefit: MemberEventBenefitView }) {
   );
 }
 
+const CLAIM_ERRORS: Record<string, string> = {
+  cycle_already_claimed: "Ya has usado el código de este ciclo mensual.",
+  event_already_has_code: "Ya tienes un código para este encuentro.",
+  event_not_eligible: "Este encuentro ya no está disponible para el beneficio.",
+  no_active_cycle: "Tu membresía no tiene un ciclo activo en este momento.",
+};
+
 /**
- * "Beneficio de evento" — one card per eligible Junto Select event
- * covered by the member's current membership entitlement, read ONLY from
- * /api/member/event-benefit (Firestore/Junto stays the read path; the
- * browser never talks to Ticket Tailor or sees its API key). Each event
- * has its own independent, single-use code — no accumulation, no code
- * shared across events (see the architecture decision).
+ * "Beneficio de evento" — the member's one 20 % code per monthly cycle,
+ * read ONLY from /api/member/event-benefit (the browser never talks to
+ * Ticket Tailor or sees its API key). While this cycle's code is unused
+ * the member picks the eligible event it's for; the server enforces one
+ * per cycle. Codes already held (including any issued before the monthly
+ * model) are listed as before.
  */
 export function EventBenefitSection({ uid }: { uid: string }) {
   const benefitQuery = useMemberQuery(
-    () => memberFetchJson<{ benefits: MemberEventBenefitView[] }>("/api/member/event-benefit"),
+    () => memberFetchJson<MemberEventBenefitState>("/api/member/event-benefit"),
     [uid],
   );
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
 
   const loading = !benefitQuery.data && !benefitQuery.error;
   const benefits = benefitQuery.data?.benefits ?? [];
+  const cycle = benefitQuery.data?.cycle ?? null;
+  const claimable = benefitQuery.data?.claimableEvents ?? [];
+  const nextCycle = cycle ? formatEventDate(cycle.cycleEnd) : null;
+  // cycleEnd is exclusive; "hasta el …" names the cycle's last day.
+  const lastDay = cycle
+    ? formatEventDate(new Date(Date.parse(`${cycle.cycleEnd}T00:00:00Z`) - 86400000).toISOString().slice(0, 10))
+    : null;
+
+  async function handleClaim(ticketTailorEventId: string) {
+    setClaimingId(ticketTailorEventId);
+    setClaimError(null);
+    try {
+      await memberFetchJson("/api/member/event-benefit", {
+        method: "POST",
+        body: JSON.stringify({ ticketTailorEventId }),
+      });
+    } catch (err) {
+      const code = (err as Error & { code?: string }).code ?? (err instanceof Error ? err.message : "");
+      setClaimError(CLAIM_ERRORS[code] ?? "No hemos podido generar tu código. Inténtalo de nuevo.");
+    } finally {
+      setClaimingId(null);
+      benefitQuery.reload();
+    }
+  }
 
   return (
     <div className="mt-10 border-t border-hairline pt-8">
       <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">Beneficio de evento</p>
       <p className="mt-2 max-w-[46ch] text-[13px] leading-relaxed text-ink-soft">
-        Como miembro de Junto Select, recibes un 20 % de descuento en una entrada para cada evento Junto
-        Select elegible que tenga lugar durante tu membresía activa. Un código por evento — no se acumulan
-        ni se comparten entre eventos.
+        Como miembro Select, recibes un código personal del 20 % para utilizar una sola vez por ciclo
+        mensual en un encuentro Junto Select elegible. No es acumulable con otros descuentos.
       </p>
       {loading || benefitQuery.error ? (
         <p className="mt-4 text-[14px] text-ink-soft">
           {benefitQuery.error ? "No hemos podido cargar tu beneficio de evento." : "Cargando…"}
         </p>
-      ) : benefits.length === 0 ? (
-        <p className="mt-4 text-[14px] text-ink-soft">
-          Todavía no hay ningún evento con beneficio disponible para tu periodo de membresía actual.
-        </p>
       ) : (
-        <div className="mt-4 space-y-3">
-          {benefits.map((benefit) => (
-            <EventBenefitCard key={benefit.ticketTailorEventId} benefit={benefit} />
-          ))}
-        </div>
+        <>
+          {cycle && !cycle.claimed && (
+            <div className="mt-4 rounded-2xl border border-hairline bg-white p-5">
+              <p className="text-[15px] font-medium text-ink">Tu código de este ciclo está disponible</p>
+              {claimable.length === 0 ? (
+                <p className="mt-2 text-[13px] text-ink-soft">
+                  Todavía no hay ningún encuentro elegible dentro de tu periodo de membresía. Podrás pedir tu
+                  código cuando se publique uno{lastDay ? `, hasta el ${lastDay}` : ""}.
+                </p>
+              ) : (
+                <>
+                  <p className="mt-2 text-[13px] text-ink-soft">
+                    Elige el encuentro para el que quieres tu código{lastDay ? ` (disponible hasta el ${lastDay})` : ""}.
+                  </p>
+                  <ul className="mt-3 space-y-2">
+                    {claimable.map((event) => (
+                      <li key={event.ticketTailorEventId} className="flex items-center justify-between gap-3 border-t border-hairline pt-2">
+                        <span className="text-[13px] text-ink">
+                          {event.eventLabel}
+                          <span className="block text-ink-soft">{formatEventDate(event.eventDate)}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleClaim(event.ticketTailorEventId)}
+                          disabled={claimingId !== null}
+                          className="shrink-0 text-[12px] font-medium uppercase tracking-[0.1em] text-ink underline decoration-hairline underline-offset-4 disabled:opacity-50"
+                        >
+                          {claimingId === event.ticketTailorEventId ? "Generando…" : "Pedir mi código"}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {claimError && (
+                <p role="alert" className="mt-3 text-[13px] text-[#8a3b3b]">
+                  {claimError}
+                </p>
+              )}
+            </div>
+          )}
+          {cycle?.claimed && nextCycle && (
+            <p className="mt-4 text-[13px] text-ink-soft">
+              Ya has pedido el código de este ciclo. El siguiente estará disponible el {nextCycle}.
+            </p>
+          )}
+          {benefits.length > 0 ? (
+            <div className="mt-4 space-y-3">
+              {benefits.map((benefit) => (
+                <EventBenefitCard key={`${benefit.ticketTailorEventId}-${benefit.code ?? "pending"}`} benefit={benefit} />
+              ))}
+            </div>
+          ) : (
+            !cycle && (
+              <p className="mt-4 text-[14px] text-ink-soft">
+                Todavía no hay ningún código disponible para tu periodo de membresía actual.
+              </p>
+            )
+          )}
+        </>
       )}
     </div>
   );

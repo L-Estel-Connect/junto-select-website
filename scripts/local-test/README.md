@@ -15,10 +15,16 @@ NODE_PATH=$(npm root -g) node scripts/local-test/journeys.cjs            # journ
 node scripts/local-test/seed.mjs compare                                  # journey 5: existing profiles unchanged
 NODE_PATH=$(npm root -g) node scripts/local-test/journeys.cjs existing   # existing profiles paying
 NODE_PATH=$(npm root -g) node scripts/local-test/site-audit.cjs          # v5 public site: links, CTAs, fonts, free profile, colaboraciones
+node scripts/local-test/benefits-matching.cjs                             # 20 % monthly codes (1/3/6-month plans) and matching eligibility
+npx tsx --conditions=react-server scripts/local-test/benefit-cycles.test.mts   # cycle dates, no emulator needed
 ```
 
 - Open http://localhost:3000 to click through by hand. Magic-link emails are
   not sent: the emulator UI (http://127.0.0.1:4000/auth) shows the links.
+- Ticket Tailor is imitated by the same mock (`TICKET_TAILOR_LOCAL_MOCK_URL`,
+  loopback only). `touch .local-test/tt-fail` makes discount creation fail.
+  Renewals, cancellations and time passing are simulated with
+  `POST /test/subscriptions/:id/{renew,cancel,backdate?days=N}` on the mock.
 - The "payment" page is a local imitation at 127.0.0.1:12111 that sends a
   signed `checkout.session.completed` webhook to the app, as Stripe does.
 - Everything the app would have sent to Stripe or Brevo is in

@@ -5,13 +5,11 @@ import { runDueEventBenefitScan } from "@/lib/eventBenefits/lifecycle";
 export const runtime = "nodejs";
 
 /**
- * The scheduler-facing entry point for the monthly Ticket Tailor event
- * benefit — the event-benefit counterpart to
- * /api/admin/matching/run-due-cycle, same shared-secret auth (this is an
- * unattended automation endpoint, not a human clicking a button), and the
- * same "safe to call as often as you like" property: runDueEventBenefitScan
- * is idempotent per subscription-cycle and bounded per call (see its own
- * doc comment for the full idempotency/external-side-effect strategy).
+ * The scheduler-facing entry point for the 20 % member benefit — same
+ * shared-secret auth as /api/admin/matching/run-due-cycle. Under the
+ * monthly-cycle model it only retries codes whose Ticket Tailor discount
+ * isn't live yet (members request their one code per cycle themselves),
+ * so it is safe to call as often as you like.
  *
  * Not yet wired to a real Cloud Scheduler job — see the implementation
  * report's manual-configuration section.

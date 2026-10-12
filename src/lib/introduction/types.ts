@@ -414,6 +414,13 @@ export interface ProfileDocument {
      * of it.
      */
     nextMatchingDueAt: unknown | null;
+    /**
+     * Set by the due-matching scan when a paying member's period came due
+     * while they were not yet eligible for active search (e.g. paid before
+     * finishing their profile); cleared when they become eligible. Server
+     * written only. Absent on profiles that were never paused.
+     */
+    matchingPausedAt?: unknown | null;
     createdAt: unknown;
     updatedAt: unknown;
   };

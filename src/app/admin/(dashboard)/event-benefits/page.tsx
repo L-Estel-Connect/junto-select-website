@@ -106,7 +106,7 @@ export default function EventBenefitsPage() {
     // A document written before this toggle existed has no
     // memberBenefitEnabled field at all — treat that the same as `true`
     // for display, mirroring the read-time compatibility rule in
-    // reconcileEventBenefitsForEvent, so an old event doesn't appear to
+    // isBenefitEvent (lifecycle.ts), so an old event doesn't appear to
     // have silently lost its benefit the first time someone opens it to edit.
     setMemberBenefitEnabled(event.memberBenefitEnabled !== false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -123,7 +123,7 @@ export default function EventBenefitsPage() {
       });
       setSyncResults((prev) => ({
         ...prev,
-        [ticketTailorEventId]: `${result.granted} nuevo(s) beneficio(s) concedido(s) de ${result.checked} miembro(s) elegible(s)${result.errors > 0 ? `, ${result.errors} error(es)` : ""}.`,
+        [ticketTailorEventId]: `${result.granted} código(s) activado(s) de ${result.checked} pendiente(s)${result.errors > 0 ? `, ${result.errors} error(es)` : ""}.`,
       }));
       eventsQuery.reload();
     } catch (err) {
@@ -143,10 +143,10 @@ export default function EventBenefitsPage() {
       <h1 className="font-serif text-[26px] text-ink">Eventos — beneficio Junto Select</h1>
       <p className="mt-2 max-w-[60ch] text-[13px] leading-relaxed text-ink-soft">
         Registra aquí qué eventos/tipos de entrada de Ticket Tailor participan en el 20 % de descuento de
-        los miembros. Cada miembro con membresía activa que cubra la fecha del evento recibe
-        automáticamente un código propio para ese evento — no es necesario hacer nada más.
-        &ldquo;Sincronizar&rdquo; solo sirve para forzar esa concesión ahora mismo en vez de esperar a la
-        siguiente ejecución automática.
+        los miembros. Cada miembro Select puede pedir, desde su página de membresía, un código personal
+        del 20 % por ciclo mensual para uno de estos eventos (de un solo uso, válido hasta el día del
+        evento). &ldquo;Sincronizar&rdquo; solo reintenta los códigos ya pedidos cuyo descuento en Ticket
+        Tailor aún no está activo.
       </p>
 
       <section className="mt-8 rounded-xl border border-hairline bg-white p-4">

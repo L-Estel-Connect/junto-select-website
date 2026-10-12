@@ -6,6 +6,7 @@
 const fs = require("node:fs");
 const { chromium } = require("playwright");
 const { initializeApp } = require("firebase-admin/app");
+const { getAuth } = require("firebase-admin/auth");
 const { getFirestore } = require("firebase-admin/firestore");
 
 const project = process.env.GCLOUD_PROJECT || "";
@@ -191,9 +192,10 @@ async function statusOf(path) {
   await page.waitForURL("**/introduction/onboarding**", { timeout: 20000 });
   check("free: new account lands in the Introductions onboarding", true);
   await page.waitForTimeout(2000);
-  const freeUser = (await db.collection("profiles").where("meta.searchStatus", "==", "passive").get()).docs.find(
-    (d) => !["intro-finalized", "intro-draft", "intro-legacy"].includes(d.id) && !d.data().meta.onboardingFinalized && !d.data().visible.firstName,
-  );
+  // Found by this run's own email, so data left by other test scripts can't be picked up.
+  const freeUid = await getAuth().getUserByEmail(freeEmail).then((u) => u.uid).catch(() => null);
+  const freeSnap = freeUid ? await db.doc(`profiles/${freeUid}`).get() : null;
+  const freeUser = freeSnap?.exists ? freeSnap : null;
   check("free: private profile created without payment", !!freeUser);
   const billing = freeUser ? await db.doc(`billing/${freeUser.id}`).get() : null;
   check("free: no billing record, search stays passive", billing && !billing.exists && freeUser.data().meta.searchStatus === "passive");

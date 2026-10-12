@@ -55,6 +55,63 @@ export interface EventBenefitDocument {
   status: EventBenefitStatus;
   invalidatedAt: unknown | null; // Firestore Timestamp
   invalidatedReason: EventBenefitInvalidationReason;
+  /**
+   * Set only on codes issued by the monthly-cycle engine (see
+   * claimCycleEventBenefit in lifecycle.ts): the `eventBenefitCycles` doc
+   * this code consumed, and that cycle's Madrid dates. Missing on codes
+   * issued by the earlier one-code-per-event engine, which stay valid
+   * exactly as issued.
+   */
+  cycleKey?: string;
+  cycleStart?: string;
+  cycleEnd?: string;
+}
+
+/**
+ * `eventBenefitCycles/{uid}_{stripeSubscriptionId}_{cycleIndex}` — the
+ * lock that makes the 20 % benefit "one code per monthly cycle". Created
+ * in the same Firestore transaction as the code it pays for, so a cycle
+ * can be consumed at most once however many times (or how concurrently)
+ * the member clicks. Keyed on the subscription as well as the uid because
+ * the cycle index restarts at 0 on a new subscription. Server-only, like
+ * `eventBenefits`' writes.
+ */
+export interface EventBenefitCycleDocument {
+  uid: string;
+  stripeSubscriptionId: string;
+  cycleIndex: number;
+  /** Madrid calendar dates, YYYY-MM-DD; `cycleEnd` is exclusive (the next cycle's first day). */
+  cycleStart: string;
+  cycleEnd: string;
+  ticketTailorEventId: string;
+  eventBenefitId: string;
+  claimedAt: unknown; // Firestore Timestamp
+}
+
+/** The member's current monthly benefit cycle, as shown on their plan page. */
+export interface MemberBenefitCycleView {
+  cycleStart: string;
+  /** Exclusive: the day the next cycle (and code) becomes available. */
+  cycleEnd: string;
+  claimed: boolean;
+  /** The event this cycle's code was used for, once claimed. */
+  claimedEventId: string | null;
+}
+
+export interface ClaimableEventView {
+  ticketTailorEventId: string;
+  eventLabel: string;
+  eventDate: string;
+}
+
+/** Everything /api/member/event-benefit returns. */
+export interface MemberEventBenefitState {
+  /** Null when there is no paid monthly cycle running right now (not entitled, renewal pending, or cycle unknown). */
+  cycle: MemberBenefitCycleView | null;
+  /** Eligible upcoming events this cycle's code can still be requested for (empty once claimed). */
+  claimableEvents: ClaimableEventView[];
+  /** Every code the member holds, including any issued before the monthly-cycle change. */
+  benefits: MemberEventBenefitView[];
 }
 
 /**

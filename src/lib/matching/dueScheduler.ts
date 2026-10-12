@@ -2,8 +2,10 @@ import "server-only";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import type { ProfileDocument } from "@/lib/introduction/types";
+import { withProfileDefaults } from "@/lib/introduction/types";
 import { resolvePersonId } from "./identity";
 import { runMatchingCycle } from "./engine";
+import { isEligibleForActiveSearch } from "./activeSearch";
 import { matchingPeriodDate, matchingPeriodId } from "./config";
 import type { MemberRunDocument } from "./types";
 
@@ -26,6 +28,10 @@ export interface DueScanResult {
   membersAdvanced: number;
   /** Due, but not yet completed (transient failure or still mid-run) — retried automatically on the next scan. */
   membersRetryPending: number;
+  /** Paying, but not yet eligible (profile not finalized or not in the pool) — paused, retried on every scan. */
+  membersIneligible: number;
+  /** Were paused and are eligible again — restarted at their current period (no backlog replay). */
+  membersResumed: number;
   proposalsCreated: number;
   membersWithZeroProposals: number;
   errors: number;
@@ -72,60 +78,132 @@ export async function runDueMatchingScan(now: Date = new Date()): Promise<DueSca
     .limit(DUE_SCAN_BATCH_SIZE)
     .get();
 
-  const result: DueScanResult = {
-    membersDue: snap.size,
+  const result = emptyResult(snap.size);
+  for (const doc of snap.docs) {
+    await processDueProfile(doc, now, result);
+  }
+  return result;
+}
+
+/**
+ * Re-evaluates ONE member right away, e.g. the moment they finalize their
+ * Introductions profile after having paid first. Same rules and same
+ * idempotency as the scan above (it calls the exact same per-member step);
+ * a member who isn't paying, or whose period isn't due, is a no-op.
+ */
+export async function runDueMatchingForUid(uid: string, now: Date = new Date()): Promise<DueScanResult> {
+  const snap = await adminDb.doc(`profiles/${uid}`).get();
+  if (!snap.exists) return emptyResult(0);
+  const profile = snap.data() as ProfileDocument;
+  const dueAt = toDate(profile.meta?.nextMatchingDueAt);
+  if (profile.meta?.searchStatus !== "active_search" || !dueAt || dueAt > now) return emptyResult(0);
+
+  const result = emptyResult(1);
+  await processDueProfile(snap, now, result);
+  return result;
+}
+
+function emptyResult(membersDue: number): DueScanResult {
+  return {
+    membersDue,
     membersAdvanced: 0,
     membersRetryPending: 0,
+    membersIneligible: 0,
+    membersResumed: 0,
     proposalsCreated: 0,
     membersWithZeroProposals: 0,
     errors: 0,
   };
+}
 
-  for (const doc of snap.docs) {
-    const uid = doc.id;
-    const profile = doc.data() as ProfileDocument;
-    const personId = resolvePersonId(uid, profile);
-    const periodDate = toDate(profile.meta.nextMatchingDueAt);
-    const anchor = toDate(profile.meta.matchingAnchorAt);
-    // Shouldn't happen given the query (both fields are set together by
-    // the webhook), but never trust stored data blindly — skip rather
-    // than crash the whole scan over one malformed profile.
-    if (!periodDate || !anchor) continue;
+/**
+ * The latest period index whose date is on or before `now`, starting from
+ * `from`. Used only when a paused member becomes eligible again: their
+ * allowance restarts at the current period instead of replaying every
+ * month they spent ineligible.
+ */
+function currentPeriodIndex(anchor: Date, from: number, now: Date): number {
+  let n = from;
+  while (matchingPeriodDate(anchor, n + 1) <= now) n += 1;
+  return n;
+}
 
-    const cycleId = matchingPeriodId(personId, periodDate);
+async function processDueProfile(
+  doc: FirebaseFirestore.DocumentSnapshot,
+  now: Date,
+  result: DueScanResult,
+): Promise<void> {
+  const uid = doc.id;
+  const profile = withProfileDefaults(uid, doc.data() as Partial<ProfileDocument>);
+  const personId = resolvePersonId(uid, profile);
+  const anchor = toDate(profile.meta.matchingAnchorAt);
+  let periodsProcessed = profile.meta.matchingPeriodsProcessed ?? 0;
+  let periodDate = toDate(profile.meta.nextMatchingDueAt);
+  // Shouldn't happen given the query (both fields are set together by
+  // the webhook), but never trust stored data blindly — skip rather
+  // than crash the whole scan over one malformed profile.
+  if (!periodDate || !anchor) return;
 
-    try {
-      const cycle = await runMatchingCycle(cycleId, "member_period", {
-        allowlistPersonIds: [personId],
+  // Paying is not enough: the member must also have finalized their
+  // Introductions profile and be in the eligible pool. Before this check a
+  // pay-first member's period ran with nobody to process and froze forever.
+  // Now the period simply waits (nextMatchingDueAt untouched) and is marked
+  // paused, so finishing the profile later resumes matching.
+  if (!isEligibleForActiveSearch(profile)) {
+    result.membersIneligible += 1;
+    if (!profile.meta.matchingPausedAt) {
+      await doc.ref.update({
+        "meta.matchingPausedAt": FieldValue.serverTimestamp(),
+        "meta.updatedAt": FieldValue.serverTimestamp(),
       });
-      result.proposalsCreated += cycle.stats.proposalsCreated;
-
-      const runSnap = await adminDb.doc(`matchingCycles/${cycleId}/memberRuns/${personId}`).get();
-      const run = runSnap.exists ? (runSnap.data() as MemberRunDocument) : null;
-
-      if (run?.status === "completed") {
-        if (run.proposalCount === 0) result.membersWithZeroProposals += 1;
-
-        const periodsProcessed = (profile.meta.matchingPeriodsProcessed ?? 0) + 1;
-        const nextDue = matchingPeriodDate(anchor, periodsProcessed);
-        await doc.ref.update({
-          "meta.matchingPeriodsProcessed": periodsProcessed,
-          "meta.nextMatchingDueAt": nextDue,
-          "meta.updatedAt": FieldValue.serverTimestamp(),
-        });
-        result.membersAdvanced += 1;
-      } else {
-        // Not completed (still claimed, or failed) — leave
-        // nextMatchingDueAt untouched so the next scan retries this exact
-        // period; engine.ts's own claimMemberRun already reclaims a
-        // failed or stale-claimed run automatically.
-        result.membersRetryPending += 1;
-      }
-    } catch (error) {
-      console.error(`Due matching scan: period ${cycleId} (personId ${personId}) failed`, error);
-      result.errors += 1;
     }
+    return;
   }
 
-  return result;
+  if (profile.meta.matchingPausedAt) {
+    const current = currentPeriodIndex(anchor, periodsProcessed, now);
+    periodsProcessed = current;
+    periodDate = matchingPeriodDate(anchor, current);
+    await doc.ref.update({
+      "meta.matchingPeriodsProcessed": periodsProcessed,
+      "meta.nextMatchingDueAt": periodDate,
+      "meta.matchingPausedAt": null,
+      "meta.updatedAt": FieldValue.serverTimestamp(),
+    });
+    result.membersResumed += 1;
+    if (periodDate > now) return; // defensive: stored dates disagreed; wait for the period to arrive
+  }
+
+  const cycleId = matchingPeriodId(personId, periodDate);
+
+  try {
+    const cycle = await runMatchingCycle(cycleId, "member_period", {
+      allowlistPersonIds: [personId],
+    });
+    result.proposalsCreated += cycle.stats.proposalsCreated;
+
+    const runSnap = await adminDb.doc(`matchingCycles/${cycleId}/memberRuns/${personId}`).get();
+    const run = runSnap.exists ? (runSnap.data() as MemberRunDocument) : null;
+
+    if (run?.status === "completed") {
+      if (run.proposalCount === 0) result.membersWithZeroProposals += 1;
+
+      const nextProcessed = periodsProcessed + 1;
+      await doc.ref.update({
+        "meta.matchingPeriodsProcessed": nextProcessed,
+        "meta.nextMatchingDueAt": matchingPeriodDate(anchor, nextProcessed),
+        "meta.updatedAt": FieldValue.serverTimestamp(),
+      });
+      result.membersAdvanced += 1;
+    } else {
+      // Not completed (still claimed, or failed) — leave
+      // nextMatchingDueAt untouched so the next scan retries this exact
+      // period; engine.ts's own claimMemberRun already reclaims a
+      // failed or stale-claimed run automatically.
+      result.membersRetryPending += 1;
+    }
+  } catch (error) {
+    console.error(`Due matching scan: period ${cycleId} (personId ${personId}) failed`, error);
+    result.errors += 1;
+  }
 }

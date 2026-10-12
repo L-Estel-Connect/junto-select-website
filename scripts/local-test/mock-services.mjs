@@ -6,6 +6,13 @@
 //           /pay/:sessionId whose "Pagar" button sends a signed
 //           checkout.session.completed webhook to the app, like Stripe does.
 //   Brevo:  POST /v3/contacts and /v3/smtp/email (recorded, never sent).
+//   Ticket Tailor: POST/GET /v1/discounts, DELETE /v1/discounts/:id
+//           (kept in memory, used with TICKET_TAILOR_LOCAL_MOCK_URL).
+//   Test controls (not Stripe): POST /test/subscriptions/:id/renew moves
+//           current_period_end forward one plan period, /backdate?days=N
+//           moves the whole subscription N days into the past (time
+//           passing), /cancel ends it; each sends the matching webhook.
+//   Set MOCK_TT_FAIL=1 to make Ticket Tailor discount creation fail.
 //
 // Every request is appended to MOCK_LOG (default ./.local-test/mock-log.jsonl)
 // so tests can check what the app would have sent.
@@ -24,6 +31,9 @@ const stripe = new Stripe("sk_test_local_mock");
 const customers = new Map();
 const sessions = new Map();
 const subscriptions = new Map();
+const discounts = new Map();
+const planMonths = new Map();
+const PLAN_MONTHS = { monthly: 1, three_month: 3, six_month: 6 };
 let seq = 0;
 const id = (prefix) => `${prefix}_test_${Date.now().toString(36)}${(seq++).toString(36)}`;
 
@@ -93,6 +103,65 @@ const server = http.createServer(async (req, res) => {
       return json(res, 201, { messageId: `<local-${++seq}@mock>` });
     }
 
+    // ---- Ticket Tailor ----
+    if (p === "/v1/discounts" && req.method === "POST") {
+      const form = new URLSearchParams(body);
+      if (process.env.MOCK_TT_FAIL === "1" || fs.existsSync(path.resolve(".local-test/tt-fail"))) {
+        log({ service: "tickettailor", kind: "discount_create_failed", code: form.get("code") });
+        return json(res, 503, { error: "mock failure" });
+      }
+      const discount = {
+        id: id("dc"),
+        code: form.get("code"),
+        face_value_percentage: Number(form.get("price_percent")),
+        ticket_types: form.getAll("ticket_types[]"),
+        max_redemptions: Number(form.get("max_redemptions")),
+        expires: form.get("expires"),
+      };
+      discounts.set(discount.id, discount);
+      log({ service: "tickettailor", kind: "discount_create", data: discount });
+      return json(res, 200, discount);
+    }
+    if (p === "/v1/discounts" && req.method === "GET") {
+      const code = url.searchParams.get("code");
+      return json(res, 200, { data: [...discounts.values()].filter((d) => !code || d.code === code) });
+    }
+    const discMatch = p.match(/^\/v1\/discounts\/([^/]+)$/);
+    if (discMatch && req.method === "DELETE") {
+      discounts.delete(discMatch[1]);
+      log({ service: "tickettailor", kind: "discount_delete", id: discMatch[1] });
+      return json(res, 200, { deleted: true });
+    }
+
+    // ---- Test controls ----
+    const ctl = p.match(/^\/test\/subscriptions\/([^/]+)\/(renew|cancel|backdate)$/);
+    if (ctl && req.method === "POST") {
+      const sub = subscriptions.get(ctl[1]);
+      if (!sub) return json(res, 404, { error: "unknown subscription" });
+      const item = sub.items.data[0];
+      if (ctl[2] === "backdate") {
+        // Simulates time passing: the whole subscription moves N days into the past.
+        const shift = Number(url.searchParams.get("days") || 0) * 86400;
+        sub.start_date -= shift;
+        item.current_period_start -= shift;
+        item.current_period_end -= shift;
+      } else if (ctl[2] === "renew") {
+        const months = planMonths.get(sub.id) ?? 1;
+        item.current_period_start = item.current_period_end;
+        item.current_period_end += months * 30 * 86400;
+      } else {
+        sub.status = "canceled";
+        sub.canceled_at = Math.floor(Date.now() / 1000);
+      }
+      const status = await sendWebhook({
+        id: id("evt"),
+        object: "event",
+        type: ctl[2] === "renew" ? "customer.subscription.updated" : "customer.subscription.deleted",
+        data: { object: sub },
+      });
+      return json(res, 200, { webhookStatus: status, subscription: sub });
+    }
+
     // ---- Stripe API ----
     if (p === "/v1/customers" && req.method === "POST") {
       const form = parseForm(body);
@@ -139,7 +208,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(checkoutPage(session));
       }
       const now = Math.floor(Date.now() / 1000);
-      const months = { monthly: 1, three_month: 3, six_month: 6 }[session.metadata.planKey] ?? 1;
+      const months = PLAN_MONTHS[session.metadata.planKey] ?? 1;
       const sub = {
         id: id("sub"),
         object: "subscription",
@@ -156,6 +225,7 @@ const server = http.createServer(async (req, res) => {
         },
       };
       subscriptions.set(sub.id, sub);
+      planMonths.set(sub.id, months);
       session.subscription = sub.id;
       session.status = "complete";
       session.payment_status = "paid";

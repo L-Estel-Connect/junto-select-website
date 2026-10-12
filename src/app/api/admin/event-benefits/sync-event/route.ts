@@ -2,21 +2,17 @@ import { NextResponse } from "next/server";
 import { requireAdminOrRespond } from "@/lib/admin/apiGuard";
 import { describeError } from "@/lib/admin/describeError";
 import { adminDb } from "@/lib/firebase/admin";
-import { reconcileEventBenefitsForEvent } from "@/lib/eventBenefits/lifecycle";
+import { retryPendingEventBenefits } from "@/lib/eventBenefits/lifecycle";
 import { recordEventBenefitSyncResult } from "@/lib/eventBenefits/eligibleEvents";
-import type { EligibleTicketTailorEventDocument } from "@/lib/eventBenefits/types";
 
 export const runtime = "nodejs";
 
 /**
- * "Sincronizar" — an optional, immediate, per-event reconciliation, never
- * a required operational step (the scheduler already does this
- * automatically for every eligible upcoming event — see
- * runDueEventBenefitScan). Useful right after registering/editing an
- * event, when Lara wants currently-entitled members granted their benefit
- * without waiting for the next scheduled pass. Idempotent and safe to
- * click repeatedly: reconcileEventBenefitsForEvent only ever creates a
- * missing (member, event) pair, never re-touches an already-settled one.
+ * "Sincronizar" — retries, for this one event, any member code whose
+ * Ticket Tailor discount isn't live yet (the scheduled scan does the same
+ * for every event). Under the monthly-cycle model it never issues codes:
+ * members request their one code per cycle themselves. Idempotent and safe
+ * to click repeatedly.
  */
 export async function POST(request: Request) {
   const admin = await requireAdminOrRespond(request);
@@ -39,8 +35,7 @@ export async function POST(request: Request) {
     if (!eventSnap.exists) {
       return NextResponse.json({ ok: false, error: "eligible_event_not_found" }, { status: 404 });
     }
-    const event = eventSnap.data() as EligibleTicketTailorEventDocument;
-    const result = await reconcileEventBenefitsForEvent(event);
+    const result = await retryPendingEventBenefits(ticketTailorEventId);
     await recordEventBenefitSyncResult(ticketTailorEventId, result);
     return NextResponse.json({ ok: true, result });
   } catch (error) {

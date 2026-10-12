@@ -1016,6 +1016,28 @@ invoker service account) not done here. Also deploy the new composite
 index (`firebase deploy --only firestore:indexes`) and the updated
 `firestore.rules` before enabling the schedule.
 
+### Paid but not yet eligible (pay-first members)
+
+Paying turns on `searchStatus: active_search`, but a member only receives
+their own proposals once their Introductions profile is also finalized
+(with the participation consent) and in the eligible pool — one rule,
+`src/lib/matching/activeSearch.ts`, used by both the scheduler and the
+engine, and re-derived from the profile's content rather than trusting the
+client-writable `meta.profileStatus`.
+
+When a due period arrives for a paying member who isn't eligible, the scan
+leaves the period untouched and sets `meta.matchingPausedAt` (server-only,
+locked in `firestore.rules`). Before this, such a period ran with nobody to
+process, was marked completed, and the member was stuck forever. As soon as
+the member becomes eligible (finalizing calls
+`POST /api/member/matching/reevaluate` for their own uid; every scan also
+re-checks), matching restarts at the current period without replaying the
+months they spent ineligible. Losing entitlement (cancellation, expiry)
+also pauses; a new subscription restarts the clock. A cycle frozen by the
+old behaviour (completed, `member_period`, zero recipients) is reopened
+automatically the next time its member is eligible. Existing profiles and
+matching records are not migrated or rewritten.
+
 ### Matching period vs. billing renewal — never conflated
 
 Two independent systems, on purpose: (1) the matching period above,
@@ -1243,6 +1265,32 @@ billing, and was explicitly left unfixed here per direct instruction — it
 does not block a member from ever having completed onboarding earlier
 under the older schema, only affects that one recovery path going
 forward. **TODO, tracked, not fixed in this change.**
+
+## Member 20 % event benefit (one code per monthly cycle)
+
+Every Select member gets one personal, single-use 20 % code per monthly
+cycle, for one eligible Junto Select event they choose on "Mi plan".
+Cycles are calendar months from the subscription's start date
+(`billing.subscriptionStartedAt`, falling back to the profile's matching
+anchor for the same subscription), whatever the plan: 1, 3 or 6 cycles per
+payment. No cycle exists outside the paid period, so nothing is issued
+while a renewal is pending or after cancellation.
+
+- Claim: `POST /api/member/event-benefit {ticketTailorEventId}`. The cycle
+  lock (`eventBenefitCycles/{uid}_{subscriptionId}_{cycleIndex}`) and the
+  code (`eventBenefits/...`) are written in one transaction, so a cycle is
+  used once however many requests arrive; repeating the same request
+  returns the same code. The event must be upcoming, have the benefit
+  enabled, and fall within the paid period. One live code per member per
+  event.
+- Ticket Tailor discount: 20 %, max 1 redemption, the event's ticket types,
+  expiring at the end of the event day (Madrid). If Ticket Tailor fails the
+  code waits; `/api/admin/billing/run-due-event-benefits` (and the admin
+  "Sincronizar" button, per event) only retry these, they never issue codes.
+- Losing entitlement invalidates every code for an upcoming event.
+- Codes issued by the earlier one-per-event engine keep working unchanged.
+  `npx tsx scripts/audit-event-benefits.mts` is a read-only count of them
+  (and of anything else worth checking) before deciding what to do.
 
 ## Admin Dashboard (`/admin`)
 

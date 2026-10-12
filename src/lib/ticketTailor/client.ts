@@ -46,7 +46,23 @@ import "server-only";
  */
 export const TICKET_TAILOR_INTEGRATION_VERIFIED = true as const;
 
-const TICKET_TAILOR_API_BASE = "https://api.tickettailor.com";
+const TICKET_TAILOR_API_BASE = localMockBase() ?? "https://api.tickettailor.com";
+
+/**
+ * Local testing only: `TICKET_TAILOR_LOCAL_MOCK_URL` points the client at
+ * the local stand-in in scripts/local-test/mock-services.mjs. Accepted
+ * only for a loopback host, so it can never redirect the API key anywhere
+ * else; unset in apphosting.yaml, so production is unaffected.
+ */
+function localMockBase(): string | null {
+  const raw = process.env.TICKET_TAILOR_LOCAL_MOCK_URL;
+  if (!raw) return null;
+  const url = new URL(raw);
+  if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") {
+    throw new Error("TICKET_TAILOR_LOCAL_MOCK_URL must point at localhost");
+  }
+  return url.origin;
+}
 
 export interface CreateDiscountParams {
   code: string;

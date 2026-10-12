@@ -82,6 +82,7 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
           ...prev,
           meta: { ...prev.meta, onboardingFinalized: true, pendingLegacyActivation: false },
         }));
+        void memberFetchJson("/api/member/matching/reevaluate", { method: "POST" }).catch(() => {});
         return;
       }
       if (!consent) {
@@ -94,6 +95,10 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
       });
       await finalizeOnboarding(uid);
       mutate((prev) => ({ ...prev, meta: { ...prev.meta, onboardingFinalized: true } }));
+      // A member who paid before finishing their profile starts matching
+      // now rather than at the next scheduled scan. Best-effort: the scan
+      // re-evaluates them anyway, so a failure here changes nothing.
+      void memberFetchJson("/api/member/matching/reevaluate", { method: "POST" }).catch(() => {});
     } catch {
       setError("No hemos podido guardar tu perfil. Inténtalo de nuevo.");
     } finally {

@@ -49,7 +49,7 @@ service cloud.firestore {
     // to touch in this change. Flagged again in the final report as a
     // pre-existing gap, not introduced or worsened here.
     // `meta.matchingAnchorAt`/`matchingSubscriptionId`/
-    // `matchingPeriodsProcessed`/`nextMatchingDueAt` (added for the
+    // `matchingPeriodsProcessed`/`nextMatchingDueAt`/`matchingPausedAt` (added for the
     // per-member-anniversary matching model — see
     // src/lib/matching/dueScheduler.ts) carry the exact same risk as
     // `searchStatus` above and get the identical treatment: only the
@@ -89,7 +89,8 @@ service cloud.firestore {
         && request.resource.data.meta.get('matchingAnchorAt', null) == resource.data.meta.get('matchingAnchorAt', null)
         && request.resource.data.meta.get('matchingSubscriptionId', null) == resource.data.meta.get('matchingSubscriptionId', null)
         && request.resource.data.meta.get('matchingPeriodsProcessed', null) == resource.data.meta.get('matchingPeriodsProcessed', null)
-        && request.resource.data.meta.get('nextMatchingDueAt', null) == resource.data.meta.get('nextMatchingDueAt', null);
+        && request.resource.data.meta.get('nextMatchingDueAt', null) == resource.data.meta.get('nextMatchingDueAt', null)
+        && request.resource.data.meta.get('matchingPausedAt', null) == resource.data.meta.get('matchingPausedAt', null);
     }
 
     // Legacy-contact activation (see src/lib/legacyImport/) — UNLIKE
