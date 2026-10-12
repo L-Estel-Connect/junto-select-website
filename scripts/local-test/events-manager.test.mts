@@ -1,6 +1,7 @@
 // Pure tests for the Events Manager rules (no emulator needed):
 //   npx tsx --conditions=react-server scripts/local-test/events-manager.test.mts
 import { parseTicketTailorEventRef, validateEventInput, DEFAULT_EVENT_IMAGES } from "../../src/lib/events/editing";
+import { pickSeriesEvent } from "../../src/lib/events/ticketTailorImport";
 import { formatEventDate, toPublicEvent, upcomingPublicEvents } from "../../src/lib/events/publicView";
 import type { EligibleTicketTailorEventDocument } from "../../src/lib/eventBenefits/types";
 
@@ -71,6 +72,13 @@ check("public: 20 % tag follows the benefit switch",
   toPublicEvent(ev("b", { memberBenefitEnabled: true, ticketTailorTicketTypeIds: ["tt_1"] }))?.selectBenefit === true &&
   toPublicEvent(ev("c", { memberBenefitEnabled: false, ticketTailorTicketTypeIds: ["tt_1"] }))?.selectBenefit === false);
 check("public: date in Spanish", formatEventDate({ date: "2026-10-29", time: "20:00" }) === "jueves, 29 de octubre · 20:00", formatEventDate({ date: "2026-10-29", time: "20:00" }));
+
+// ---- Ticket Tailor series: the public link's number is a series ----
+const tNow = new Date("2026-10-12T10:00:00Z");
+const evAt = (id: string, iso: string) => ({ id, start: { unix: Date.parse(iso) / 1000 } });
+check("series: picks the next date", pickSeriesEvent([evAt("ev_b", "2026-11-26T19:00:00Z"), evAt("ev_a", "2026-10-29T19:00:00Z"), evAt("ev_old", "2026-09-01T19:00:00Z")], tNow)?.id === "ev_a");
+check("series: all past picks the latest", pickSeriesEvent([evAt("ev_1", "2026-08-01T19:00:00Z"), evAt("ev_2", "2026-09-01T19:00:00Z")], tNow)?.id === "ev_2");
+check("series: empty gives nothing", pickSeriesEvent([], tNow) === null);
 
 console.log(failed ? `\n${failed} FAILED` : "\nAll passed");
 process.exit(failed ? 1 : 0);

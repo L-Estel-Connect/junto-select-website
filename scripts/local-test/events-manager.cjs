@@ -129,7 +129,7 @@ async function main() {
   check("import: Ticket Tailor description kept apart from the site copy", !("description" in f) && /corazón de Madrid/.test(imp.data.import.ticketTailorDescription ?? ""));
   check("import: nothing saved", JSON.stringify((await eventDoc("2439069")) ?? null) === before2439069);
   const ttCalls = mockLog().slice(logBefore).filter((e) => e.service === "tickettailor");
-  check("import: only reads from Ticket Tailor", ttCalls.length > 0 && ttCalls.every((e) => e.kind === "event_get"), ttCalls.map((e) => e.kind).join(","));
+  check("import: only reads from Ticket Tailor", ttCalls.length > 0 && ttCalls.every((e) => e.kind === "event_get" || e.kind === "series_events_get"), ttCalls.map((e) => e.kind).join(","));
   const nf = await api(admin, "POST", "/api/admin/events/import", { ref: "9100099" });
   check("import: unknown event gives a plain message", nf.status === 404 && /no encuentra/.test(nf.data?.error), nf.data?.error);
   const bad = await api(admin, "POST", "/api/admin/events/import", { ref: "hola" });
