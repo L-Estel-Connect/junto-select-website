@@ -79,6 +79,9 @@ if (mode === "seed") {
       if (e.code !== "auth/uid-already-exists") throw e;
     });
     await db.doc(`profiles/${uid}`).set(profile);
+    // Reruns start clean: none of the seeded people has paid.
+    await db.doc(`billing/${uid}`).delete();
+    await db.doc(`membershipSignups/${uid}`).delete();
   }
   console.log(`Seeded ${PEOPLE.length} mock Introductions profiles (no billing, no payments).`);
 } else if (mode === "snapshot") {

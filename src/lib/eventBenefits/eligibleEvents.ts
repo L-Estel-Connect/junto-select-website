@@ -35,6 +35,8 @@ export async function registerEligibleEvent(params: {
   const existingData = existing.data() as EligibleTicketTailorEventDocument | undefined;
   await ref.set(
     {
+      // Keep the Events Manager's public fields (title aside) intact.
+      ...(existingData ?? {}),
       ticketTailorEventId: params.ticketTailorEventId,
       ticketTailorTicketTypeIds: params.ticketTailorTicketTypeIds,
       label: params.label,

@@ -1,6 +1,7 @@
 import "server-only";
 import type { CommunityPayload } from "./types";
 import { buildBrevoContactPayload } from "./brevoPayload";
+import { isStagingDeploy } from "@/lib/config/deployEnv";
 
 export class BrevoConfigError extends Error {}
 
@@ -34,6 +35,10 @@ function contactsUrl(): string {
  */
 export async function upsertBrevoContact(input: CommunityPayload) {
   const apiKey = process.env.BREVO_API_KEY;
+  if (isStagingDeploy()) {
+    // Staging never writes to Brevo (no mailing list, no contact).
+    throw new BrevoConfigError("Brevo is disabled in staging");
+  }
   if (!apiKey) {
     throw new BrevoConfigError("BREVO_API_KEY is not configured");
   }

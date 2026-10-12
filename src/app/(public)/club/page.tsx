@@ -8,7 +8,7 @@ import clubPhoto from "../../../../public/images/who-you-meet.png";
 export const metadata: Metadata = {
   title: "El Club · Comunidad privada de solteros",
   description:
-    "Así es Junto Select: un club social privado para solteros con trayectoria. Encuentros con plazas limitadas en lugares con encanto, una comunidad que crece y, para los miembros, introducciones privadas.",
+    "Así es Junto Select: un club social privado para solteros a partir de 40. Encuentros con plazas limitadas en lugares con encanto, una comunidad que crece y, para los miembros, introducciones privadas.",
   alternates: { canonical: "/club" },
 };
 
@@ -26,7 +26,7 @@ const LEVELS = [
   {
     n: "III",
     title: "Membresía Select",
-    text: "Para quienes quieren formar parte del club por completo: introducciones privadas, un privilegio mensual en los encuentros y un lugar propio en el club.",
+    text: "Para quienes quieren formar parte del club por completo: introducciones privadas, un 20 % en un encuentro al mes y su propia cuenta de miembro.",
   },
 ];
 

@@ -1,5 +1,6 @@
 import "server-only";
 import Stripe from "stripe";
+import { assertStripeKeyAllowed } from "@/lib/config/deployEnv";
 
 /**
  * A function, not an eagerly-evaluated constant — mirrors
@@ -18,6 +19,7 @@ export function getStripe(): Stripe {
   if (!key) {
     throw new Error("STRIPE_SECRET_KEY is not configured");
   }
+  assertStripeKeyAllowed(key);
   // No explicit apiVersion pin: let the SDK use the version it ships
   // bundled with (matches this package's own type definitions), rather
   // than risk pinning to a literal that drifts from what this SDK version

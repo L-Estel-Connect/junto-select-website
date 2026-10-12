@@ -1,4 +1,5 @@
 import "server-only";
+import { isStagingDeploy } from "@/lib/config/deployEnv";
 
 /**
  * Server-only Ticket Tailor client abstraction — analogous in spirit to
@@ -46,7 +47,23 @@ import "server-only";
  */
 export const TICKET_TAILOR_INTEGRATION_VERIFIED = true as const;
 
-const TICKET_TAILOR_API_BASE = "https://api.tickettailor.com";
+const TICKET_TAILOR_API_BASE = localMockBase() ?? "https://api.tickettailor.com";
+
+/**
+ * Local testing only: `TICKET_TAILOR_LOCAL_MOCK_URL` points the client at
+ * the local stand-in in scripts/local-test/mock-services.mjs. Accepted
+ * only for a loopback host, so it can never redirect the API key anywhere
+ * else; unset in apphosting.yaml, so production is unaffected.
+ */
+function localMockBase(): string | null {
+  const raw = process.env.TICKET_TAILOR_LOCAL_MOCK_URL;
+  if (!raw) return null;
+  const url = new URL(raw);
+  if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") {
+    throw new Error("TICKET_TAILOR_LOCAL_MOCK_URL must point at localhost");
+  }
+  return url.origin;
+}
 
 export interface CreateDiscountParams {
   code: string;
@@ -115,6 +132,16 @@ export interface TicketTailorClient {
    * a reason to skip the Firestore-side invalidation.
    */
   invalidateDiscount(discountId: string): Promise<void>;
+  /**
+   * READ-ONLY: `GET /v1/events/:event_id` (documented at
+   * developers.tickettailor.com/docs/api/get-event-by-id). Used only by the
+   * admin Events Manager's "Importar" to pre-fill a form the admin then
+   * reviews. Never creates or changes anything in Ticket Tailor. Returns
+   * the raw JSON object (or null on 404): the response schema has NOT been
+   * verified against a real response in this engagement, so every field is
+   * read defensively by eventImport.ts, never assumed.
+   */
+  getEvent(eventId: string): Promise<Record<string, unknown> | null>;
 }
 
 interface TicketTailorDiscountResponse {
@@ -203,6 +230,10 @@ class LiveTicketTailorClient implements TicketTailorClient {
   constructor(private readonly apiKey: string) {}
 
   private assertVerified(operation: string): void {
+    if (isStagingDeploy()) {
+      // Staging may read events (Events Manager import) but never create or delete discount codes.
+      throw new Error(`ticket_tailor_writes_disabled_in_staging: refusing "${operation}"`);
+    }
     if (!TICKET_TAILOR_INTEGRATION_VERIFIED) {
       throw new Error(
         `ticket_tailor_integration_not_verified: refusing to perform "${operation}" — real integration is not yet activated (see src/lib/ticketTailor/client.ts doc comment: the contract is verified, but activation is a separate, deliberate rollout step).`,
@@ -247,6 +278,16 @@ class LiveTicketTailorClient implements TicketTailorClient {
     const data = (await res.json()) as { data?: TicketTailorDiscountResponse[] };
     const match = data.data?.find((d) => d.code === code);
     return match ? parseDiscount(match) : null;
+  }
+
+  async getEvent(eventId: string): Promise<Record<string, unknown> | null> {
+    // Read-only, so no assertVerified gate: it cannot change anything.
+    const res = await fetch(`${TICKET_TAILOR_API_BASE}/v1/events/${encodeURIComponent(eventId)}`, {
+      headers: this.headers(),
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`ticket_tailor_get_event_failed_${res.status}`);
+    return (await res.json()) as Record<string, unknown>;
   }
 
   async invalidateDiscount(discountId: string): Promise<void> {

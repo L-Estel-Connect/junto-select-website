@@ -62,7 +62,7 @@ async function signInByLink(page, email) {
 // 5b. An existing Introductions profile takes the new paid path: only the
 // billing-driven fields may change; their answers, photos and status stay.
 async function existingProfilePays(browser) {
-  const FIELDS_ALLOWED = ["searchStatus", "matchingAnchorAt", "matchingSubscriptionId", "matchingPeriodsProcessed", "nextMatchingDueAt", "updatedAt"];
+  const FIELDS_ALLOWED = ["searchStatus", "matchingPausedAt", "matchingAnchorAt", "matchingSubscriptionId", "matchingPeriodsProcessed", "nextMatchingDueAt", "updatedAt"];
   for (const { uid, email, landing } of [
     { uid: "intro-draft", email: "prueba.borrador@example.test", landing: "/member/bienvenida" },
     { uid: "intro-finalized", email: "prueba.finalizado@example.test", landing: "/member" },

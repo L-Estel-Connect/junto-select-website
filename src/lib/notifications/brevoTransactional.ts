@@ -1,4 +1,5 @@
 import "server-only";
+import { isStagingDeploy } from "@/lib/config/deployEnv";
 
 // BREVO_API_BASE_URL is only set for local testing, where it points at the
 // local mock (scripts/local-test) so no real email can leave the machine.
@@ -74,6 +75,10 @@ export async function sendTransactionalEmail(
   input: SendTransactionalEmailInput,
 ): Promise<{ messageId: string | null }> {
   const apiKey = process.env.BREVO_API_KEY;
+  if (isStagingDeploy()) {
+    // Staging never sends email: the batch fails closed and stays queued.
+    throw new BrevoSenderNotConfiguredError("email sending is disabled in staging");
+  }
   if (!apiKey) {
     throw new BrevoSenderNotConfiguredError("BREVO_API_KEY is not configured");
   }

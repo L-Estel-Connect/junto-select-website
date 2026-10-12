@@ -73,6 +73,61 @@ export function isMemberEligibleForEvent(billing: BillingDocument, eventDateYMD:
   return eventDateYMD <= madridCalendarDate(currentPeriodEnd);
 }
 
+/**
+ * Adds whole calendar months to a YYYY-MM-DD date, keeping the anchor's
+ * day of month and clamping it to shorter months (Jan 31 + 1 = Feb 28/29,
+ * + 2 = Mar 31), so the cycles line up with Stripe's own renewal days.
+ */
+export function addMonthsYMD(anchorYMD: string, months: number): string {
+  const [year, month, day] = anchorYMD.split("-").map(Number);
+  const target0 = month - 1 + months;
+  const y = year + Math.floor(target0 / 12);
+  const m = ((target0 % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m, Math.min(day, lastDay))).toISOString().slice(0, 10);
+}
+
+export interface BenefitCycle {
+  /** 0 for the subscription's first month, then 1, 2, … — never resets on renewal, only on a new subscription. */
+  index: number;
+  /** Madrid calendar dates; `end` is exclusive. */
+  start: string;
+  end: string;
+}
+
+/**
+ * The monthly 20 % benefit cycle running today, or null when there isn't
+ * one. Cycles are calendar months counted from the subscription's own
+ * start date, whatever the plan length: a monthly plan has one per
+ * payment, a 3-month plan three, a 6-month plan six. Fails closed:
+ * not entitled, no known start date, or today already past the paid
+ * period (`currentPeriodEnd`, e.g. a renewal still being retried) all
+ * mean no cycle, so no new code. Renewals need no special handling: the
+ * cycles keep counting from the same start date.
+ */
+export function currentBenefitCycle(
+  billing: BillingDocument,
+  subscriptionStartedAt: Date | null,
+  now: Date,
+): BenefitCycle | null {
+  if (!isEntitledStatus(billing.status)) return null;
+  const periodEnd = toDate(billing.currentPeriodEnd);
+  if (!periodEnd || !subscriptionStartedAt) return null;
+
+  const today = madridCalendarDate(now);
+  const anchor = madridCalendarDate(subscriptionStartedAt);
+  if (today < anchor || today >= madridCalendarDate(periodEnd)) return null;
+
+  // Months between anchor and today, then corrected for the day of month.
+  const [ay, am] = anchor.split("-").map(Number);
+  const [ty, tm] = today.split("-").map(Number);
+  let index = (ty - ay) * 12 + (tm - am);
+  while (index > 0 && addMonthsYMD(anchor, index) > today) index -= 1;
+  while (addMonthsYMD(anchor, index + 1) <= today) index += 1;
+
+  return { index, start: addMonthsYMD(anchor, index), end: addMonthsYMD(anchor, index + 1) };
+}
+
 /** An event is still worth scanning for benefits only while it hasn't happened yet. */
 export function isEventUpcoming(eventDateYMD: string, now: Date): boolean {
   return eventDateYMD >= madridCalendarDate(now);

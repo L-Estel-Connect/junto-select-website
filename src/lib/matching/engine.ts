@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import type { ProfileDocument } from "@/lib/introduction/types";
 import { withProfileDefaults } from "@/lib/introduction/types";
 import { resolvePersonId } from "./identity";
+import { isEligibleForActiveSearch } from "./activeSearch";
 import { isProfileInEligiblePool } from "./eligibility";
 import { evaluateHardFilters } from "./hardFilters";
 import { scorePair, SCORING_VERSION } from "./scoring";
@@ -94,7 +95,9 @@ function selectRecipients(
   mode: CycleMode,
   config: CycleConfig,
 ): EligibleProfile[] {
-  let recipients = pool.filter((p) => p.profile.meta.searchStatus === "active_search");
+  // Same rule as the due scheduler (activeSearch.ts): paying AND finalized
+  // AND in the pool (the pool itself is already filtered on the last one).
+  let recipients = pool.filter((p) => isEligibleForActiveSearch(p.profile));
 
   if (
     (mode === "allowlist" || mode === "dry_run" || mode === "member_period") &&
@@ -342,7 +345,13 @@ export async function runMatchingCycle(
   let cycle: MatchingCycleDocument;
   if (existingSnap.exists) {
     cycle = existingSnap.data() as MatchingCycleDocument;
-    if (cycle.status === "completed") return cycle;
+    // A member's period cycle that "completed" with nobody to process was
+    // the pay-first freeze: the member wasn't eligible yet when it ran, so
+    // no memberRun was ever written and the period could never be served.
+    // Reopen exactly that shape; every other completed cycle stays a no-op.
+    const frozenMemberPeriod =
+      cycle.status === "completed" && cycle.mode === "member_period" && (cycle.stats?.recipientsConsidered ?? 0) === 0;
+    if (cycle.status === "completed" && !frozenMemberPeriod) return cycle;
     await cycleRef.update({ status: "running" });
   } else {
     const config: CycleConfig = { ...DEFAULT_CYCLE_CONFIG, ...overrides, scoringVersion: SCORING_VERSION };

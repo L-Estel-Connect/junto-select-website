@@ -3,6 +3,7 @@ import { getApps, getApp, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
+import { assertNotProductionFirebase } from "@/lib/config/deployEnv";
 
 /**
  * No explicit credentials: on Firebase App Hosting, the Admin SDK
@@ -14,6 +15,7 @@ import { getStorage } from "firebase-admin/storage";
  * during static prerendering, so a sandbox with no credentials at all
  * (e.g. this repo's own build step) never actually calls anything here.
  */
+assertNotProductionFirebase();
 const app = getApps().length ? getApp() : initializeApp();
 
 export const adminAuth = getAuth(app);

@@ -169,7 +169,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ uid: st
         </p>
       </section>
 
-      {/* Beneficio de evento (-20%) — uno por evento elegible, nunca un estado "usado" fabricado */}
+      {/* Beneficio de evento (-20%) — un código por ciclo mensual (más los emitidos antes, por evento); nunca un estado "usado" fabricado */}
       {member.eventBenefits.length > 0 && (
         <section className="mt-10">
           <SectionHeading>Beneficio de evento (-20%)</SectionHeading>

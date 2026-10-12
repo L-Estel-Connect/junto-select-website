@@ -1,11 +1,26 @@
 import type { CommunityCity } from "@/lib/types";
 
+/** Approved navigation (v5, Option 1). The logo links to Inicio; no Ciudades. */
 export const NAV = [
   { href: "/club", label: "El Club" },
-  { href: "/membresia", label: "Membresía Select" },
   { href: "/eventos", label: "Encuentros" },
-  { href: "/#ciudades", label: "Ciudades" },
+  { href: "/introducciones", label: "Introducciones" },
+  { href: "/membresia", label: "Membresía Select" },
 ] as const;
+
+/**
+ * The Select event benefit, worded once for every public page. Kept here so
+ * the homepage, Membresía, Introducciones and Encuentros never drift apart.
+ */
+export const EVENT_BENEFIT = {
+  short: "20 % en un encuentro al mes",
+  text: "Como miembro Select, recibes un código personal del 20 % para utilizar una sola vez por ciclo mensual en un encuentro Junto Select elegible.",
+  conditions: "Un código por ciclo mensual, válido para un encuentro elegible. De un solo uso y no acumulable con otros descuentos.",
+} as const;
+
+/** The contact address already published in the legal pages. */
+export const CONTACT_EMAIL = "juntoselect@gmail.com";
+export const INSTAGRAM_URL = "https://www.instagram.com/juntoselect/";
 
 /** Sign-in for existing accounts (introductions profiles and members). */
 export const SIGN_IN_HREF = "/introduction";

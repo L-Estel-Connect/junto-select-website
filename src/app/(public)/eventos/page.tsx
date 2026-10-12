@@ -6,12 +6,15 @@ import { getUpcomingEvents } from "@/lib/site/events";
 export const metadata: Metadata = {
   title: "Eventos para solteros en Madrid · Próximos encuentros",
   description:
-    "Próximos encuentros de Junto Select: eventos exclusivos para solteros en Madrid, con plazas limitadas y en lugares con encanto. Abiertos a todos; privilegio mensual para miembros Select.",
+    "Próximos encuentros de Junto Select: eventos exclusivos para solteros en Madrid, con plazas limitadas y en lugares con encanto. Abiertos a todos; los miembros Select reciben un código del 20 % para un encuentro al mes.",
   alternates: { canonical: "/eventos" },
 };
 
-export default function EventsPage() {
-  const events = getUpcomingEvents();
+// Published events change from the admin Events Manager: always read fresh.
+export const dynamic = "force-dynamic";
+
+export default async function EventsPage() {
+  const events = await getUpcomingEvents();
   return (
     <main>
       <SiteHeader variant="solid" />
@@ -23,7 +26,7 @@ export default function EventsPage() {
           </h1>
           <p className="txt">
             Eventos para solteros con plazas limitadas, en algunos de los lugares más especiales de Madrid.
-            Abiertos a todos; los miembros Select disfrutan de su privilegio mensual.
+            Abiertos a todos; los miembros Select reciben cada mes un código del 20 % para un encuentro elegible.
           </p>
         </div>
       </section>

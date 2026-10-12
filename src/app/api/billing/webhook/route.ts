@@ -214,6 +214,7 @@ async function syncSubscription(subscription: Stripe.Subscription): Promise<void
       currentPeriodEnd: item ? new Date(item.current_period_end * 1000) : null,
       cancelAtPeriodEnd: willNotRenew,
       canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null,
+      subscriptionStartedAt: typeof subscription.start_date === "number" ? new Date(subscription.start_date * 1000) : null,
       updatedAt: now,
     } satisfies Partial<BillingDocument>,
     { merge: true },
@@ -245,6 +246,13 @@ async function syncSubscription(subscription: Stripe.Subscription): Promise<void
     "meta.searchStatus": isEntitledStatus(status) ? "active_search" : "passive",
     "meta.updatedAt": now,
   };
+  // Losing entitlement pauses the member's matching clock, so that if the
+  // SAME subscription becomes entitled again (e.g. unpaid -> active) the
+  // due scan restarts them at their current period instead of replaying
+  // every month they weren't paying (see dueScheduler.ts processDueProfile).
+  if (wasEntitled && !isEntitledStatus(status)) {
+    update["meta.matchingPausedAt"] = now;
+  }
 
   // Per-member matching-cycle anchor: only (re)initialized the first time
   // THIS subscription id is seen — a renewal/status update on an ONGOING
@@ -274,6 +282,7 @@ async function syncSubscription(subscription: Stripe.Subscription): Promise<void
       update["meta.matchingSubscriptionId"] = subscription.id;
       update["meta.matchingPeriodsProcessed"] = 0;
       update["meta.nextMatchingDueAt"] = matchingPeriodDate(anchor, 0);
+      update["meta.matchingPausedAt"] = null;
     }
   } catch (error) {
     // Never let a failure to read the existing anchor block the billing
