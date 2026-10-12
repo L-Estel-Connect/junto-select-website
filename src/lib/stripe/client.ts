@@ -22,6 +22,27 @@ export function getStripe(): Stripe {
   // bundled with (matches this package's own type definitions), rather
   // than risk pinning to a literal that drifts from what this SDK version
   // actually supports.
-  cached = new Stripe(key);
+  cached = new Stripe(key, localMockConfig(key));
   return cached;
+}
+
+/**
+ * Local testing only: points the SDK at a local Stripe stand-in when
+ * `STRIPE_LOCAL_MOCK_URL` is set (e.g. http://127.0.0.1:12111). Refused
+ * unless the key is a test key, so a live key can never be routed
+ * anywhere but Stripe. Unset in apphosting.yaml, so production is
+ * unaffected.
+ */
+function localMockConfig(key: string): Stripe.StripeConfig | undefined {
+  const raw = process.env.STRIPE_LOCAL_MOCK_URL;
+  if (!raw) return undefined;
+  if (!key.startsWith("sk_test_")) {
+    throw new Error("STRIPE_LOCAL_MOCK_URL requires a Stripe test key");
+  }
+  const url = new URL(raw);
+  return {
+    host: url.hostname,
+    port: url.port || (url.protocol === "https:" ? "443" : "80"),
+    protocol: url.protocol === "https:" ? "https" : "http",
+  };
 }

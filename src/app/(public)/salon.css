@@ -1,0 +1,354 @@
+/*
+ * "Salón" visual identity for the public site only. Every rule is scoped
+ * under `.salon` (the (public) route group's wrapper) so the member area,
+ * onboarding and admin keep their existing look untouched.
+ */
+.salon {
+  --marfil: #f6f1ea;
+  --piedra: #e8dfd3;
+  --arena: #cdbfad;
+  --tinta: #1e1a18;
+  --tinta-suave: #625952;
+  --tinto: #4a2a2c;
+  --tinto-hondo: #311b1d;
+  --laton: #a8875a;
+  --laton-claro: #d7bf93;
+  --linea: #ddd3c6;
+  --serif: var(--font-instrument-serif), "Times New Roman", Georgia, serif;
+  --sans: var(--font-instrument-sans), -apple-system, "Segoe UI", Roboto, sans-serif;
+  --gutter: 64px;
+
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  background: var(--marfil);
+  color: var(--tinta);
+  font-family: var(--sans);
+}
+.salon ::selection { background: var(--laton-claro); color: var(--tinta); }
+.salon :focus-visible { outline: 2px solid var(--laton); outline-offset: 3px; }
+
+.salon .wrap { width: 100%; max-width: 1280px; margin: 0 auto; padding-inline: var(--gutter); }
+.salon .eyebrow { margin: 0; font-size: 11.5px; font-weight: 500; letter-spacing: .3em; text-transform: uppercase; }
+.salon h1, .salon h2, .salon h3 { margin: 0; font-family: var(--serif); font-weight: 400; text-wrap: balance; }
+.salon h2 { font-size: clamp(42px, 5.2vw, 76px); line-height: 1; letter-spacing: -.01em; }
+.salon h1 em, .salon h2 em, .salon h3 em { font-style: italic; }
+.salon p { margin: 0; }
+.salon .txt { max-width: 40ch; font-size: 18px; line-height: 1.65; color: var(--tinta-suave); }
+.salon .muted { color: var(--tinta-suave); }
+
+.salon .btn {
+  display: inline-flex; align-items: center; justify-content: center; text-align: center;
+  padding: 17px 32px; border: 1px solid transparent; cursor: pointer;
+  font-family: var(--sans); font-size: 12.5px; font-weight: 500; letter-spacing: .2em; text-transform: uppercase;
+  text-decoration: none; transition: background .25s, color .25s, border-color .25s;
+}
+.salon .btn:disabled { opacity: .6; cursor: progress; }
+.salon .btn-laton { background: var(--laton); color: var(--tinta); }
+.salon .btn-laton:hover { background: var(--laton-claro); }
+.salon .btn-tinta { background: var(--tinta); color: var(--marfil); }
+.salon .btn-tinta:hover { background: var(--tinto); }
+.salon .btn-line { background: transparent; border-color: var(--tinta); color: var(--tinta); }
+.salon .btn-line:hover { background: var(--tinta); color: var(--marfil); }
+.salon .link {
+  display: inline-block; padding-bottom: 4px; border-bottom: 1px solid currentColor;
+  color: inherit; text-decoration: none; font-size: 12.5px; font-weight: 500; letter-spacing: .2em; text-transform: uppercase;
+}
+.salon .link:hover { opacity: .75; }
+
+/* ---------- header ---------- */
+.salon .hdr { position: absolute; top: 0; left: 0; right: 0; z-index: 20; color: var(--marfil); }
+.salon .hdr.solid { position: relative; color: var(--tinta); border-bottom: 1px solid var(--linea); }
+.salon .hdr .wrap { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-block: 28px; }
+.salon .word { color: inherit; font-size: 15px; font-weight: 500; letter-spacing: .4em; text-transform: uppercase; text-decoration: none; white-space: nowrap; }
+.salon .word span { color: var(--laton-claro); }
+.salon .hdr.solid .word span { color: var(--laton); }
+.salon .nav { display: flex; gap: 36px; font-size: 13.5px; letter-spacing: .06em; }
+.salon .nav a { color: inherit; text-decoration: none; opacity: .92; }
+.salon .nav a:hover, .salon .nav a[aria-current="page"] { opacity: 1; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 6px; }
+.salon .hdr-actions { display: flex; align-items: center; gap: 24px; font-size: 13.5px; letter-spacing: .06em; }
+.salon .hdr-actions .acc { color: inherit; text-decoration: none; }
+.salon .hdr .btn { padding: 12px 20px; font-size: 11.5px; }
+.salon .burger { display: none; margin-right: -8px; padding: 8px; border: 0; background: none; color: inherit; cursor: pointer; }
+.salon .burger span { display: block; width: 22px; height: 1px; margin: 6px 0; background: currentColor; }
+.salon .menu { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; gap: 34px; overflow-y: auto; padding: 22px 24px 40px; background: var(--marfil); color: var(--tinta); }
+.salon .menu-top { display: flex; align-items: center; justify-content: space-between; }
+.salon .menu-top .word span { color: var(--laton); }
+.salon .menu-top button { border: 0; background: none; color: inherit; cursor: pointer; font: inherit; font-size: 12.5px; letter-spacing: .16em; text-transform: uppercase; }
+.salon .menu nav { display: grid; gap: 4px; }
+.salon .menu nav a { color: inherit; font-family: var(--serif); font-size: 44px; line-height: 1.15; text-decoration: none; }
+.salon .menu .sec { display: grid; gap: 12px; font-size: 15px; color: var(--tinta-suave); }
+.salon .menu .sec a { color: inherit; text-decoration: none; }
+
+/* ---------- photographic hero (home + membership) ---------- */
+.salon .hero { position: relative; display: flex; align-items: flex-end; min-height: 860px; color: var(--marfil); background: var(--tinto-hondo); }
+.salon .hero .ph { position: absolute; inset: 0; overflow: hidden; }
+.salon .hero .ph img { object-fit: cover; }
+.salon .hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(20,14,12,.55) 0%, rgba(20,14,12,0) 26%, rgba(20,14,12,.15) 55%, rgba(28,15,16,.88) 100%); }
+.salon .hero .wrap { position: relative; z-index: 2; display: grid; gap: 30px; padding-bottom: 84px; }
+.salon .hero .eyebrow { color: var(--laton-claro); }
+.salon .hero h1 { max-width: 15ch; font-size: clamp(52px, 7.2vw, 112px); line-height: .95; letter-spacing: -.02em; }
+.salon .hero.m h1 { max-width: 11ch; font-size: clamp(58px, 8.6vw, 132px); line-height: .92; }
+.salon .hero h1 em { color: var(--laton-claro); }
+.salon .hero-row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 24px 56px; }
+.salon .hero-row > p { max-width: 46ch; font-size: 18px; line-height: 1.6; color: #efe6db; }
+.salon .hero-cta { display: grid; justify-items: start; gap: 12px; }
+.salon .hero-cta small { font-size: 13px; letter-spacing: .04em; color: #d3c6b7; }
+.salon .hero-links { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 28px; }
+.salon .hero-links .link { color: var(--marfil); }
+
+/* ---------- home: club ---------- */
+.salon .club { padding-block: 150px; }
+.salon .club .wrap { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 96px; align-items: center; }
+.salon .photo { position: relative; overflow: hidden; background: var(--tinto-hondo); }
+.salon .photo img { object-fit: cover; }
+.salon .club .photo { aspect-ratio: 4/5; }
+.salon .club-txt { display: grid; gap: 30px; }
+.salon .club .eyebrow, .salon .tinto-eyebrow { color: var(--tinto); }
+.salon .figs { display: flex; flex-wrap: wrap; gap: 24px 44px; padding-top: 30px; border-top: 1px solid var(--linea); }
+.salon .figs div { display: grid; gap: 6px; max-width: 16ch; }
+.salon .figs b { font-family: var(--serif); font-size: 44px; font-weight: 400; line-height: 1; }
+.salon .figs span { font-size: 13px; line-height: 1.45; color: var(--tinta-suave); }
+
+/* ---------- events ---------- */
+.salon .events { padding-bottom: 150px; }
+.salon .sec-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 52px; }
+.salon .sec-head .eyebrow { margin-bottom: 14px; }
+.salon .sec-head .lede { margin-top: 14px; font-size: 16px; color: var(--tinta-suave); }
+.salon .ev-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 40px; }
+.salon .ev { display: grid; gap: 22px; min-width: 0; }
+.salon .ev .photo { aspect-ratio: 3/2; }
+.salon .ev-date { font-size: 12.5px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: var(--tinto); }
+.salon .ev h3 { margin-top: 8px; font-size: 38px; line-height: 1.05; }
+.salon .ev-desc { margin-top: 10px; font-size: 16px; line-height: 1.6; color: var(--tinta-suave); }
+.salon .ev-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; padding-top: 18px; border-top: 1px solid var(--linea); font-size: 15px; color: var(--tinta-suave); }
+.salon .ev-foot a { color: var(--tinta); }
+.salon .badge { position: absolute; top: 16px; left: 16px; z-index: 1; padding: 5px 9px; background: var(--marfil); color: var(--tinto); font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; }
+.salon .empty { display: grid; gap: 22px; justify-items: start; padding: 56px; border: 1px solid var(--linea); }
+.salon .empty h3 { font-size: 34px; }
+
+/* ---------- home: select band ---------- */
+.salon .select { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); min-height: 760px; background: var(--tinto-hondo); color: var(--marfil); }
+.salon .select .photo { min-height: 480px; }
+.salon .select .in { display: grid; align-content: center; gap: 30px; padding: 110px 88px; }
+.salon .select .eyebrow, .salon .select .meta { color: var(--laton-claro); }
+.salon .select .txt { color: #dccdbd; }
+.salon .select .meta { font-size: 13px; letter-spacing: .2em; text-transform: uppercase; }
+.salon .sel-list { display: grid; margin: 0; padding: 0; list-style: none; border-top: 1px solid rgba(215,191,147,.25); }
+.salon .sel-list li { display: flex; align-items: baseline; gap: 16px; padding: 14px 0; border-bottom: 1px solid rgba(215,191,147,.25); font-family: var(--serif); font-size: 24px; }
+.salon .sel-list li span { font-family: var(--sans); font-size: 11px; letter-spacing: .2em; color: var(--laton-claro); }
+
+/* ---------- cities + community ---------- */
+.salon .cities { padding-block: 150px 140px; text-align: center; }
+.salon .cities .eyebrow { color: var(--tinto); }
+.salon .cities h2 { max-width: 14ch; margin: 20px auto 0; }
+.salon .clist { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); margin: 72px 0 0; padding: 0; list-style: none; border-block: 1px solid var(--linea); }
+.salon .clist li + li { border-left: 1px solid var(--linea); }
+.salon .clist a { display: grid; justify-items: center; gap: 10px; height: 100%; padding: 40px 12px; color: inherit; text-decoration: none; transition: background .25s; }
+.salon .clist a:hover { background: var(--piedra); }
+.salon .clist h3 { font-size: clamp(30px, 3.2vw, 48px); line-height: 1; }
+.salon .clist span { font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: var(--tinta-suave); }
+.salon .clist .on span { color: var(--tinto); }
+.salon .clist .on span::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: #5f8f69; vertical-align: 1px; }
+.salon .join { display: grid; justify-items: center; gap: 22px; margin-top: 72px; }
+.salon .join h3 { font-size: clamp(32px, 3.4vw, 46px); line-height: 1.05; }
+.salon .join .txt { max-width: 42ch; text-align: center; }
+.salon .join small { font-size: 13px; color: var(--tinta-suave); }
+
+/* ---------- footer ---------- */
+.salon .ftr { padding-block: 84px 36px; background: var(--tinto-hondo); color: #d9ccbd; }
+.salon .ftr-top { display: grid; grid-template-columns: minmax(0,1.4fr) repeat(3, minmax(0,1fr)); gap: 40px; }
+.salon .ftr .word { color: var(--marfil); }
+.salon .ftr .tag { max-width: 22ch; margin-top: 22px; font-family: var(--serif); font-size: 28px; line-height: 1.2; color: var(--marfil); }
+.salon .ftr h4 { margin: 0 0 16px; font-size: 11px; font-weight: 500; letter-spacing: .22em; text-transform: uppercase; color: var(--laton-claro); }
+.salon .ftr ul { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; font-size: 14.5px; }
+.salon .ftr a { color: inherit; text-decoration: none; }
+.salon .ftr a:hover { color: var(--marfil); }
+.salon .ftr-bot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 28px; margin-top: 64px; padding-top: 24px; border-top: 1px solid rgba(215,191,147,.22); font-size: 12.5px; color: #a8998a; }
+.salon .ftr-bot nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+
+/* ---------- inner page intro ---------- */
+.salon .page-intro { padding-block: 120px 80px; }
+.salon .page-intro .eyebrow { color: var(--tinto); }
+.salon .page-intro h1 { max-width: 16ch; margin-top: 22px; font-size: clamp(50px, 6.4vw, 96px); line-height: .98; letter-spacing: -.015em; }
+.salon .page-intro .txt { max-width: 52ch; margin-top: 28px; }
+
+/* ---------- membership page ---------- */
+.salon .m-intro { padding-block: 140px 120px; text-align: center; }
+.salon .m-intro h2 { margin: 22px auto 0; }
+.salon .m-intro .statement { max-width: 32ch; margin: 34px auto 0; font-family: var(--serif); font-size: clamp(24px, 2.6vw, 36px); line-height: 1.35; }
+.salon .m-intro .eyebrow { color: var(--tinto); }
+.salon .privs { padding-block: 120px; background: var(--piedra); }
+.salon .privs h2 { margin-bottom: 64px; text-align: center; }
+.salon .priv-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 28px; }
+.salon .priv { display: grid; align-content: start; gap: 18px; min-width: 0; padding: 44px 36px 48px; background: var(--marfil); }
+.salon .priv .n { font-family: var(--serif); font-size: 22px; font-style: italic; color: var(--laton); }
+.salon .priv h3 { font-size: 34px; line-height: 1.05; }
+.salon .priv p { font-size: 16px; line-height: 1.6; color: var(--tinta-suave); }
+.salon .intro-sec { padding-block: 130px; background: var(--tinto-hondo); color: var(--marfil); }
+.salon .intro-sec .eyebrow { color: var(--laton-claro); }
+.salon .intro-sec h2 { max-width: 16ch; margin-top: 20px; }
+.salon .steps { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); margin: 72px 0 0; padding: 0; list-style: none; border-top: 1px solid rgba(215,191,147,.28); }
+.salon .steps li { display: grid; align-content: start; gap: 14px; padding: 36px 28px 8px 0; }
+.salon .steps li + li { padding-left: 28px; border-left: 1px solid rgba(215,191,147,.28); }
+.salon .steps b { font-family: var(--serif); font-size: 46px; font-weight: 400; line-height: 1; color: var(--laton-claro); }
+.salon .steps h3 { font-size: 26px; }
+.salon .steps p { font-size: 15.5px; line-height: 1.6; color: #d8c9b8; }
+.salon .intro-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 40px; margin-top: 56px; font-size: 14px; color: #cbbba9; }
+.salon .ev-priv { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); min-height: 620px; }
+.salon .ev-priv .photo { min-height: 420px; }
+.salon .ev-priv .in { display: grid; align-content: center; gap: 28px; padding: 100px 88px; }
+.salon .ev-priv .eyebrow { color: var(--tinto); }
+.salon .ev-priv h2 { font-size: clamp(34px, 3.8vw, 52px); }
+.salon .big20 { font-family: var(--serif); font-size: 120px; line-height: .9; color: var(--tinto); }
+.salon .plans { padding-block: 130px; text-align: center; scroll-margin-top: 24px; }
+.salon .plans .eyebrow { color: var(--tinto); }
+.salon .plans h2 { margin-top: 20px; }
+.salon .plans .lede { margin: 22px auto 0; font-size: 17px; color: var(--tinta-suave); }
+.salon .plan-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); align-items: stretch; gap: 24px; margin-top: 64px; text-align: left; }
+.salon .plan { position: relative; display: grid; align-content: start; gap: 16px; padding: 40px 34px; border: 1px solid var(--linea); background: var(--marfil); }
+.salon .plan.hl { border-color: var(--tinta); background: var(--tinta); color: var(--marfil); }
+.salon .plan .tag { position: absolute; top: -12px; left: 34px; padding: 5px 10px; background: var(--laton); color: var(--tinta); font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; }
+.salon .plan .lbl { font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: var(--tinta-suave); }
+.salon .plan .price { font-family: var(--serif); font-size: 68px; line-height: 1; }
+.salon .plan .eq { min-height: 1.4em; font-size: 14px; color: var(--tinto); }
+.salon .plan .bill { min-height: 66px; font-size: 14px; line-height: 1.55; color: var(--tinta-suave); }
+.salon .plan.hl .lbl, .salon .plan.hl .eq, .salon .plan.hl .bill { color: #cfc2b2; }
+.salon .plan .btn { margin-top: 8px; }
+.salon .plan.hl .btn { background: var(--laton); color: var(--tinta); }
+.salon .plan:not(.hl) .btn { border-color: var(--tinta); background: transparent; color: var(--tinta); }
+.salon .plans .city { max-width: 60ch; margin: 40px auto 0; font-size: 14.5px; color: var(--tinta-suave); }
+.salon .future { padding-bottom: 120px; }
+.salon .future .box { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.2fr); align-items: center; gap: 48px; padding: 64px; border: 1px dashed var(--arena); }
+.salon .future .eyebrow { color: var(--tinta-suave); }
+.salon .future h2 { margin-top: 16px; font-size: clamp(36px, 4vw, 56px); }
+.salon .future p { font-size: 17px; line-height: 1.65; color: var(--tinta-suave); }
+.salon .future .not { display: inline-block; margin-top: 18px; padding: 6px 10px; border: 1px solid var(--tinto); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--tinto); }
+.salon .m-cta { padding-block: 130px; background: var(--tinto-hondo); color: var(--marfil); text-align: center; }
+.salon .m-cta h2 { max-width: 14ch; margin: 0 auto; }
+.salon .m-cta .acts { display: grid; justify-items: center; gap: 22px; margin-top: 40px; }
+.salon .m-cta .link { color: #d9ccbd; font-size: 15px; letter-spacing: .02em; text-transform: none; }
+.salon .faq { padding-block: 120px; }
+.salon .faq .wrap { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.6fr); gap: 64px; }
+.salon .faq details { padding: 22px 0; border-top: 1px solid var(--linea); }
+.salon .faq details:last-child { border-bottom: 1px solid var(--linea); }
+.salon .faq summary { display: flex; justify-content: space-between; gap: 16px; cursor: pointer; list-style: none; font-family: var(--serif); font-size: 24px; }
+.salon .faq summary::-webkit-details-marker { display: none; }
+.salon .faq summary::after { content: "+"; font-family: var(--sans); color: var(--laton); }
+.salon .faq details[open] summary::after { content: "–"; }
+.salon .faq details p { max-width: 58ch; margin-top: 12px; font-size: 16px; line-height: 1.65; color: var(--tinta-suave); }
+
+/* ---------- forms ---------- */
+.salon .form-page { padding-block: 64px 140px; }
+.salon .form-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.15fr); gap: 96px; align-items: start; }
+.salon .form-aside { position: sticky; top: 40px; display: grid; gap: 26px; }
+.salon .form-aside h1 { font-size: clamp(46px, 5.4vw, 80px); line-height: 1; letter-spacing: -.015em; }
+.salon .form-aside .eyebrow { color: var(--tinto); }
+.salon .note { padding: 18px 20px; border-left: 2px solid var(--laton); background: var(--piedra); font-size: 15px; line-height: 1.6; color: var(--tinta); }
+.salon .fform { display: grid; gap: 30px; }
+.salon .field { display: grid; gap: 10px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.salon .field > label, .salon .field > legend { padding: 0; font-size: 12px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: var(--tinta); }
+.salon .field .hint { font-size: 13.5px; color: var(--tinta-suave); }
+.salon .input, .salon .select-input {
+  width: 100%; padding: 14px 0; border: 0; border-bottom: 1px solid var(--arena); border-radius: 0;
+  background: transparent; color: var(--tinta); font: inherit; font-size: 18px;
+}
+.salon .input:focus, .salon .select-input:focus { outline: none; border-bottom-color: var(--tinta); }
+.salon .chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.salon .chip { position: relative; }
+.salon .chip input { position: absolute; opacity: 0; pointer-events: none; }
+.salon .chip span { display: inline-block; padding: 11px 18px; border: 1px solid var(--arena); font-size: 15px; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
+.salon .chip input:checked + span { border-color: var(--tinta); background: var(--tinta); color: var(--marfil); }
+.salon .chip input:focus-visible + span { outline: 2px solid var(--laton); outline-offset: 2px; }
+.salon .check { display: flex; align-items: flex-start; gap: 12px; font-size: 14.5px; line-height: 1.55; color: var(--tinta-suave); }
+.salon .check input { width: 18px; height: 18px; margin-top: 2px; flex: none; accent-color: var(--tinta); }
+.salon .check a { color: var(--tinta); }
+.salon .err { font-size: 13.5px; color: #9b2c2c; }
+.salon .form-error { padding: 14px 18px; border: 1px solid #c9a3a3; background: #f7ecec; color: #7a2222; font-size: 15px; }
+.salon .done { display: grid; gap: 22px; padding: 56px 48px; background: var(--tinto-hondo); color: var(--marfil); }
+.salon .done .eyebrow { color: var(--laton-claro); }
+.salon .done h2 { font-size: clamp(38px, 4vw, 54px); }
+.salon .done p { max-width: 46ch; font-size: 17px; line-height: 1.65; color: #dccdbd; }
+.salon .done .link { justify-self: start; color: var(--marfil); }
+
+/* ---------- membership checkout steps ---------- */
+.salon .stepper { display: flex; flex-wrap: wrap; gap: 8px 26px; margin: 0 0 40px; padding: 0; list-style: none; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--tinta-suave); }
+.salon .stepper li[aria-current="step"] { color: var(--tinta); font-weight: 500; }
+.salon .stepper li.done-step { color: var(--tinto); }
+.salon .summary-card { display: grid; gap: 10px; padding: 28px 30px; border: 1px solid var(--linea); background: var(--piedra); }
+.salon .summary-card .price { font-family: var(--serif); font-size: 44px; line-height: 1; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .salon .hero .ph img { animation: salon-settle 2.4s cubic-bezier(.2,.6,.2,1) both; }
+  @keyframes salon-settle { from { transform: scale(1.05); } to { transform: scale(1); } }
+}
+
+@media (max-width: 1080px) {
+  .salon { --gutter: 36px; }
+  .salon .nav { display: none; }
+  .salon .burger { display: block; }
+  .salon .club .wrap, .salon .form-grid { grid-template-columns: minmax(0,1fr); gap: 56px; }
+  .salon .form-aside { position: static; }
+  .salon .select, .salon .ev-priv { grid-template-columns: minmax(0,1fr); }
+  .salon .clist { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .salon .clist li { border-left: 0 !important; border-top: 1px solid var(--linea); }
+  .salon .clist li:nth-child(-n+2) { border-top: 0; }
+  .salon .clist li:nth-child(even) { border-left: 1px solid var(--linea) !important; }
+  .salon .clist li:last-child { grid-column: 1 / -1; border-left: 0 !important; }
+  .salon .ftr-top { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .salon .priv-grid, .salon .plan-grid { grid-template-columns: minmax(0,1fr); }
+  .salon .plan-grid { max-width: 520px; margin-inline: auto; }
+  .salon .steps { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .salon .steps li:nth-child(3) { padding-left: 0; border-left: 0; }
+  .salon .future .box, .salon .faq .wrap { grid-template-columns: minmax(0,1fr); gap: 28px; }
+}
+@media (max-width: 640px) {
+  .salon { --gutter: 22px; }
+  .salon .hdr .wrap { padding-block: 18px; }
+  .salon .hdr-actions .acc { display: none; }
+  .salon .hdr .btn { padding: 10px 12px; font-size: 10px; letter-spacing: .12em; white-space: nowrap; }
+  .salon .word { font-size: 12.5px; letter-spacing: .3em; }
+  .salon .hero { min-height: 740px; }
+  .salon .hero::after { background: linear-gradient(180deg, rgba(20,14,12,.5) 0%, rgba(20,14,12,.05) 24%, rgba(28,15,16,.5) 55%, rgba(28,15,16,.94) 100%); }
+  .salon .hero .wrap { gap: 22px; padding-bottom: 44px; }
+  .salon .hero h1 { font-size: 46px; line-height: 1; }
+  .salon .hero.m h1 { font-size: 58px; }
+  .salon .hero-row > p { font-size: 16.5px; }
+  .salon .hero-cta { width: 100%; justify-items: stretch; }
+  .salon .hero-links { flex-direction: column; align-items: stretch; }
+  .salon .hero-links .link { align-self: center; }
+  .salon h2 { font-size: 44px; }
+  .salon .txt { font-size: 16.5px; }
+  .salon .club { padding-block: 84px; }
+  .salon .events { padding-bottom: 90px; }
+  .salon .ev-grid { grid-template-columns: minmax(0,1fr); gap: 48px; }
+  .salon .ev h3 { font-size: 32px; }
+  .salon .empty { padding: 32px 24px; }
+  .salon .select .in { padding: 70px 22px 80px; }
+  .salon .select .photo { min-height: 420px; }
+  .salon .sel-list li { font-size: 21px; }
+  .salon .cities { padding-block: 90px; }
+  .salon .clist { margin-top: 48px; }
+  .salon .clist a { padding: 28px 8px; }
+  .salon .join { margin-top: 48px; }
+  .salon .join .btn { width: 100%; }
+  .salon .ftr { padding-block: 60px 30px; }
+  .salon .ftr-top > div:first-child { grid-column: 1 / -1; }
+  .salon .page-intro { padding-block: 72px 48px; }
+  .salon .m-intro { padding-block: 84px 72px; }
+  .salon .privs, .salon .intro-sec, .salon .plans, .salon .m-cta, .salon .faq { padding-block: 84px; }
+  .salon .privs h2 { margin-bottom: 36px; }
+  .salon .priv { padding: 32px 24px 36px; }
+  .salon .steps { grid-template-columns: minmax(0,1fr); margin-top: 44px; }
+  .salon .steps li, .salon .steps li + li { padding: 26px 0 18px; border-left: 0; border-bottom: 1px solid rgba(215,191,147,.28); }
+  .salon .ev-priv .in { padding: 64px 22px 72px; }
+  .salon .big20 { font-size: 92px; }
+  .salon .future { padding-bottom: 84px; }
+  .salon .future .box { padding: 36px 24px; }
+  .salon .plan .bill { min-height: 0; }
+  .salon .faq summary { font-size: 21px; }
+  .salon .form-page { padding-block: 40px 90px; }
+  .salon .done { padding: 40px 24px; }
+  .salon .fform .btn { width: 100%; }
+}

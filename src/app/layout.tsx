@@ -21,9 +21,9 @@ const fraunces = Fraunces({
 // to the juntoselect.com custom domain means changing APP_BASE_URL only;
 // this file (and robots.ts/sitemap.ts) never needs editing for that move.
 const siteUrl = getAppBaseUrl();
-const title = "Junto Select — Encuentros privados para solteros en Madrid";
+const title = "Junto Select · Club social privado para solteros en Madrid";
 const description =
-  "Junto Select organiza encuentros privados y cuidadosamente seleccionados para solteros y solteras 35+ en Madrid. Sin apps, sin eventos masivos: una lista de invitados seleccionada y espacios con encanto.";
+  "Un club privado para solteros que buscan algo extraordinario. Encuentros exclusivos en Madrid, experiencias elegidas con cuidado e introducciones privadas. Pronto en Valencia, Barcelona y Málaga.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -33,13 +33,13 @@ export const metadata: Metadata = {
   },
   description,
   keywords: [
-    "citas Madrid",
-    "encuentros para solteros Madrid",
+    "club de solteros Madrid",
+    "club social para solteros",
+    "club privado para solteros",
     "eventos para solteros Madrid",
-    "singles events Madrid",
-    "dating events Madrid",
-    "curated dating Madrid",
-    "solteros 35+ Madrid",
+    "eventos exclusivos para solteros",
+    "introducciones privadas",
+    "matchmaking privado Madrid",
   ],
   authors: [{ name: "Junto Select" }],
   alternates: {

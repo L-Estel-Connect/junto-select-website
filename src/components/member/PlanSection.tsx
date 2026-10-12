@@ -164,7 +164,7 @@ function EventBenefitCard({ benefit }: { benefit: MemberEventBenefitView }) {
  * has its own independent, single-use code — no accumulation, no code
  * shared across events (see the architecture decision).
  */
-function EventBenefitSection({ uid }: { uid: string }) {
+export function EventBenefitSection({ uid }: { uid: string }) {
   const benefitQuery = useMemberQuery(
     () => memberFetchJson<{ benefits: MemberEventBenefitView[] }>("/api/member/event-benefit"),
     [uid],

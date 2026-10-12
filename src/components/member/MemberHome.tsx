@@ -51,8 +51,14 @@ export default function MemberHome({ uid }: { uid: string }) {
   useEffect(() => {
     if (!profile) return;
     const redirect = requireFinalized(profile);
-    if (redirect) router.replace(redirect);
-  }, [profile, router]);
+    if (!redirect) return;
+    // A paying Select member who hasn't finished the introductions profile
+    // (membership-first path) lands on the welcome page, which shows their
+    // membership and event privilege alongside the "complete your profile"
+    // step. Everyone else keeps going straight to onboarding, as before.
+    if (billingLoading) return;
+    router.replace(billing && isEntitledStatus(billing.status) ? "/member/bienvenida" : redirect);
+  }, [profile, router, billing, billingLoading]);
 
   if (!profile) {
     if (profileError) {

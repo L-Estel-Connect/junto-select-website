@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireFirebaseUser } from "@/lib/firebase/serverAuth";
-import { getStripe } from "@/lib/stripe/client";
-import { getStripePriceId } from "@/lib/stripe/plans";
-import { getAppBaseUrl } from "@/lib/config/appBaseUrl";
 import { isPlanKey, type PlanKey } from "@/lib/billing/plans";
-import type { BillingDocument } from "@/lib/billing/types";
+import { createMembershipCheckout } from "@/lib/billing/checkout";
 import { withProfileDefaults, type ProfileDocument } from "@/lib/introduction/types";
 import { isMarketAvailabilityEligible } from "@/lib/introduction/completion";
-import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/legal/versions";
 
 export const runtime = "nodejs";
 
@@ -71,92 +67,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "market_not_available" }, { status: 400 });
   }
 
-  let priceId: string;
-  try {
-    priceId = getStripePriceId(planKey);
-  } catch {
-    return NextResponse.json({ ok: false, error: "billing_not_configured" }, { status: 503 });
-  }
-
-  const billingRef = adminDb.doc(`billing/${uid}`);
-  const billingSnap = await billingRef.get();
-  const billing = billingSnap.exists ? (billingSnap.data() as BillingDocument) : null;
-
-  // Someone with a currently-valid subscription should manage it via the
-  // Customer Portal (plan changes, cancellation), never by starting a
-  // second, competing subscription from this endpoint.
-  if (billing && (billing.status === "active" || billing.status === "trialing" || billing.status === "past_due")) {
-    return NextResponse.json({ ok: false, error: "already_active" }, { status: 409 });
-  }
-
-  let stripe;
-  try {
-    stripe = getStripe();
-  } catch {
-    return NextResponse.json({ ok: false, error: "billing_not_configured" }, { status: 503 });
-  }
-
-  let appBaseUrl: string;
-  try {
-    appBaseUrl = getAppBaseUrl();
-  } catch (error) {
-    console.error("create-checkout-session: APP_BASE_URL misconfigured", error);
-    return NextResponse.json({ ok: false, error: "app_url_not_configured" }, { status: 503 });
-  }
-
-  // Reuse the existing Stripe Customer for this uid if one was already
-  // created by a prior checkout attempt; otherwise create one now, tagged
-  // with the Firebase uid so the webhook can always resolve events back to
-  // the right member without ever trusting client-supplied identity.
-  let customerId = billing?.stripeCustomerId ?? null;
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: email ?? undefined,
-      metadata: { firebaseUid: uid },
-    });
-    customerId = customer.id;
-  }
-
-  const now = new Date();
-  await billingRef.set(
-    {
-      stripeCustomerId: customerId,
-      termsAcceptance: {
-        version: CURRENT_TERMS_VERSION,
-        privacyVersion: CURRENT_PRIVACY_VERSION,
-        planKey,
-        acceptedAt: now,
-        immediateServiceRequested: true,
-      },
-      updatedAt: now,
-      createdAt: billing?.createdAt ?? now,
-      status: billing?.status ?? "none",
-      stripeSubscriptionId: billing?.stripeSubscriptionId ?? null,
-      planKey: billing?.planKey ?? null,
-      currentPeriodEnd: billing?.currentPeriodEnd ?? null,
-      cancelAtPeriodEnd: billing?.cancelAtPeriodEnd ?? false,
-      canceledAt: billing?.canceledAt ?? null,
-      lastPaymentFailedAt: billing?.lastPaymentFailedAt ?? null,
-    } satisfies BillingDocument,
-    { merge: true },
-  );
-
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    customer: customerId,
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${appBaseUrl}/member/plan?checkout=success`,
-    cancel_url: `${appBaseUrl}/member/plan?checkout=cancel`,
-    client_reference_id: uid,
-    subscription_data: {
-      metadata: { firebaseUid: uid, planKey },
-    },
-    metadata: { firebaseUid: uid, planKey },
+  const result = await createMembershipCheckout({
+    uid,
+    email,
+    planKey,
+    successPath: "/member/plan?checkout=success",
+    cancelPath: "/member/plan?checkout=cancel",
   });
-
-  if (!session.url) {
-    return NextResponse.json({ ok: false, error: "checkout_session_failed" }, { status: 502 });
+  if (!result.ok) {
+    return NextResponse.json({ ok: false, error: result.error }, { status: result.status });
   }
-
-  return NextResponse.json({ ok: true, url: session.url });
+  return NextResponse.json({ ok: true, url: result.url });
 }

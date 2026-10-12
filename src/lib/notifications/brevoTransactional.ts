@@ -1,6 +1,11 @@
 import "server-only";
 
-const BREVO_TRANSACTIONAL_URL = "https://api.brevo.com/v3/smtp/email";
+// BREVO_API_BASE_URL is only set for local testing, where it points at the
+// local mock (scripts/local-test) so no real email can leave the machine.
+function transactionalUrl(): string {
+  const base = process.env.BREVO_API_BASE_URL?.replace(/\/+$/, "") || "https://api.brevo.com/v3";
+  return `${base}/smtp/email`;
+}
 
 /**
  * Deliberately a completely separate code path from `brevo.ts`'s
@@ -74,7 +79,7 @@ export async function sendTransactionalEmail(
   }
   const sender = getTransactionalSenderIdentity();
 
-  const response = await fetch(BREVO_TRANSACTIONAL_URL, {
+  const response = await fetch(transactionalUrl(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
