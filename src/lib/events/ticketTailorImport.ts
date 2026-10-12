@@ -15,7 +15,6 @@ export interface TicketTailorImport {
     eventDate?: string;
     startTime?: string;
     endTime?: string;
-    description?: string;
     imageUrl?: string;
     ticketTailorCheckoutUrl?: string;
     ticketTailorTicketTypeIds?: string[];
@@ -26,6 +25,13 @@ export interface TicketTailorImport {
   missing: string[];
   /** Facts shown to the admin but deliberately not copied (e.g. the venue, which may be private). */
   notes: string[];
+  /**
+   * Ticket Tailor's own event description, for reference only. It is never
+   * copied into the website description automatically: the site keeps its
+   * editorial copy (40+ club positioning), and the admin copies text over
+   * only by choice. An event's own age criteria (e.g. "35+") live there.
+   */
+  ticketTailorDescription: string | null;
 }
 
 const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
@@ -82,10 +88,8 @@ export function mapTicketTailorEvent(ticketTailorEventId: string, raw: Record<st
     imported.push("hora de fin");
   }
   const description = text(raw.description);
-  if (description) {
-    fields.description = htmlToText(description).slice(0, 1200);
-    imported.push("descripción");
-  }
+  const ticketTailorDescription = description ? htmlToText(description).slice(0, 4000) : null;
+  if (ticketTailorDescription) notes.push("La descripción de Ticket Tailor no se copia en la web: se muestra abajo como referencia.");
   const images = obj(raw.images);
   const image = text(images?.header) ?? text(images?.thumbnail);
   if (image && image.startsWith("https://")) {
@@ -117,10 +121,10 @@ export function mapTicketTailorEvent(ticketTailorEventId: string, raw: Record<st
   if (venueName) notes.push(`Lugar en Ticket Tailor: «${venueName}». No se copia: escribe tú la descripción pública del lugar.`);
   notes.push("El precio no se importa: escríbelo solo si quieres mostrarlo.");
 
-  const all = ["título", "fecha", "hora de inicio", "hora de fin", "descripción", "imagen", "enlace de compra", "tipos de entrada", "disponibilidad de entradas"];
+  const all = ["título", "fecha", "hora de inicio", "hora de fin", "imagen", "enlace de compra", "tipos de entrada", "disponibilidad de entradas"];
   const missing = all.filter((f) => !imported.some((i) => i.startsWith(f)));
-  missing.push("ciudad", "tipo de evento", "descripción pública del lugar");
-  return { ticketTailorEventId, fields, imported, missing, notes };
+  missing.push("ciudad", "tipo de evento", "descripción para la web", "descripción pública del lugar");
+  return { ticketTailorEventId, fields, imported, missing, notes, ticketTailorDescription };
 }
 
 export type ImportResult = { ok: true; value: TicketTailorImport } | { ok: false; error: "not_found" | "not_configured" | "request_failed"; detail?: string };

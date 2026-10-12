@@ -90,6 +90,8 @@ async function main() {
   check("import: fills the date and time", (await page.locator("#ev-date").inputValue()) === "2026-10-29" && (await page.locator("#ev-start").inputValue()) === "20:00");
   check("import: fills the booking link", (await page.locator("#ev-checkout").inputValue()) === "https://www.tickettailor.com/events/juntoselect/2439069");
   check("import: suggests Entradas disponibles", (await page.locator("#ev-status").inputValue()) === "tickets_available");
+  check("import: site description not overwritten by Ticket Tailor's", (await page.locator("#ev-desc").inputValue()) === "");
+  check("import: Ticket Tailor description shown for reference", await page.getByText("Descripción en Ticket Tailor (solo referencia)").isVisible());
   await page.screenshot({ path: `${OUT}/events-1-import.png`, fullPage: true });
 
   // Review / edit, as Lara asked: a Signature event in Madrid.

@@ -1,4 +1,5 @@
 import "server-only";
+import { isStagingDeploy } from "@/lib/config/deployEnv";
 
 /**
  * Server-only Ticket Tailor client abstraction — analogous in spirit to
@@ -229,6 +230,10 @@ class LiveTicketTailorClient implements TicketTailorClient {
   constructor(private readonly apiKey: string) {}
 
   private assertVerified(operation: string): void {
+    if (isStagingDeploy()) {
+      // Staging may read events (Events Manager import) but never create or delete discount codes.
+      throw new Error(`ticket_tailor_writes_disabled_in_staging: refusing "${operation}"`);
+    }
     if (!TICKET_TAILOR_INTEGRATION_VERIFIED) {
       throw new Error(
         `ticket_tailor_integration_not_verified: refusing to perform "${operation}" — real integration is not yet activated (see src/lib/ticketTailor/client.ts doc comment: the contract is verified, but activation is a separate, deliberate rollout step).`,

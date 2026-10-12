@@ -153,14 +153,16 @@ export default function EventsManagerPage() {
         body: JSON.stringify({ ref: form.ticketTailorRef }),
       });
       const f = imp.fields;
+      // Facts (date, times, links, ticket types) come from Ticket Tailor. Editorial copy already
+      // typed here is never replaced: the title only fills an empty field, the image only replaces
+      // a default one, and the description is never copied (it is shown below for reference).
       setForm((prev) => ({
         ...prev,
-        label: f.label ?? prev.label,
+        label: prev.label.trim() ? prev.label : (f.label ?? prev.label),
         eventDate: f.eventDate ?? prev.eventDate,
         startTime: f.startTime ?? prev.startTime,
         endTime: f.endTime ?? prev.endTime,
-        description: f.description ?? prev.description,
-        imageUrl: f.imageUrl ?? prev.imageUrl,
+        imageUrl: f.imageUrl && DEFAULT_EVENT_IMAGES.some((d) => d.url === prev.imageUrl) ? f.imageUrl : prev.imageUrl,
         ticketTailorCheckoutUrl: f.ticketTailorCheckoutUrl ?? prev.ticketTailorCheckoutUrl,
         ticketTypeIds: f.ticketTailorTicketTypeIds ? f.ticketTailorTicketTypeIds.join(", ") : prev.ticketTypeIds,
         publicStatus: f.publicStatus ?? prev.publicStatus,
@@ -332,6 +334,19 @@ export default function EventsManagerPage() {
                 </p>
               ))}
               <p className="mt-1 text-ink-soft">Revisa todos los textos importados antes de publicar.</p>
+              {importInfo.ticketTailorDescription && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-ink">Descripción en Ticket Tailor (solo referencia)</summary>
+                  <p className="mt-1 whitespace-pre-line text-ink-soft">{importInfo.ticketTailorDescription}</p>
+                  <button
+                    type="button"
+                    className={`${softButton} mt-2`}
+                    onClick={() => set("description", importInfo.ticketTailorDescription ?? "")}
+                  >
+                    Usar este texto en la web
+                  </button>
+                </details>
+              )}
             </div>
           )}
 

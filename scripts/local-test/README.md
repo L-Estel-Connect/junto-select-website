@@ -20,6 +20,7 @@ npx tsx --conditions=react-server scripts/local-test/benefit-cycles.test.mts   #
 node scripts/local-test/events-manager.cjs                                # Events Manager APIs, public pages, 20 % switch
 NODE_PATH=$(npm root -g) node scripts/local-test/events-manager-ui.cjs   # admin walk-through; creates the 29 Oct and 26 Nov events locally
 npx tsx --conditions=react-server scripts/local-test/events-manager.test.mts   # link parsing, form rules, what the website shows
+npx tsx --conditions=react-server scripts/local-test/deploy-env.test.mts       # staging isolation guard
 ```
 
 - Open http://localhost:3000 to click through by hand. Magic-link emails are

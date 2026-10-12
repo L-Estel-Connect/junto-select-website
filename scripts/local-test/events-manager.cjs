@@ -124,8 +124,9 @@ async function main() {
   check("import: image and ticket types", f.imageUrl?.startsWith("https://uploads.tickettailorassets.com/") && JSON.stringify(f.ticketTailorTicketTypeIds) === '["tt_mock1","tt_mock2"]');
   check("import: suggests Entradas disponibles", f.publicStatus === "tickets_available");
   check("import: venue shown as a note, not copied", !("venuePublic" in f) && imp.data.import.notes.some((n) => n.includes("MOCK venue")));
-  check("import: city, type and public venue left to the admin", ["ciudad", "tipo de evento", "descripción pública del lugar"].every((m) => imp.data.import.missing.includes(m)));
+  check("import: city, type and public venue left to the admin", ["ciudad", "tipo de evento", "descripción para la web", "descripción pública del lugar"].every((m) => imp.data.import.missing.includes(m)));
   check("import: price not imported", !("priceFromEuros" in f));
+  check("import: Ticket Tailor description kept apart from the site copy", !("description" in f) && /corazón de Madrid/.test(imp.data.import.ticketTailorDescription ?? ""));
   check("import: nothing saved", JSON.stringify((await eventDoc("2439069")) ?? null) === before2439069);
   const ttCalls = mockLog().slice(logBefore).filter((e) => e.service === "tickettailor");
   check("import: only reads from Ticket Tailor", ttCalls.length > 0 && ttCalls.every((e) => e.kind === "event_get"), ttCalls.map((e) => e.kind).join(","));

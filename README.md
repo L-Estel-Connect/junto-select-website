@@ -1632,6 +1632,35 @@ firebase deploy --only firestore:rules,storage:rules
 or paste the contents of `firestore.rules` / `storage.rules` directly
 into Firebase Console → Firestore Database → Rules / Storage → Rules.
 
+## Staging environment (not set up yet)
+
+Staging must be a **separate Firebase project**. `select-dev-508407` is
+production: never use it for staging.
+
+What staging needs (owner steps, in this order):
+1. Create a Firebase project, e.g. `junto-select-staging`, on the Blaze plan.
+   Add a Web app, enable Authentication (Google + email link), Firestore and
+   Storage. Deploy `firestore.rules`, `storage.rules` and
+   `firestore.indexes.json` to it (`firebase deploy --only firestore,storage --project <staging-id>`).
+2. Create an App Hosting backend in that project on the branch to review,
+   with environment name `staging`, so `apphosting.staging.yaml` applies.
+   Fill in its `REPLACE_WITH_` values from the staging Web app config.
+3. In that project's Secret Manager: `STRIPE_SECRET_KEY` (sk_test_…),
+   `STRIPE_WEBHOOK_SECRET` (from a TEST-mode webhook pointing at the staging
+   URL), `MATCHING_ADMIN_SECRET` (new random value), `ANTHROPIC_API_KEY`,
+   `TICKET_TAILOR_API_KEY` (writes are refused in staging; reads only).
+   Grant each to the backend with `firebase apphosting:secrets:grantaccess`.
+4. Stripe TEST mode: three prices (49 €/1 mes, 129 €/3 meses, 234 €/6 meses).
+5. No Brevo key or list in staging.
+6. Cloud Scheduler jobs, if wanted, only in the staging project and only
+   against the staging URL with the staging `MATCHING_ADMIN_SECRET`.
+
+Code guards (`src/lib/config/deployEnv.ts`, on when `JUNTO_DEPLOY_ENV=staging`):
+the server refuses to start Firebase Admin against `select-dev-508407`,
+refuses non-test Stripe keys, never calls Brevo (no contacts, lists or
+emails) and never writes to Ticket Tailor (no discount codes). The Events
+Manager's read-only Ticket Tailor import still works.
+
 ## Privacy notes
 
 - Submitted form data is only ever sent to Brevo; nothing is logged,

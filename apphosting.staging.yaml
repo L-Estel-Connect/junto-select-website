@@ -1,0 +1,89 @@
+# Firebase App Hosting overrides for the STAGING backend only.
+#
+# Used only by an App Hosting backend whose environment name is "staging"
+# (Firebase Console > App Hosting > backend > Settings > Environment), in
+# a SEPARATE Firebase project. It is merged over apphosting.yaml, variable
+# by variable. Production (select-dev-508407) never reads this file.
+#
+# JUNTO_DEPLOY_ENV=staging switches on the code guards in
+# src/lib/config/deployEnv.ts: the app refuses the production Firebase
+# project, live Stripe keys, every Brevo call and every Ticket Tailor
+# write, even if a value below is wrong.
+#
+# Secrets (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, MATCHING_ADMIN_SECRET,
+# ANTHROPIC_API_KEY, TICKET_TAILOR_API_KEY) are looked up in the STAGING
+# project's own Secret Manager, so they are separate by construction. Set
+# them there with Stripe TEST values. See README "Staging environment".
+#
+# Every REPLACE_WITH_ value must be filled in from the staging project
+# before the first staging rollout; until then the build fails closed
+# (Firebase client config is invalid), it never falls back to production.
+env:
+  - variable: JUNTO_DEPLOY_ENV
+    value: "staging"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: APP_BASE_URL
+    value: "REPLACE_WITH_STAGING_BACKEND_URL"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: "REPLACE_WITH_STAGING_WEB_API_KEY"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: "REPLACE_WITH_STAGING_PROJECT_ID.firebaseapp.com"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: "REPLACE_WITH_STAGING_PROJECT_ID"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: "REPLACE_WITH_STAGING_PROJECT_ID.firebasestorage.app"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "REPLACE_WITH_STAGING_SENDER_ID"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "REPLACE_WITH_STAGING_APP_ID"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # No Brevo in staging: no list, no key, no email. The code guard refuses
+  # Brevo calls anyway; these keep the live list id and key out entirely.
+  - variable: BREVO_LIST_ID
+    value: ""
+    availability:
+      - RUNTIME
+  - variable: BREVO_API_KEY
+    value: ""
+    availability:
+      - RUNTIME
+
+  # Stripe TEST-mode Price IDs (49 €/1 mes, 129 €/3 meses, 234 €/6 meses),
+  # created in the Stripe Dashboard with "Test mode" on.
+  - variable: STRIPE_PRICE_MONTHLY
+    value: "REPLACE_WITH_TEST_PRICE_MONTHLY"
+    availability:
+      - RUNTIME
+  - variable: STRIPE_PRICE_THREE_MONTH
+    value: "REPLACE_WITH_TEST_PRICE_THREE_MONTH"
+    availability:
+      - RUNTIME
+  - variable: STRIPE_PRICE_SIX_MONTH
+    value: "REPLACE_WITH_TEST_PRICE_SIX_MONTH"
+    availability:
+      - RUNTIME
