@@ -250,7 +250,11 @@ export default function EventsManagerPage() {
     }
   }
 
-  const visible = events.filter((e) => showArchived || !e.archivedAt);
+  // Upcoming (and undated) events first, soonest first; past events after them, most recent first.
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const isPast = (e: AdminEventRow) => !!e.eventDate && e.eventDate < today;
+  const filtered = events.filter((e) => showArchived || !e.archivedAt);
+  const visible = [...filtered.filter((e) => !isPast(e)), ...filtered.filter(isPast).reverse()];
   const previewUrl = editingId ? `/eventos/vista-previa?id=${encodeURIComponent(editingId)}` : null;
 
   return (
@@ -536,6 +540,7 @@ export default function EventsManagerPage() {
                       <p className="mt-1 text-[12px] text-ink-soft">
                         <span className="text-ink">{EVENT_PUBLIC_STATUS_LABELS[e.publicStatus ?? "draft"]}</span>
                         {" · "}
+                        {isPast(e) ? "Ya celebrado · " : ""}
                         {e.archivedAt ? "Archivado" : e.published ? "Publicado en la web" : "No publicado"}
                         {" · "}20 % miembros: {benefitOn ? "sí" : "no"}
                         {benefitOn ? ` (${e.benefitCount} código(s))` : ""}
