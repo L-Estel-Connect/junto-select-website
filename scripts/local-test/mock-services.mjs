@@ -8,7 +8,8 @@
 //   Brevo:  POST /v3/contacts and /v3/smtp/email (recorded, never sent).
 //   Ticket Tailor: POST/GET /v1/discounts, DELETE /v1/discounts/:id
 //           (kept in memory, used with TICKET_TAILOR_LOCAL_MOCK_URL), and
-//           GET /v1/events/:id for the Events Manager import (read-only;
+//           GET /v1/event_series/:id/events and GET /v1/events/:id for
+//           the Events Manager import (read-only;
 //           see MOCK_TT_EVENTS below for what is real and what is made up).
 //   Test controls (not Stripe): POST /test/subscriptions/:id/renew moves
 //           current_period_end forward one plan period, /backdate?days=N
@@ -39,19 +40,21 @@ const PLAN_MONTHS = { monthly: 1, three_month: 3, six_month: 6 };
 let seq = 0;
 const id = (prefix) => `${prefix}_test_${Date.now().toString(36)}${(seq++).toString(36)}`;
 
-// Ticket Tailor event fixtures. The shape follows the public API docs
-// (GET /v1/events/:event_id) but has NOT been checked against a real
-// response. ev_2439069 copies what the public event page shows (title,
-// date, times, image); the ticket types and the venue name are MOCK values,
-// because the public page does not show them.
+// Ticket Tailor event fixtures. The shape matches a real response checked
+// on 2026-10-12: the public link's number (2439069) is the event SERIES
+// id, and the dated event inside it is ev_9175061. Title, date, times and
+// image copy the real event; the ticket types and the venue name are MOCK
+// values.
+const MOCK_TT_SERIES = { es_2439069: ["ev_9175061"] };
 const MOCK_TT_EVENTS = {
-  ev_2439069: {
+  ev_9175061: {
     object: "event",
-    id: "ev_2439069",
+    id: "ev_9175061",
+    event_series_id: "es_2439069",
     name: "Junto Select OCTOBER 2026",
     description: "<p>Una noche para conocer gente nueva en el corazón de Madrid. (Texto de prueba local.)</p>",
-    start: { date: "2026-10-29", time: "20:00", iso: "2026-10-29T20:00:00+01:00", timezone: "Europe/Madrid" },
-    end: { date: "2026-10-29", time: "23:00", iso: "2026-10-29T23:00:00+01:00", timezone: "Europe/Madrid" },
+    start: { date: "2026-10-29", time: "20:00", iso: "2026-10-29T20:00:00+01:00", timezone: "+01:00", unix: 1793300400 },
+    end: { date: "2026-10-29", time: "23:00", iso: "2026-10-29T23:00:00+01:00", timezone: "+01:00", unix: 1793311200 },
     images: { header: "https://uploads.tickettailorassets.com/c_scale,w_800/v1/production/userfiles/xiseq0x2lz0kmcaekpq2.jpg?_a=BAAHWXDQ" },
     url: "https://www.tickettailor.com/events/juntoselect/2439069",
     tickets_available: "true",
@@ -157,6 +160,15 @@ const server = http.createServer(async (req, res) => {
       discounts.delete(discMatch[1]);
       log({ service: "tickettailor", kind: "discount_delete", id: discMatch[1] });
       return json(res, 200, { deleted: true });
+    }
+
+    const seriesMatch = p.match(/^\/v1\/event_series\/([^/]+)\/events$/);
+    if (seriesMatch && req.method === "GET") {
+      log({ service: "tickettailor", kind: "series_events_get", id: seriesMatch[1] });
+      const ids = MOCK_TT_SERIES[seriesMatch[1]];
+      // As in the real API, the listing leaves out name, description, images and venue.
+      const slim = (ev) => Object.fromEntries(Object.entries(ev).filter(([k]) => !["name", "description", "images", "venue"].includes(k)));
+      return ids ? json(res, 200, { data: ids.map((i) => slim(MOCK_TT_EVENTS[i])) }) : json(res, 404, { status: 404, error_code: "PAGE_NOT_FOUND", message: "Page not found" });
     }
 
     const evMatch = p.match(/^\/v1\/events\/([^/]+)$/);

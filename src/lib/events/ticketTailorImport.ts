@@ -3,10 +3,10 @@ import { getTicketTailorClient } from "@/lib/ticketTailor/client";
 
 /**
  * What a Ticket Tailor import pre-fills in the Events Manager form. Every
- * field is optional: Ticket Tailor's event response schema hasn't been
- * verified against a real response in this project, so each value is read
- * defensively and anything missing is simply left for the admin to type.
- * Nothing is saved here; the admin reviews the form and saves it.
+ * field is optional: the mapping was checked against a real Ticket Tailor
+ * response on 2026-10-12, but each value is still read defensively and
+ * anything missing is simply left for the admin to type. Nothing is saved
+ * here; the admin reviews the form and saves it.
  */
 export interface TicketTailorImport {
   ticketTailorEventId: string;
@@ -62,6 +62,20 @@ function dateTime(v: unknown): { date?: string; time?: string } {
 }
 
 const truthy = (v: unknown) => v === true || v === "true";
+
+/**
+ * Picks the event to import from a series: the next one still to come, or
+ * the latest one if all are past. Our events are single-date series, so
+ * this is normally the only entry.
+ */
+export function pickSeriesEvent(events: Record<string, unknown>[], now: Date = new Date()): Record<string, unknown> | null {
+  const unix = (e: Record<string, unknown>) => {
+    const u = obj(e.start)?.unix;
+    return typeof u === "number" ? u : 0;
+  };
+  const sorted = [...events].sort((a, b) => unix(a) - unix(b));
+  return sorted.find((e) => unix(e) * 1000 >= now.getTime()) ?? sorted[sorted.length - 1] ?? null;
+}
 
 export function mapTicketTailorEvent(ticketTailorEventId: string, raw: Record<string, unknown>, pastedUrl: string | null): TicketTailorImport {
   const fields: TicketTailorImport["fields"] = {};
@@ -138,10 +152,21 @@ export async function importTicketTailorEvent(ticketTailorEventId: string, paste
     return { ok: false, error: "not_configured" };
   }
   try {
-    // The API's event ids carry an "ev_" prefix; the public page shows the bare number.
-    const raw = (await client.getEvent(`ev_${ticketTailorEventId}`)) ?? (await client.getEvent(ticketTailorEventId));
+    // The number on the public page is the event SERIES id ("es_" in the
+    // API); the dated event inside it has a different "ev_" id. The series
+    // listing leaves out the name, image, description and venue, so the
+    // chosen event is then read in full. Falls back to reading the number
+    // as an event id, in case one is pasted directly.
+    const seriesEvents = await client.listEventSeriesEvents(`es_${ticketTailorEventId}`);
+    const picked = seriesEvents ? pickSeriesEvent(seriesEvents) : null;
+    const pickedId = text(picked?.id);
+    const raw = pickedId ? ((await client.getEvent(pickedId)) ?? picked) : await client.getEvent(`ev_${ticketTailorEventId}`);
     if (!raw) return { ok: false, error: "not_found" };
-    return { ok: true, value: mapTicketTailorEvent(ticketTailorEventId, raw, pastedUrl) };
+    const value = mapTicketTailorEvent(ticketTailorEventId, raw, pastedUrl);
+    if (seriesEvents && seriesEvents.length > 1) {
+      value.notes.push(`Este enlace de Ticket Tailor tiene ${seriesEvents.length} fechas: se ha importado la próxima. Revisa la fecha.`);
+    }
+    return { ok: true, value };
   } catch (error) {
     return { ok: false, error: "request_failed", detail: error instanceof Error ? error.message : String(error) };
   }

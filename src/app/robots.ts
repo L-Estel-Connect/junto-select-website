@@ -1,7 +1,10 @@
 import type { MetadataRoute } from "next";
 import { getAppBaseUrl } from "@/lib/config/appBaseUrl";
+import { isStagingDeploy } from "@/lib/config/deployEnv";
 
 export default function robots(): MetadataRoute.Robots {
+  // Staging is never crawled (JUNTO_DEPLOY_ENV is available at build time).
+  if (isStagingDeploy()) return { rules: { userAgent: "*", disallow: "/" } };
   return {
     rules: {
       userAgent: "*",

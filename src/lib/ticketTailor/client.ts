@@ -133,15 +133,22 @@ export interface TicketTailorClient {
    */
   invalidateDiscount(discountId: string): Promise<void>;
   /**
-   * READ-ONLY: `GET /v1/events/:event_id` (documented at
-   * developers.tickettailor.com/docs/api/get-event-by-id). Used only by the
-   * admin Events Manager's "Importar" to pre-fill a form the admin then
-   * reviews. Never creates or changes anything in Ticket Tailor. Returns
-   * the raw JSON object (or null on 404): the response schema has NOT been
-   * verified against a real response in this engagement, so every field is
-   * read defensively by eventImport.ts, never assumed.
+   * READ-ONLY: `GET /v1/events/:event_id`. Used only by the admin Events
+   * Manager's "Importar" to pre-fill a form the admin then reviews. Never
+   * creates or changes anything in Ticket Tailor. Returns the raw JSON
+   * object (or null on 404). The schema was checked against a real
+   * response on 2026-10-12 (event ev_9175061); ticketTailorImport.ts still
+   * reads every field defensively.
    */
   getEvent(eventId: string): Promise<Record<string, unknown> | null>;
+  /**
+   * READ-ONLY: `GET /v1/event_series/:event_series_id/events`. The number
+   * in a public Ticket Tailor link (…/events/juntoselect/2439069) is the
+   * event SERIES id (`es_2439069`), not an event id: the dated event
+   * inside it has its own id (`ev_9175061`). Verified against the real
+   * API on 2026-10-12. Returns the series' events (or null on 404).
+   */
+  listEventSeriesEvents(eventSeriesId: string): Promise<Record<string, unknown>[] | null>;
 }
 
 interface TicketTailorDiscountResponse {
@@ -288,6 +295,17 @@ class LiveTicketTailorClient implements TicketTailorClient {
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`ticket_tailor_get_event_failed_${res.status}`);
     return (await res.json()) as Record<string, unknown>;
+  }
+
+  async listEventSeriesEvents(eventSeriesId: string): Promise<Record<string, unknown>[] | null> {
+    // Read-only, so no assertVerified gate: it cannot change anything.
+    const res = await fetch(`${TICKET_TAILOR_API_BASE}/v1/event_series/${encodeURIComponent(eventSeriesId)}/events`, {
+      headers: this.headers(),
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`ticket_tailor_list_series_events_failed_${res.status}`);
+    const body = (await res.json()) as { data?: unknown };
+    return Array.isArray(body.data) ? (body.data as Record<string, unknown>[]) : [];
   }
 
   async invalidateDiscount(discountId: string): Promise<void> {

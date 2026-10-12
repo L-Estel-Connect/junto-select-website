@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Fraunces } from "next/font/google";
 import { getAppBaseUrl } from "@/lib/config/appBaseUrl";
+import { isStagingDeploy } from "@/lib/config/deployEnv";
 import "./globals.css";
 
 const inter = Inter({
@@ -58,10 +59,8 @@ export const metadata: Metadata = {
     title,
     description,
   },
-  robots: {
-    index: true,
-    follow: true,
-  },
+  // Staging must never be indexed.
+  robots: isStagingDeploy() ? { index: false, follow: false } : { index: true, follow: true },
 };
 
 export const viewport: Viewport = {
