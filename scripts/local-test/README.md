@@ -17,12 +17,23 @@ NODE_PATH=$(npm root -g) node scripts/local-test/journeys.cjs existing   # exist
 NODE_PATH=$(npm root -g) node scripts/local-test/site-audit.cjs          # v5 public site: links, CTAs, fonts, free profile, colaboraciones
 node scripts/local-test/benefits-matching.cjs                             # 20 % monthly codes (1/3/6-month plans) and matching eligibility
 npx tsx --conditions=react-server scripts/local-test/benefit-cycles.test.mts   # cycle dates, no emulator needed
+node scripts/local-test/events-manager.cjs                                # Events Manager APIs, public pages, 20 % switch
+NODE_PATH=$(npm root -g) node scripts/local-test/events-manager-ui.cjs   # admin walk-through; creates the 29 Oct and 26 Nov events locally
+npx tsx --conditions=react-server scripts/local-test/events-manager.test.mts   # link parsing, form rules, what the website shows
 ```
 
 - Open http://localhost:3000 to click through by hand. Magic-link emails are
   not sent: the emulator UI (http://127.0.0.1:4000/auth) shows the links.
 - Ticket Tailor is imitated by the same mock (`TICKET_TAILOR_LOCAL_MOCK_URL`,
   loopback only). `touch .local-test/tt-fail` makes discount creation fail.
+  The Events Manager import reads `GET /v1/events/ev_2439069` from the mock:
+  title, date, times and image copy the public Ticket Tailor page; ticket
+  types and venue name are invented and marked MOCK. The real API response
+  has not been checked yet.
+- Admin dashboard: http://localhost:3000/admin, events at /admin/eventos.
+  The Google button needs apis.google.com; where that is blocked, the
+  walk-through signs `ADMIN_ALLOWLIST_EMAILS` into the auth emulator
+  directly.
   Renewals, cancellations and time passing are simulated with
   `POST /test/subscriptions/:id/{renew,cancel,backdate?days=N}` on the mock.
 - The "payment" page is a local imitation at 127.0.0.1:12111 that sends a

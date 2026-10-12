@@ -19,8 +19,11 @@ const organizationJsonLd = {
   address: { "@type": "PostalAddress", addressLocality: "Madrid", addressCountry: "ES" },
 };
 
-export default function Home() {
-  const events = getUpcomingEvents().slice(0, 2);
+// Upcoming events come from the admin Events Manager: always read fresh.
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const events = (await getUpcomingEvents()).slice(0, 2);
 
   return (
     <main>

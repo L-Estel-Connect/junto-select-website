@@ -101,6 +101,8 @@ async function loadBillingAndCycle(
 function isBenefitEvent(event: EligibleTicketTailorEventDocument, now: Date): event is EligibleTicketTailorEventDocument & { eventDate: string } {
   return (
     event.memberBenefitEnabled !== false &&
+    event.ticketTailorLinked !== false &&
+    !event.archivedAt &&
     !!event.eventDate &&
     event.ticketTailorTicketTypeIds.length > 0 &&
     isEventUpcoming(event.eventDate, now)

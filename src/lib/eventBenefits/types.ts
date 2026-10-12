@@ -218,4 +218,43 @@ export interface EligibleTicketTailorEventDocument {
    * whether there's a one-click link to it.
    */
   ticketTailorCheckoutUrl: string | null;
+
+  // ---- Events Manager (public display) --------------------------------
+  // All optional: documents written before the Events Manager existed have
+  // none of these and are simply unpublished (never shown publicly) until
+  // edited. `label` doubles as the public title — one name per event, used
+  // by the website, the member's "Mi plan" and the Ticket Tailor discount.
+
+  /** Whether `ticketTailorEventId` (the doc id) is a real Ticket Tailor event. False for an event created manually before tickets exist; its doc id is then `manual_…` until a Ticket Tailor link is added. Missing = true (every older doc is a Ticket Tailor event). */
+  ticketTailorLinked?: boolean;
+  /** "HH:MM", Madrid time. Null = time not announced yet. */
+  startTime?: string | null;
+  endTime?: string | null;
+  city?: string | null;
+  /** Public venue wording, e.g. "Un lugar reservado en el centro de Madrid". Never the private address. */
+  venuePublic?: string | null;
+  /** e.g. "Signature". */
+  eventType?: string | null;
+  description?: string | null;
+  /** Public image: a default under /images/…, an uploaded file served by /api/events/image/…, or a Ticket Tailor image URL. Null = the default Salón photo. */
+  imageUrl?: string | null;
+  /** Lowest ticket price in euros, only if known; never guessed. */
+  priceFromEuros?: number | null;
+  publicStatus?: EventPublicStatus;
+  /** Shown on the website only while true (and not archived, and the event hasn't passed). */
+  published?: boolean;
+  publishedAt?: unknown | null;
+  archivedAt?: unknown | null;
+  /** Which fields the last Ticket Tailor import filled, for the admin's review. */
+  importedFromTicketTailorAt?: unknown | null;
 }
+
+export type EventPublicStatus = "draft" | "coming_soon" | "tickets_available" | "sold_out" | "completed";
+
+export const EVENT_PUBLIC_STATUS_LABELS: Record<EventPublicStatus, string> = {
+  draft: "Borrador",
+  coming_soon: "Próximamente",
+  tickets_available: "Entradas disponibles",
+  sold_out: "Completo",
+  completed: "Finalizado",
+};

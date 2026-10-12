@@ -7,7 +7,9 @@
 //           checkout.session.completed webhook to the app, like Stripe does.
 //   Brevo:  POST /v3/contacts and /v3/smtp/email (recorded, never sent).
 //   Ticket Tailor: POST/GET /v1/discounts, DELETE /v1/discounts/:id
-//           (kept in memory, used with TICKET_TAILOR_LOCAL_MOCK_URL).
+//           (kept in memory, used with TICKET_TAILOR_LOCAL_MOCK_URL), and
+//           GET /v1/events/:id for the Events Manager import (read-only;
+//           see MOCK_TT_EVENTS below for what is real and what is made up).
 //   Test controls (not Stripe): POST /test/subscriptions/:id/renew moves
 //           current_period_end forward one plan period, /backdate?days=N
 //           moves the whole subscription N days into the past (time
@@ -36,6 +38,30 @@ const planMonths = new Map();
 const PLAN_MONTHS = { monthly: 1, three_month: 3, six_month: 6 };
 let seq = 0;
 const id = (prefix) => `${prefix}_test_${Date.now().toString(36)}${(seq++).toString(36)}`;
+
+// Ticket Tailor event fixtures. The shape follows the public API docs
+// (GET /v1/events/:event_id) but has NOT been checked against a real
+// response. ev_2439069 copies what the public event page shows (title,
+// date, times, image); the ticket types and the venue name are MOCK values,
+// because the public page does not show them.
+const MOCK_TT_EVENTS = {
+  ev_2439069: {
+    object: "event",
+    id: "ev_2439069",
+    name: "Junto Select OCTOBER 2026",
+    description: "<p>Una noche para conocer gente nueva en el corazón de Madrid. (Texto de prueba local.)</p>",
+    start: { date: "2026-10-29", time: "20:00", iso: "2026-10-29T20:00:00+01:00", timezone: "Europe/Madrid" },
+    end: { date: "2026-10-29", time: "23:00", iso: "2026-10-29T23:00:00+01:00", timezone: "Europe/Madrid" },
+    images: { header: "https://uploads.tickettailorassets.com/c_scale,w_800/v1/production/userfiles/xiseq0x2lz0kmcaekpq2.jpg?_a=BAAHWXDQ" },
+    url: "https://www.tickettailor.com/events/juntoselect/2439069",
+    tickets_available: "true",
+    venue: { name: "MOCK venue (not the real one)" },
+    ticket_types: [
+      { object: "ticket_type", id: "tt_mock1", name: "MOCK Entrada general" },
+      { object: "ticket_type", id: "tt_mock2", name: "MOCK Entrada pareja" },
+    ],
+  },
+};
 
 function log(entry) {
   fs.appendFileSync(LOG, JSON.stringify({ at: new Date().toISOString(), ...entry }) + "\n");
@@ -131,6 +157,13 @@ const server = http.createServer(async (req, res) => {
       discounts.delete(discMatch[1]);
       log({ service: "tickettailor", kind: "discount_delete", id: discMatch[1] });
       return json(res, 200, { deleted: true });
+    }
+
+    const evMatch = p.match(/^\/v1\/events\/([^/]+)$/);
+    if (evMatch && req.method === "GET") {
+      log({ service: "tickettailor", kind: "event_get", id: evMatch[1] });
+      const ev = MOCK_TT_EVENTS[evMatch[1]];
+      return ev ? json(res, 200, ev) : json(res, 404, { error: "not found" });
     }
 
     // ---- Test controls ----

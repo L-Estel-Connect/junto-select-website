@@ -10,8 +10,11 @@ export const metadata: Metadata = {
   alternates: { canonical: "/eventos" },
 };
 
-export default function EventsPage() {
-  const events = getUpcomingEvents();
+// Published events change from the admin Events Manager: always read fresh.
+export const dynamic = "force-dynamic";
+
+export default async function EventsPage() {
+  const events = await getUpcomingEvents();
   return (
     <main>
       <SiteHeader variant="solid" />

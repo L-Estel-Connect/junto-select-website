@@ -129,7 +129,9 @@ async function planJourney(planKey) {
   let s = await state(token);
   const expected = { monthly: ["tt-e1", "tt-e2", "tt-e7"], three_month: ["tt-e1", "tt-e2", "tt-e7", "tt-e3"], six_month: ["tt-e1", "tt-e2", "tt-e7", "tt-e3", "tt-e4"] }[planKey];
   check(`${tag} payment opens cycle 1 today`, s.cycle && s.cycle.cycleStart === TODAY && !s.cycle.claimed, JSON.stringify(s.cycle));
-  check(`${tag} offers only upcoming eligible events inside the paid period`, JSON.stringify(s.claimableEvents.map((e) => e.ticketTailorEventId)) === JSON.stringify(expected), s.claimableEvents.map((e) => e.ticketTailorEventId).join(","));
+  // Only this suite's events: others (e.g. the Events Manager walk-through) may also be in the emulator.
+  const offered = s.claimableEvents.map((e) => e.ticketTailorEventId).filter((id) => id in EVENTS);
+  check(`${tag} offers only upcoming eligible events inside the paid period`, JSON.stringify(offered) === JSON.stringify(expected), offered.join(","));
   check(`${tag} nothing issued automatically`, s.benefits.length === 0);
 
   check(`${tag} past event refused`, (await claim(token, "tt-e5")).data?.error === "event_not_eligible");
