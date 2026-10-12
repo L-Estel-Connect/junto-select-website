@@ -14,6 +14,7 @@ node scripts/local-test/seed.mjs && node scripts/local-test/seed.mjs snapshot
 NODE_PATH=$(npm root -g) node scripts/local-test/journeys.cjs            # journeys 1-4
 node scripts/local-test/seed.mjs compare                                  # journey 5: existing profiles unchanged
 NODE_PATH=$(npm root -g) node scripts/local-test/journeys.cjs existing   # existing profiles paying
+NODE_PATH=$(npm root -g) node scripts/local-test/site-audit.cjs          # v5 public site: links, CTAs, fonts, free profile, colaboraciones
 ```
 
 - Open http://localhost:3000 to click through by hand. Magic-link emails are

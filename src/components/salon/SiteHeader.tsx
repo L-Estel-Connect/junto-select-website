@@ -24,7 +24,7 @@ export default function SiteHeader({ variant = "overlay" }: { variant?: "overlay
   return (
     <header className={`hdr${variant === "solid" ? " solid" : ""}`}>
       <div className="wrap">
-        <Link className="word" href="/">
+        <Link className="word" href="/" aria-label="Junto Select, inicio">
           Junto <span>Select</span>
         </Link>
         <nav className="nav" aria-label="Principal">
@@ -67,19 +67,29 @@ export default function SiteHeader({ variant = "overlay" }: { variant?: "overlay
           </div>
           <nav aria-label="Menú móvil">
             {NAV.map((item) => (
-              <Link key={item.href} href={item.href} onClick={() => setOpen(false)}>
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={pathname === item.href ? "page" : undefined}
+                onClick={() => setOpen(false)}
+              >
                 {item.label}
               </Link>
             ))}
           </nav>
-          <div className="sec">
-            <Link href={SIGN_IN_HREF} onClick={() => setOpen(false)}>
-              Acceder
+          <div className="ctas">
+            <Link className="btn btn-tinta" href={joinHref()} onClick={() => setOpen(false)}>
+              Únete al club
+            </Link>
+            <Link className="btn btn-line" href="/membresia#planes" onClick={() => setOpen(false)}>
+              Hazte miembro
             </Link>
           </div>
-          <Link className="btn btn-tinta" href={joinHref()} onClick={() => setOpen(false)}>
-            Únete al club
-          </Link>
+          <div className="sec">
+            <Link href={SIGN_IN_HREF} onClick={() => setOpen(false)}>
+              Acceder a mi cuenta
+            </Link>
+          </div>
         </div>
       )}
     </header>

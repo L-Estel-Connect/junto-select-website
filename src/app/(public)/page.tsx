@@ -3,7 +3,7 @@ import Link from "next/link";
 import SiteHeader from "@/components/salon/SiteHeader";
 import EventCards from "@/components/salon/EventCards";
 import CityLinks from "@/components/salon/CityLinks";
-import { FIGURES, joinHref } from "@/lib/site/content";
+import { EVENT_BENEFIT, FIGURES, joinHref } from "@/lib/site/content";
 import { getUpcomingEvents } from "@/lib/site/events";
 import heroPhoto from "../../../public/images/hero.png";
 import clubPhoto from "../../../public/images/who-you-meet.png";
@@ -15,7 +15,7 @@ const organizationJsonLd = {
   name: "Junto Select",
   url: "https://juntoselect.com",
   description:
-    "Club social privado para solteros: encuentros exclusivos, experiencias cuidadosamente elegidas e introducciones privadas. En Madrid y, muy pronto, en Valencia, Barcelona y Málaga.",
+    "Club social privado para solteros a partir de 40: encuentros con plazas limitadas, experiencias cuidadosamente elegidas e introducciones privadas. En Madrid y, próximamente, en Valencia, Barcelona y Málaga.",
   address: { "@type": "PostalAddress", addressLocality: "Madrid", addressCountry: "ES" },
 };
 
@@ -35,14 +35,14 @@ export default function Home() {
           <Image src={heroPhoto} alt="Invitados conversando en una azotea de Madrid al anochecer" fill priority sizes="100vw" />
         </div>
         <div className="wrap">
-          <p className="eyebrow">Club social privado · Madrid</p>
+          <p className="eyebrow">Club social privado · Solteros a partir de 40</p>
           <h1>
             El club privado de los solteros <em>con trayectoria.</em>
           </h1>
           <div className="hero-row">
             <p>
               Encuentros exclusivos, experiencias cuidadosamente elegidas e introducciones privadas para
-              solteros que buscan una conexión auténtica. En Madrid y, muy pronto, en Valencia, Barcelona y
+              solteros que buscan una conexión auténtica. En Madrid y, próximamente, en Valencia, Barcelona y
               Málaga.
             </p>
             <div className="hero-cta">
@@ -97,7 +97,10 @@ export default function Home() {
             <div>
               <p className="eyebrow tinto-eyebrow">En Madrid</p>
               <h2 id="ev-h">Próximos encuentros</h2>
-              <p className="lede">Abiertos a todos, con plazas limitadas. Los miembros Select disfrutan de su privilegio mensual.</p>
+              <p className="lede">
+                Abiertos a todos, con plazas limitadas. Los miembros Select reciben cada mes un código del 20 % para
+                un encuentro elegible.
+              </p>
             </div>
             <Link className="link" href="/eventos">
               Ver todos los encuentros
@@ -117,13 +120,13 @@ export default function Home() {
             Más que asistir, <em>pertenecer.</em>
           </h2>
           <p className="txt">
-            Ser miembro Select es formar parte del club por completo. Introducciones privadas y discretas con
-            solteros afines, un privilegio en nuestros encuentros cada mes y un lugar propio en un club que crece.
+            La membresía de Junto Select abre la puerta a las introducciones privadas, a un 20 % en un encuentro
+            cada mes y a tu propio espacio en el club.
           </p>
           <ul className="sel-list">
             <li><span>01</span>Introducciones privadas</li>
-            <li><span>02</span>Privilegio en los encuentros</li>
-            <li><span>03</span>Discreción</li>
+            <li><span>02</span>{EVENT_BENEFIT.short}</li>
+            <li><span>03</span>Tu cuenta de miembro</li>
           </ul>
           <p className="meta">Disponible en Madrid · Desde 49 € al mes</p>
           <Link className="link" href="/membresia" style={{ justifySelf: "start" }}>

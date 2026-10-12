@@ -1,11 +1,13 @@
-import { Instrument_Sans, Instrument_Serif } from "next/font/google";
+import { Instrument_Sans, Newsreader } from "next/font/google";
 import SiteFooter from "@/components/salon/SiteFooter";
 import "./salon.css";
 
-const instrumentSerif = Instrument_Serif({
-  variable: "--font-instrument-serif",
+// Typography B (approved v5): Newsreader Light for headings, Instrument Sans
+// for body copy and navigation.
+const newsreader = Newsreader({
+  variable: "--font-newsreader",
   subsets: ["latin", "latin-ext"],
-  weight: "400",
+  weight: ["300", "400"],
   style: ["normal", "italic"],
   display: "swap",
 });
@@ -24,7 +26,7 @@ const instrumentSans = Instrument_Sans({
  */
 export default function PublicLayout({ children }: LayoutProps<"/">) {
   return (
-    <div className={`salon ${instrumentSerif.variable} ${instrumentSans.variable}`}>
+    <div className={`salon ${newsreader.variable} ${instrumentSans.variable}`}>
       {children}
       <SiteFooter />
     </div>

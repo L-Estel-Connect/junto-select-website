@@ -32,19 +32,35 @@ export default function IntroductionLandingPage() {
   // (/introduction/onboarding) is the only other place a signed-in visitor
   // here can land.
   const [nextPath, setNextPath] = useState<string | null>(null);
+  const [memberNextPath, setMemberNextPath] = useState<string | null>(null);
+  const [paramsRead, setParamsRead] = useState(false);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSessionExpired(params.get("session") === "expired");
     const next = params.get("next");
-    setNextPath(next && next.startsWith("/reconnect/") ? next : null);
+    setParamsRead(true);
+    if (next && next.startsWith("/reconnect/")) {
+      setNextPath(next);
+      return;
+    }
+    // The public site's "Acceder" links for existing members (e.g. the
+    // Introducciones page) send `?next=/member/...`. Also restricted to one
+    // tree, never an arbitrary URL. A magic link completes in a new tab
+    // without this query, so the destination is kept in localStorage too.
+    const memberNext = isMemberPath(next) ? next : readStoredMemberNext();
+    if (memberNext) {
+      storeMemberNext(memberNext);
+      setMemberNextPath(memberNext);
+    }
   }, []);
 
   useEffect(() => {
-    if (!loading && user) {
-      router.replace(nextPath ?? "/introduction/onboarding");
+    if (paramsRead && !loading && user) {
+      if (memberNextPath) storeMemberNext(null);
+      router.replace(nextPath ?? memberNextPath ?? "/introduction/onboarding");
     }
-  }, [loading, user, router, nextPath]);
+  }, [paramsRead, loading, user, router, nextPath, memberNextPath]);
 
   if (loading || user) {
     return (
@@ -124,4 +140,28 @@ export default function IntroductionLandingPage() {
       </p>
     </Section>
   );
+}
+
+const MEMBER_NEXT_KEY = "junto_signin_next";
+
+function isMemberPath(path: string | null): path is string {
+  return !!path && /^\/member(\/[a-z0-9/_-]*)?$/i.test(path) && !path.includes("//");
+}
+
+function readStoredMemberNext(): string | null {
+  try {
+    const stored = window.localStorage.getItem(MEMBER_NEXT_KEY);
+    return isMemberPath(stored) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeMemberNext(path: string | null) {
+  try {
+    if (path) window.localStorage.setItem(MEMBER_NEXT_KEY, path);
+    else window.localStorage.removeItem(MEMBER_NEXT_KEY);
+  } catch {
+    // Storage unavailable: the in-memory destination still applies.
+  }
 }

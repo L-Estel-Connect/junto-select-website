@@ -1,17 +1,14 @@
 "use client";
 
 import { useId, useState, type FormEvent } from "react";
-import { primaryButtonClasses } from "@/lib/styles";
 import { collaborationLimits, validateCollaboration } from "@/lib/collaborations/validation";
 import { collaborationTypeOptions, emptyCollaboration, type CollaborationPayload } from "@/lib/collaborations/types";
 
 type Status = "idle" | "submitting" | "success" | "error";
 
-const inputClasses =
-  "w-full rounded-md border border-hairline bg-paper px-4 py-3 text-[15px] text-ink placeholder:text-ink-soft/80 transition-colors focus:border-rose-dark focus:outline-none";
-
-const labelClasses = "text-sm font-medium text-ink";
-const errorClasses = "text-sm text-[#8a3b3b]";
+// Salón styles (src/app/(public)/salon.css): the page lives in the public site.
+const inputClasses = "input";
+const errorClasses = "err";
 
 export default function CollaborationForm() {
   const [data, setData] = useState<CollaborationPayload>(emptyCollaboration);
@@ -50,6 +47,13 @@ export default function CollaborationForm() {
       });
 
       if (!response.ok) {
+        // The server re-validates; show its field errors where they belong.
+        const body = (await response.json().catch(() => null)) as { errors?: typeof errors } | null;
+        if (response.status === 400 && body?.errors && Object.keys(body.errors).length > 0) {
+          setErrors(body.errors);
+          setStatus("idle");
+          return;
+        }
         throw new Error("request_failed");
       }
 
@@ -62,10 +66,10 @@ export default function CollaborationForm() {
 
   if (status === "success") {
     return (
-      <div role="status" className="rounded-lg border border-hairline bg-white px-6 py-12 text-center sm:px-10">
-        <p className="text-lg text-ink">
-          Gracias. Hemos recibido tu propuesta y nos pondremos en contacto contigo.
-        </p>
+      <div role="status" className="done">
+        <p className="eyebrow">Propuesta recibida</p>
+        <h2>Gracias.</h2>
+        <p>Hemos recibido tu propuesta y nos pondremos en contacto contigo.</p>
       </div>
     );
   }
@@ -76,10 +80,10 @@ export default function CollaborationForm() {
     <form
       onSubmit={handleSubmit}
       noValidate
-      className="space-y-6 rounded-lg border border-hairline bg-white p-6 sm:p-10"
+      className="fform"
     >
-      <div className="space-y-2">
-        <label htmlFor={`${formId}-nombre`} className={labelClasses}>
+      <div className="field">
+        <label htmlFor={`${formId}-nombre`}>
           Nombre
         </label>
         <input
@@ -102,8 +106,8 @@ export default function CollaborationForm() {
         )}
       </div>
 
-      <div className="space-y-2">
-        <label htmlFor={`${formId}-marca`} className={labelClasses}>
+      <div className="field">
+        <label htmlFor={`${formId}-marca`}>
           Marca / Empresa
         </label>
         <input
@@ -126,8 +130,8 @@ export default function CollaborationForm() {
         )}
       </div>
 
-      <div className="space-y-2">
-        <label htmlFor={`${formId}-email`} className={labelClasses}>
+      <div className="field">
+        <label htmlFor={`${formId}-email`}>
           Email
         </label>
         <input
@@ -149,9 +153,9 @@ export default function CollaborationForm() {
         )}
       </div>
 
-      <div className="space-y-2">
-        <label htmlFor={`${formId}-instagram`} className={labelClasses}>
-          Instagram o web <span className="font-normal text-ink-soft">(opcional)</span>
+      <div className="field">
+        <label htmlFor={`${formId}-instagram`} >
+          Instagram o web <span className="hint">(opcional)</span>
         </label>
         <input
           id={`${formId}-instagram`}
@@ -172,32 +176,26 @@ export default function CollaborationForm() {
         )}
       </div>
 
-      <fieldset className="space-y-2">
-        <legend className={labelClasses}>Tipo de colaboración</legend>
+      <fieldset className="field">
+        <legend>Tipo de colaboración</legend>
         <div
           role="radiogroup"
           aria-describedby={errors.tipoColaboracion ? `${formId}-tipo-error` : undefined}
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          className="chips"
         >
           {collaborationTypeOptions.map((option) => {
             const checked = data.tipoColaboracion === option.value;
             return (
-              <label
-                key={option.value}
-                className={`cursor-pointer rounded-md border px-4 py-3 text-[14px] transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-rose-dark ${
-                  checked ? "border-rose-dark bg-rose-tint text-ink" : "border-hairline text-ink-soft hover:border-rose"
-                }`}
-              >
+              <label key={option.value} className="chip">
                 <input
                   type="radio"
                   name="tipoColaboracion"
                   value={option.value}
                   checked={checked}
                   onChange={() => update("tipoColaboracion", option.value)}
-                  className="sr-only"
                   required
                 />
-                {option.label}
+                <span>{option.label}</span>
               </label>
             );
           })}
@@ -209,8 +207,8 @@ export default function CollaborationForm() {
         )}
       </fieldset>
 
-      <div className="space-y-2">
-        <label htmlFor={`${formId}-mensaje`} className={labelClasses}>
+      <div className="field">
+        <label htmlFor={`${formId}-mensaje`}>
           Mensaje
         </label>
         <textarea
@@ -224,7 +222,8 @@ export default function CollaborationForm() {
           onChange={(e) => update("mensaje", e.target.value)}
           aria-invalid={Boolean(errors.mensaje)}
           aria-describedby={errors.mensaje ? `${formId}-mensaje-error` : undefined}
-          className={`${inputClasses} resize-none`}
+          className={inputClasses}
+          style={{ resize: "vertical" }}
         />
         {errors.mensaje && (
           <p id={`${formId}-mensaje-error`} className={errorClasses}>
@@ -250,12 +249,12 @@ export default function CollaborationForm() {
       </div>
 
       {submitError && (
-        <p role="alert" className={errorClasses}>
+        <p role="alert" className="form-error">
           {submitError}
         </p>
       )}
 
-      <button type="submit" disabled={isSubmitting} className={`${primaryButtonClasses} w-full`}>
+      <button type="submit" disabled={isSubmitting} className="btn btn-tinta">
         {isSubmitting ? "Enviando…" : "Proponer una colaboración"}
       </button>
     </form>

@@ -40,7 +40,7 @@ export default function EventCards({ events }: { events: PublicEvent[] }) {
             <span>
               {e.venue}, {e.city}
               {e.priceEuros != null && ` · ${e.priceEuros} €`}
-              {e.selectBenefit && " · Privilegio Select"}
+              {e.selectBenefit && " · 20 % con tu código Select"}
             </span>
             {e.status === "sold_out" ? (
               <span>Completo</span>

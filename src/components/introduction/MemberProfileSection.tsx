@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { finalizeOnboarding } from "@/lib/introduction/profile";
 import { useSharedProfile } from "@/lib/introduction/profileCache";
 import { legacyFetchJson } from "@/lib/legacyImport/legacyFetch";
+import { memberFetchJson } from "@/lib/member/memberFetch";
 import {
   getPrerequisiteRedirect,
   isAboutMeComplete,
@@ -31,6 +32,7 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
   const { profile, error: profileError, refresh: refreshProfile, mutate } = useSharedProfile(uid);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [consent, setConsent] = useState(false);
 
   useEffect(() => {
     if (!profile) return;
@@ -82,6 +84,14 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
         }));
         return;
       }
+      if (!consent) {
+        setError("Para finalizar, confirma que aceptas participar en las introducciones privadas.");
+        return;
+      }
+      await memberFetchJson("/api/member/introductions-consent", {
+        method: "POST",
+        body: JSON.stringify({ introductionsConsent: true }),
+      });
       await finalizeOnboarding(uid);
       mutate((prev) => ({ ...prev, meta: { ...prev.meta, onboardingFinalized: true } }));
     } catch {
@@ -144,6 +154,29 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
         <p role="alert" className="mt-4 text-sm text-[#8a3b3b]">
           {error}
         </p>
+      )}
+
+      {!finalized && !profile.meta.pendingLegacyActivation && (
+        <label className="mt-8 flex items-start gap-3 text-left text-[14px] leading-relaxed text-ink-soft">
+          <input
+            type="checkbox"
+            checked={consent}
+            onChange={(e) => setConsent(e.target.checked)}
+            className="mt-1 h-4 w-4 flex-none accent-ink"
+          />
+          <span>
+            Acepto participar en las introducciones privadas de Junto Select: podéis proponer mi perfil a
+            personas compatibles, y solo compartiréis mi contacto si los dos aceptamos. He leído los{" "}
+            <Link href="/terminos" target="_blank" className={linkClasses}>
+              Términos y Condiciones
+            </Link>{" "}
+            y la{" "}
+            <Link href="/privacidad" target="_blank" className={linkClasses}>
+              Política de Privacidad
+            </Link>
+            .
+          </span>
+        </label>
       )}
 
       {!finalized && (
