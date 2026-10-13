@@ -4,8 +4,8 @@ import Link from "next/link";
 import SiteHeader from "@/components/salon/SiteHeader";
 import { PLAN_DISPLAY, PLAN_KEYS } from "@/lib/billing/plans";
 import { EVENT_BENEFIT, joinHref } from "@/lib/site/content";
-import doorPhoto from "../../../../public/images/private-curated.png";
-import salonPhoto from "../../../../public/images/who-you-meet.png";
+import doorPhoto from "../../../../public/images/guest-portrait-candlelight.jpg";
+import salonPhoto from "../../../../public/images/champagne-toast.jpg";
 
 export const metadata: Metadata = {
   title: "Membresía Select · Club privado para solteros a partir de 40",
@@ -51,11 +51,11 @@ export default function MembershipPage() {
         <div className="ph">
           <Image
             src={doorPhoto}
-            alt="Una invitada entra en el salón de un encuentro"
+            alt="Una invitada en una cena a la luz de las velas"
             fill
             priority
             sizes="100vw"
-            style={{ objectPosition: "55% 35%" }}
+            style={{ objectPosition: "50% 30%" }}
           />
         </div>
         <div className="wrap">
@@ -65,8 +65,8 @@ export default function MembershipPage() {
           </h1>
           <div className="hero-row">
             <p>
-              Para solteros a partir de 40: introducciones privadas en Madrid, un 20 % en un encuentro al mes y tu
-              propia cuenta de miembro.
+              Para solteros a partir de 40: una comunidad selecta, introducciones privadas en Madrid y un 20 % de
+              descuento en un encuentro al mes.
             </p>
             <div className="hero-cta">
               <a className="btn btn-laton" href="#planes">
@@ -95,7 +95,7 @@ export default function MembershipPage() {
             </p>
           </div>
           <div className="photo">
-            <Image src={salonPhoto} alt="Invitados conversando en un encuentro" fill sizes="(max-width: 1080px) 100vw, 50vw" />
+            <Image src={salonPhoto} alt="Dos invitados brindan con champagne a la luz de las velas" fill sizes="(max-width: 1080px) 100vw, 50vw" />
           </div>
         </div>
       </section>

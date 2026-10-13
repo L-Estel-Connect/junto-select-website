@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import SiteHeader from "@/components/salon/SiteHeader";
 import { FIGURES, joinHref } from "@/lib/site/content";
-import clubPhoto from "../../../../public/images/who-you-meet.png";
+import clubPhoto from "../../../../public/images/conversation-champagne.jpg";
 
 export const metadata: Metadata = {
   title: "El Club · Comunidad privada de solteros",
@@ -26,7 +26,7 @@ const LEVELS = [
   {
     n: "III",
     title: "Membresía Select",
-    text: "Para quienes quieren formar parte del club por completo: introducciones privadas, un 20 % en un encuentro al mes y su propia cuenta de miembro.",
+    text: "Para quienes quieren formar parte del club por completo: una comunidad selecta, introducciones privadas y un 20 % de descuento en un encuentro al mes.",
   },
 ];
 
@@ -50,7 +50,7 @@ export default function ClubPage() {
       <section className="club" style={{ paddingTop: 0 }}>
         <div className="wrap">
           <div className="photo">
-            <Image src={clubPhoto} alt="Invitados riendo alrededor de una mesa con velas" fill sizes="(max-width: 1080px) 100vw, 50vw" />
+            <Image src={clubPhoto} alt="Una invitada sonríe en una conversación con una copa de champagne" fill sizes="(max-width: 1080px) 100vw, 50vw" />
           </div>
           <div className="club-txt">
             <p className="eyebrow">Para quién</p>

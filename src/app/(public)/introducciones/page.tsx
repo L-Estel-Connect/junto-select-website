@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import SiteHeader from "@/components/salon/SiteHeader";
-import salonPhoto from "../../../../public/images/who-you-meet.png";
+import salonPhoto from "../../../../public/images/candlelit-lounge-table.jpg";
 
 export const metadata: Metadata = {
   title: "Introducciones privadas · Solteros a partir de 40 en Madrid",

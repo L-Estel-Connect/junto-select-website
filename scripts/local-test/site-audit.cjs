@@ -186,10 +186,10 @@ async function statusOf(path) {
   check("membresía: Cómo funcionan → /introducciones", (await href("text=Cómo funcionan")) === "/introducciones");
   {
     const body = await page.locator("main").innerText();
-    check("membresía: no member-account benefit", !body.includes("Tu cuenta de miembro") && !body.includes("Tu propio espacio"));
+    check("membresía: no member-account benefit", !/cuenta de miembro|propio espacio/i.test(body));
+    const titles = await page.locator(".p2-grid h3").allInnerTexts();
     check("membresía: benefits in approved order",
-      body.indexOf("Una comunidad selecta") > -1 && body.indexOf("Una comunidad selecta") < body.indexOf("Introducciones privadas") &&
-        body.indexOf("Introducciones privadas") < body.indexOf("20 % de descuento en un encuentro al mes"));
+      titles.slice(0, 3).join(" | ") === "Una comunidad selecta | Introducciones privadas | 20 % de descuento en un encuentro al mes", titles.join(" | "));
   }
   check("membresía: closing link → /unete", (await href(".p2-close >> text=Únete al club sin compromiso")) === "/unete");
 
