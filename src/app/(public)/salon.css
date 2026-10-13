@@ -417,7 +417,8 @@
   .salon .burger { display: block; }
   .salon .club .wrap, .salon .form-grid { grid-template-columns: minmax(0,1fr); gap: 56px; }
   .salon .form-aside { position: static; }
-  .salon .select,   .salon .clist { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .salon .select { grid-template-columns: minmax(0,1fr); min-height: 0; }
+  .salon .clist { grid-template-columns: repeat(2, minmax(0,1fr)); }
   .salon .clist li { border-left: 0 !important; border-top: 1px solid var(--linea); }
   .salon .clist li:nth-child(-n+2) { border-top: 0; }
   .salon .clist li:nth-child(even) { border-left: 1px solid var(--linea) !important; }
@@ -434,7 +435,7 @@
   .salon .hdr .btn { padding: 10px 11px; font-size: 10px; letter-spacing: .08em; white-space: nowrap; }
   .salon .word { font-size: 12.5px; letter-spacing: .26em; white-space: nowrap; }
   /* Very narrow phones: the menu carries the same button. */
-  @media (max-width: 350px) { .salon .hdr-actions .btn { display: none; } }
+  @media (max-width: 374px) { .salon .hdr-actions .btn { display: none; } }
   .salon .hero { min-height: 740px; }
   .salon .hero::after { background: linear-gradient(180deg, rgba(20,14,12,.5) 0%, rgba(20,14,12,.05) 24%, rgba(28,15,16,.5) 55%, rgba(28,15,16,.94) 100%); }
   .salon .hero .wrap { gap: 22px; padding-bottom: 44px; }

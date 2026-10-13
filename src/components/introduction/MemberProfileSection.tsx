@@ -296,7 +296,7 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
               type="button"
               disabled={saving}
               onClick={() => void choosePassive()}
-              className={`mt-6 text-[14px] ${linkClasses}`}
+              className="mt-6 inline-flex w-full items-center justify-center rounded-full border border-ink/30 px-9 py-4 text-[13px] font-medium uppercase tracking-[0.18em] text-ink transition-colors duration-200 hover:border-ink disabled:cursor-not-allowed disabled:opacity-60"
             >
               {saving ? "Guardando…" : "Quedarme como perfil pasivo, sin coste"}
             </button>

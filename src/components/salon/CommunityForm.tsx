@@ -152,7 +152,7 @@ export default function CommunityForm({ initialCity, source }: { initialCity: Co
         <label htmlFor={`${id}-ciudad`}>Ciudad</label>
         <select
           id={`${id}-ciudad`}
-          className="input select"
+          className="input"
           value={data.ciudad}
           onChange={(e) => update("ciudad", e.target.value as CommunityCity)}
           aria-invalid={Boolean(errors.ciudad)}

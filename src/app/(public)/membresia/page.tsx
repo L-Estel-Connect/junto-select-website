@@ -4,8 +4,8 @@ import Link from "next/link";
 import SiteHeader from "@/components/salon/SiteHeader";
 import { PLAN_DISPLAY, PLAN_KEYS } from "@/lib/billing/plans";
 import { EVENT_BENEFIT, joinHref } from "@/lib/site/content";
-import doorPhoto from "../../../../public/images/guest-portrait-candlelight.jpg";
-import salonPhoto from "../../../../public/images/champagne-toast.jpg";
+import doorPhoto from "../../../../public/images/private-curated.png";
+import salonPhoto from "../../../../public/images/guest-portrait-candlelight.jpg";
 
 export const metadata: Metadata = {
   title: "Membresía Select · Club privado para solteros a partir de 40",
@@ -51,11 +51,11 @@ export default function MembershipPage() {
         <div className="ph">
           <Image
             src={doorPhoto}
-            alt="Una invitada en una cena a la luz de las velas"
+            alt="Una invitada entra en el salón de un encuentro"
             fill
             priority
             sizes="100vw"
-            style={{ objectPosition: "50% 30%" }}
+            style={{ objectPosition: "55% 35%" }}
           />
         </div>
         <div className="wrap">
@@ -95,7 +95,7 @@ export default function MembershipPage() {
             </p>
           </div>
           <div className="photo">
-            <Image src={salonPhoto} alt="Dos invitados brindan con champagne a la luz de las velas" fill sizes="(max-width: 1080px) 100vw, 50vw" />
+            <Image src={salonPhoto} alt="Una invitada sonríe en una cena a la luz de las velas" fill sizes="(max-width: 1080px) 100vw, 50vw" />
           </div>
         </div>
       </section>

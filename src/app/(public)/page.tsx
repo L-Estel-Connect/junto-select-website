@@ -7,7 +7,7 @@ import { FIGURES, joinHref } from "@/lib/site/content";
 import { getUpcomingEvents } from "@/lib/site/events";
 import heroPhoto from "../../../public/images/hero.png";
 import clubPhoto from "../../../public/images/who-you-meet.png";
-import selectPhoto from "../../../public/images/private-curated.png";
+import selectPhoto from "../../../public/images/champagne-toast.jpg";
 
 const organizationJsonLd = {
   "@context": "https://schema.org",
@@ -120,7 +120,7 @@ export default async function Home() {
 
       <section className="select" aria-labelledby="sel-h">
         <div className="photo">
-          <Image src={selectPhoto} alt="Una invitada entra en un salón iluminado con velas" fill sizes="(max-width: 1080px) 100vw, 50vw" />
+          <Image src={selectPhoto} alt="Dos invitados brindan con champagne a la luz de las velas" fill sizes="(max-width: 1080px) 100vw, 50vw" />
         </div>
         <div className="in">
           <p className="eyebrow">Membresía Select</p>
