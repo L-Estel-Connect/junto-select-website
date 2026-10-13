@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { auth } from "@/lib/firebase/client";
 import { IntroductionError, IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
 import { useMemberProfile } from "./useMemberProfile";
@@ -15,7 +15,7 @@ import { primaryButtonClasses } from "@/lib/styles";
 import { CONTACT_EMAIL } from "@/lib/site/content";
 
 const MARKET_NOT_AVAILABLE_MESSAGE =
-  "Junto Select está disponible actualmente solo para Madrid. Para recibir selecciones, necesitas vivir en Madrid, cerca de Madrid o venir a Madrid con cierta frecuencia. Si tu situación cambia, podrás actualizar esta respuesta más adelante.";
+  "Junto Select está disponible actualmente solo para Madrid. Para recibir propuestas, necesitas vivir en Madrid, cerca de Madrid o venir a Madrid con cierta frecuencia. Si tu situación cambia, podrás actualizar esta respuesta más adelante.";
 
 async function authedFetch(path: string, body?: Record<string, unknown>) {
   const idToken = await auth.currentUser?.getIdToken();
@@ -51,7 +51,7 @@ function formatEventDate(ymd: string | null): string | null {
 }
 
 const DISCLOSURES = [
-  "Recibe hasta 3 selecciones cuidadosas al mes — las que no uses no se acumulan.",
+  "Hasta 3 propuestas al mes. Las que no uses no se acumulan.",
   "Como miembro, también recibes un código personal del 20 % por ciclo mensual para un encuentro Junto Select elegible.",
 ];
 
@@ -466,11 +466,16 @@ export function PlanCheckoutForm({
   returnTo,
   beforeCheckout,
   disabledReason,
+  leadingConfirmation,
+  leadingConfirmed,
 }: {
   marketEligible: boolean;
   returnTo?: "profile";
   beforeCheckout?: () => Promise<void>;
   disabledReason?: string | null;
+  /** An extra required box shown first in "Confirmaciones" (the Introducciones participation consent). */
+  leadingConfirmation?: ReactNode;
+  leadingConfirmed?: boolean;
 }) {
   const [selectedPlan, setSelectedPlan] = useState<PlanKey>("three_month");
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -508,66 +513,72 @@ export function PlanCheckoutForm({
     }
   }
 
+  const missingConfirmations =
+    (leadingConfirmation && !leadingConfirmed ? 1 : 0) + (termsAccepted ? 0 : 1) + (immediateServiceRequested ? 0 : 1);
+  const checkboxLabelClasses = "flex items-start gap-3 text-[14px] leading-relaxed text-ink";
+
   return (
     <>
-      <div className="mt-8 space-y-3">
-        {PLAN_KEYS.map((key) => (
-          <PlanCard key={key} planKey={key} selected={selectedPlan === key} onSelect={() => setSelectedPlan(key)} />
-        ))}
-      </div>
-
-      <div className="mt-8">
-        <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">
-          Antes de continuar
-        </p>
-        <ul className="mt-3 space-y-2 text-[13px] leading-relaxed text-ink-soft">
+      <div className="mt-6">
+        <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">Incluye</p>
+        <ul className="mt-3 space-y-2 text-[14px] leading-relaxed text-ink-soft">
           {DISCLOSURES.map((line) => (
-            <li key={line} className="flex gap-2">
-              <span aria-hidden className="mt-1 h-1 w-1 shrink-0 rounded-full bg-ink-soft" />
+            <li key={line} className="flex gap-3">
+              <span aria-hidden className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-[var(--laton,#625952)]" />
               <span>{line}</span>
             </li>
           ))}
         </ul>
       </div>
 
-      <label className="mt-6 flex items-start gap-3 text-[13px] leading-relaxed text-ink">
-        <input
-          type="checkbox"
-          checked={termsAccepted}
-          onChange={(e) => setTermsAccepted(e.target.checked)}
-          className="mt-0.5 h-4 w-4 shrink-0"
-        />
-        <span>
-          He leído y acepto los{" "}
-          <a href="/terminos" target="_blank" className="underline decoration-hairline underline-offset-4">
-            Términos y condiciones
-          </a>{" "}
-          y la{" "}
-          <a href="/privacidad" target="_blank" className="underline decoration-hairline underline-offset-4">
-            Política de privacidad
-          </a>
-          , incluida la renovación automática.
-        </span>
-      </label>
+      <div className="mt-6 space-y-3">
+        {PLAN_KEYS.map((key) => (
+          <PlanCard key={key} planKey={key} selected={selectedPlan === key} onSelect={() => setSelectedPlan(key)} />
+        ))}
+      </div>
 
-      <label className="mt-4 flex items-start gap-3 text-[13px] leading-relaxed text-ink">
-        <input
-          type="checkbox"
-          checked={immediateServiceRequested}
-          onChange={(e) => setImmediateServiceRequested(e.target.checked)}
-          className="mt-0.5 h-4 w-4 shrink-0"
-        />
-        <span>
-          Solicito que mi membresía y búsqueda activa comiencen inmediatamente. He leído y acepto
-          las condiciones aplicables al desistimiento recogidas en los{" "}
-          <a href="/terminos" target="_blank" className="underline decoration-hairline underline-offset-4">
-            Términos y condiciones
-          </a>
-          .
-        </span>
-      </label>
+      <fieldset className="mt-8 space-y-4 rounded-md border border-hairline bg-white/60 p-5">
+        <legend className="px-1 text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">Confirmaciones</legend>
+        {leadingConfirmation}
+        <label className={checkboxLabelClasses}>
+          <input
+            type="checkbox"
+            checked={termsAccepted}
+            onChange={(e) => setTermsAccepted(e.target.checked)}
+            className="mt-1 h-4 w-4 shrink-0"
+          />
+          <span>
+            He leído y acepto los{" "}
+            <a href="/terminos" target="_blank" className="underline decoration-hairline underline-offset-4">
+              Términos y condiciones
+            </a>{" "}
+            y la{" "}
+            <a href="/privacidad" target="_blank" className="underline decoration-hairline underline-offset-4">
+              Política de privacidad
+            </a>
+            , incluida la renovación automática.
+          </span>
+        </label>
 
-      <div className="mt-6 flex items-center justify-between border-t border-hairline pt-4 text-[14px]">
+        <label className={checkboxLabelClasses}>
+          <input
+            type="checkbox"
+            checked={immediateServiceRequested}
+            onChange={(e) => setImmediateServiceRequested(e.target.checked)}
+            className="mt-1 h-4 w-4 shrink-0"
+          />
+          <span>
+            Solicito que mi membresía y búsqueda activa comiencen inmediatamente. He leído y acepto
+            las condiciones aplicables al desistimiento recogidas en los{" "}
+            <a href="/terminos" target="_blank" className="underline decoration-hairline underline-offset-4">
+              Términos y condiciones
+            </a>
+            .
+          </span>
+        </label>
+      </fieldset>
+
+      <div className="mt-6 flex items-center justify-between border-t border-hairline pt-4 text-[15px]">
         <span className="text-ink">Total a pagar ahora</span>
         <span className="font-medium text-ink">{PLAN_DISPLAY[selectedPlan].priceEuros} €</span>
       </div>
@@ -582,11 +593,18 @@ export function PlanCheckoutForm({
         type="button"
         onClick={handleCheckout}
         disabled={submitting || !termsAccepted || !immediateServiceRequested || !marketEligible || !!disabledReason}
-        className="mt-4 w-full rounded-full bg-ink px-9 py-4 text-center text-[13px] font-medium uppercase tracking-[0.18em] text-white transition-opacity disabled:opacity-40"
+        className={`${primaryButtonClasses} mt-4 w-full`}
       >
         {submitting ? "Redirigiendo a Stripe…" : `Continuar al pago — ${PLAN_DISPLAY[selectedPlan].priceEuros} €`}
       </button>
-      {disabledReason && !checkoutError && <p className="mt-3 text-[13px] text-ink-soft">{disabledReason}</p>}
+      {!checkoutError && missingConfirmations > 0 && (
+        <p className="mt-2 text-center text-[13px] text-ink-soft">
+          {missingConfirmations === 1 ? "Falta 1 confirmación." : `Faltan ${missingConfirmations} confirmaciones.`}
+        </p>
+      )}
+      {disabledReason && !checkoutError && missingConfirmations === 0 && (
+        <p className="mt-2 text-center text-[13px] text-ink-soft">{disabledReason}</p>
+      )}
       {checkoutError && (
         <p role="alert" className="mt-3 text-[13px] text-[#8a3b3b]">
           {checkoutError}
@@ -674,8 +692,8 @@ export default function PlanSection({ uid }: { uid: string }) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[560px] flex-col px-6 py-14 sm:px-0">
-      <h1 className="font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">Mi plan</h1>
+    <div className="mx-auto flex w-full max-w-[560px] flex-col py-14">
+      <h1 className="font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">Mi plan</h1>
 
       {checkoutParam === "success" && !entitled && (
         <div className="mt-4 rounded-xl border border-hairline bg-white p-4 text-[14px] text-ink-soft">
@@ -693,7 +711,7 @@ export default function PlanSection({ uid }: { uid: string }) {
         <>
           {profile?.meta.onboardingFinalized ? (
             <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-              Tu membresía está activa: Junto Select está buscando por ti y recibirás hasta 3 selecciones
+              Tu membresía está activa: Junto Select está buscando por ti y recibirás hasta 3 propuestas
               al mes, siempre que encontremos perfiles compatibles con tus criterios en Madrid.
             </p>
           ) : (
@@ -708,7 +726,7 @@ export default function PlanSection({ uid }: { uid: string }) {
           )}
           {profile?.meta.onboardingFinalized && !marketEligible && (
             <div className="mt-4 rounded-xl border border-hairline bg-white p-4 text-[14px] text-ink-soft">
-              Tus selecciones están en pausa porque Junto Select está disponible actualmente solo para
+              Tus propuestas están en pausa porque Junto Select está disponible actualmente solo para
               Madrid. Actualiza tu disponibilidad en{" "}
               <a href="/member/profile/about" className="underline decoration-hairline underline-offset-4">
                 Sobre ti
@@ -730,7 +748,7 @@ export default function PlanSection({ uid }: { uid: string }) {
           <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
             Formar parte de Junto Select es gratuito: tu perfil permanece en nuestra base privada y
             puede aparecer como una posible selección para otros miembros. Para recibir tú mismo/a
-            hasta 3 selecciones al mes, hazte miembro.
+            hasta 3 propuestas al mes, hazte miembro.
           </p>
 
           <div className="mt-10 border-t border-hairline">

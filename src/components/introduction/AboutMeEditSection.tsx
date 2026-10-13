@@ -319,12 +319,12 @@ export default function AboutMeEditSection({ uid }: { uid: string }) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[640px] flex-col px-6 py-14 sm:px-0">
+    <div className="mx-auto flex w-full max-w-[640px] flex-col py-14">
       <Link href="/member/profile" className={`text-sm ${linkClasses}`}>
         ← Volver a mi perfil
       </Link>
 
-      <h1 className="mt-6 font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">
+      <h1 className="mt-6 font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">
         Sobre ti
       </h1>
       <p className="mt-2 max-w-[52ch] text-[15px] leading-relaxed text-ink-soft">

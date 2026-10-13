@@ -19,7 +19,7 @@ import type { MemberLifecycleSummary } from "@/lib/matching/memberLifecycleTypes
 const NAV_ITEMS = [
   { href: "/member", label: "Inicio" },
   { href: "/member/profile", label: "Mi perfil" },
-  { href: "/member/proposals", label: "Selecciones" },
+  { href: "/member/proposals", label: "Propuestas" },
   { href: "/member/connections", label: "Conexiones" },
   { href: "/member/plan", label: "Mi plan" },
   { href: "/member/settings", label: "Ajustes" },

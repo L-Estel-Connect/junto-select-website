@@ -76,7 +76,9 @@ export default function MemberHome({ uid }: { uid: string }) {
   }
 
   const summary = summaryQuery.data?.summary ?? null;
-  const searchLabel = billingLoading || !billing ? "…" : isEntitledStatus(billing.status) ? "Activa" : "No activa";
+  // Paid Select membership = "Búsqueda activa"; otherwise the finalized
+  // profile is a passive one (it can still be proposed to Select members).
+  const modeLabel = billingLoading ? "…" : billing && isEntitledStatus(billing.status) ? "Búsqueda activa" : "Perfil pasivo";
 
   const pendingCount = summary
     ? summary.proposalsWaitingForDecision + summary.invitationsWaitingForDecision
@@ -85,8 +87,8 @@ export default function MemberHome({ uid }: { uid: string }) {
   const hasIntroductions = (summary?.mutualIntroductionsCount ?? 0) > 0;
 
   return (
-    <div className="mx-auto flex w-full max-w-[560px] flex-col px-6 py-14 sm:px-0">
-      <p className="font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">
+    <div className="mx-auto flex w-full max-w-[560px] flex-col py-14">
+      <p className="font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">
         Hola, {profile.visible.firstName || "de nuevo"}
       </p>
       <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
@@ -95,13 +97,13 @@ export default function MemberHome({ uid }: { uid: string }) {
       </p>
 
       {hasPending && (
-        <div className="mt-8 rounded-2xl border border-rose bg-white p-6">
+        <div className="mt-8 rounded-md border border-[var(--laton,#cdbfad)] bg-white/60 p-6">
           <p className="text-[15px] font-medium text-ink">
             {summary!.invitationsWaitingForDecision > 0 && summary!.proposalsWaitingForDecision > 0
-              ? "Tienes una selección y alguien esperando tu respuesta."
+              ? "Tienes una propuesta y alguien esperando tu respuesta."
               : summary!.invitationsWaitingForDecision > 0
                 ? "Alguien está esperando tu respuesta."
-                : "Tienes una selección esperando tu respuesta."}
+                : "Tienes una propuesta esperando tu respuesta."}
           </p>
           <Link href="/member/proposals" className={`${primaryButtonClasses} mt-4 inline-flex`}>
             Ver ahora
@@ -110,7 +112,7 @@ export default function MemberHome({ uid }: { uid: string }) {
       )}
 
       {!hasPending && hasIntroductions && (
-        <div className="mt-8 rounded-2xl border border-hairline bg-white p-6">
+        <div className="mt-8 rounded-md border border-hairline bg-white/60 p-6">
           <p className="text-[15px] font-medium text-ink">Tienes una conexión mutua.</p>
           <Link href="/member/connections" className={`mt-3 inline-block text-sm ${linkClasses}`}>
             Ver mi conexión
@@ -126,7 +128,7 @@ export default function MemberHome({ uid }: { uid: string }) {
           pending), so nothing renders — exactly the "nothing exposed
           before/during the event" state the product spec requires. */}
       {reconnectQuery.data?.event && (
-        <div className="mt-8 rounded-2xl border border-hairline bg-white p-6">
+        <div className="mt-8 rounded-md border border-hairline bg-white/60 p-6">
           <p className="text-[15px] font-medium text-ink">Reconnect · {reconnectQuery.data.event.eventLabel}</p>
           <p className="mt-1 text-[13px] text-ink-soft">¿Conociste a alguien que te gustaría volver a ver?</p>
           <Link
@@ -140,7 +142,7 @@ export default function MemberHome({ uid }: { uid: string }) {
 
       <div className="mt-10 border-t border-hairline">
         <StatusRow label="Perfil" value="Completo" />
-        <StatusRow label="Búsqueda de Junto Select" value={searchLabel} />
+        <StatusRow label="Modalidad" value={modeLabel} />
       </div>
 
       <div className="mt-8 flex flex-wrap items-center gap-6">
@@ -154,14 +156,14 @@ export default function MemberHome({ uid }: { uid: string }) {
 
       {!hasPending && (
         <div className="mt-14 border-t border-hairline pt-8">
-          <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">
-            Tus selecciones
+          <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">
+            Tus propuestas
           </p>
           <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-            Cuando tengamos una selección para ti, o alguien se interese en conocerte, aparecerá aquí.
+            Cuando tengamos una propuesta para ti, o alguien se interese en conocerte, aparecerá aquí.
           </p>
           <Link href="/member/proposals" className={`mt-3 inline-block text-sm ${linkClasses}`}>
-            Ver mis selecciones
+            Ver mis propuestas
           </Link>
         </div>
       )}

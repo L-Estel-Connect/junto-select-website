@@ -42,7 +42,7 @@ export default function ConnectionsSection({ uid }: { uid: string }) {
 
   return (
     <div className="mx-auto flex w-full max-w-[1100px] flex-col px-6 py-14">
-      <h1 className="font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">
+      <h1 className="font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">
         Conexiones
       </h1>
 

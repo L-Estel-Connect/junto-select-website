@@ -5,7 +5,7 @@ import type { AboutMeStep } from "@/lib/introduction/aboutMeFields";
 import { primaryButtonClasses } from "@/lib/styles";
 
 const cardOptionClasses = (checked: boolean) =>
-  `w-full cursor-pointer rounded-md border px-5 py-4 text-left text-[16px] transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-rose-dark ${
+  `choice-card ${checked ? "choice-selected" : ""} w-full cursor-pointer rounded-md border bg-white/60 px-5 py-4 text-left text-[16px] transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-rose-dark ${
     checked
       ? "border-rose-dark bg-rose-tint text-ink"
       : "border-hairline text-ink hover:border-rose"
@@ -24,11 +24,14 @@ interface Props {
 export default function StepQuestion({ step, value, saving, onAnswer }: Props) {
   return (
     <div>
-      <h1 className="font-serif text-[26px] font-normal leading-snug text-ink sm:text-3xl">
+      <h1 className="font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">
         {step.question}
       </h1>
       {step.helper && (
-        <p className="mt-2 text-[15px] text-ink-soft">{step.helper}</p>
+        <p className={`mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft ${step.private ? "flex items-start gap-2" : ""}`}>
+          {step.private && <PrivateIcon />}
+          <span>{step.helper}</span>
+        </p>
       )}
 
       <div className="mt-8">
@@ -57,24 +60,45 @@ function StepInput({ step, value, saving, onAnswer }: Props) {
   }
 }
 
+/** Small lock shown before the privacy note of private answers. */
+function PrivateIcon() {
+  return (
+    <svg aria-hidden viewBox="0 0 12 14" className="mt-[5px] h-[13px] w-[11px] flex-none" fill="none" stroke="currentColor" strokeWidth="1.2">
+      <rect x="1" y="6" width="10" height="7" rx="1" />
+      <path d="M3.5 6V4a2.5 2.5 0 0 1 5 0v2" />
+    </svg>
+  );
+}
+
+/**
+ * On a phone the button sits in a bar fixed to the bottom of the screen,
+ * within reach of the thumb; when it can't be used yet, a line says why.
+ */
 function ContinueButton({
   disabled,
   saving,
   onClick,
+  hint,
 }: {
   disabled?: boolean;
   saving: boolean;
   onClick: () => void;
+  hint?: string;
 }) {
   return (
-    <button
-      type="button"
-      disabled={disabled || saving}
-      onClick={onClick}
-      className={`${primaryButtonClasses} mt-6 w-full`}
-    >
-      {saving ? "Guardando…" : "Continuar"}
-    </button>
+    <div className="sticky bottom-0 z-10 -mx-6 mt-6 border-t border-hairline bg-paper px-6 pb-[max(env(safe-area-inset-bottom),16px)] pt-4 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
+      <button
+        type="button"
+        disabled={disabled || saving}
+        onClick={onClick}
+        className={`${primaryButtonClasses} w-full`}
+      >
+        {saving ? "Guardando…" : "Continuar"}
+      </button>
+      {disabled && !saving && hint && (
+        <p className="mt-2 text-center text-[13px] text-ink-soft">{hint}</p>
+      )}
+    </div>
   );
 }
 
@@ -100,6 +124,7 @@ function TextInput({ step, value, saving, onAnswer }: Props) {
         disabled={!text.trim()}
         saving={saving}
         onClick={() => onAnswer(text.trim())}
+        hint="Escribe tu respuesta para continuar."
       />
     </div>
   );
@@ -135,6 +160,7 @@ function NumberInput({ step, value, saving, onAnswer }: Props) {
         disabled={!isValid}
         saving={saving}
         onClick={() => onAnswer(parsed)}
+        hint={`Escribe un número entre ${numberStep.min} y ${numberStep.max}.`}
       />
       {!numberStep.required && (
         <button
@@ -163,7 +189,7 @@ function DateInput({ value, saving, onAnswer }: Props) {
         onChange={(e) => setText(e.target.value)}
         className={inputClasses}
       />
-      <ContinueButton disabled={!isValid} saving={saving} onClick={() => onAnswer(text)} />
+      <ContinueButton disabled={!isValid} saving={saving} onClick={() => onAnswer(text)} hint="Indica tu fecha de nacimiento para continuar." />
     </div>
   );
 }
@@ -204,6 +230,7 @@ function ChipsInput({ step, value, saving, onAnswer }: Props) {
 
   return (
     <div>
+      <p className="mb-4 text-[13px] text-ink-soft">Puedes elegir varias.</p>
       <div className="flex flex-wrap gap-2.5">
         {chipsStep.options.map((option) => {
           const checked = selected.includes(option.value);
@@ -213,12 +240,14 @@ function ChipsInput({ step, value, saving, onAnswer }: Props) {
               type="button"
               disabled={saving}
               onClick={() => toggle(option.value)}
+              aria-pressed={checked}
               className={`rounded-full border px-5 py-3 text-[15px] transition-colors ${
                 checked
                   ? "border-rose-dark bg-rose-tint text-ink"
-                  : "border-hairline text-ink hover:border-rose"
+                  : "border-hairline bg-white/60 text-ink hover:border-rose"
               }`}
             >
+              {checked && <span aria-hidden className="mr-1.5 text-rose-dark">✓</span>}
               {option.label}
             </button>
           );
@@ -228,6 +257,7 @@ function ChipsInput({ step, value, saving, onAnswer }: Props) {
         disabled={selected.length === 0}
         saving={saving}
         onClick={() => onAnswer(selected)}
+        hint="Elige al menos una opción."
       />
     </div>
   );

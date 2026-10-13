@@ -13,6 +13,7 @@ import type { ProfileDocument } from "@/lib/introduction/types";
 import IneligibleAge from "./IneligibleAge";
 import { IntroductionError, IntroductionLoading } from "./RequireIntroductionAuth";
 import StepQuestion from "./StepQuestion";
+import { OnboardingStepper } from "./OnboardingFrame";
 
 function getByPath(obj: unknown, path: string): unknown {
   return path
@@ -294,18 +295,17 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
   }
 
   return (
-    <div className="mx-auto flex min-h-[70svh] w-full max-w-[560px] flex-col justify-center px-6 py-10 sm:px-0">
-      <div
-        role="progressbar"
-        aria-valuenow={stepIndex + 1}
-        aria-valuemin={1}
-        aria-valuemax={totalSteps}
-        className="mb-10 h-1 w-full overflow-hidden rounded-full bg-hairline"
-      >
-        <div
-          className="h-full rounded-full bg-rose-dark transition-all duration-300"
-          style={{ width: `${((stepIndex + 1) / totalSteps) * 100}%` }}
-        />
+    <div className="mx-auto flex w-full max-w-[560px] flex-col pb-10 pt-8 sm:pt-12">
+      <OnboardingStepper
+        stage={1}
+        fraction={(stepIndex + 1) / totalSteps}
+        detail={`${stepIndex + 1} de ${totalSteps}`}
+        selectJourney={profile.meta.requestedService === "select"}
+        onBack={stepIndex > 0 ? handleBack : undefined}
+      />
+
+      <div role="progressbar" aria-valuenow={stepIndex + 1} aria-valuemin={1} aria-valuemax={totalSteps} className="sr-only">
+        {`Pregunta ${stepIndex + 1} de ${totalSteps}`}
       </div>
 
       <StepQuestion
@@ -320,16 +320,6 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
         <p role="alert" className="mt-4 text-sm text-[#8a3b3b]">
           {error}
         </p>
-      )}
-
-      {stepIndex > 0 && (
-        <button
-          type="button"
-          onClick={handleBack}
-          className="mt-8 self-start text-sm text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink"
-        >
-          Atrás
-        </button>
       )}
     </div>
   );

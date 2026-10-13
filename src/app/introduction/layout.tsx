@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { salonAppClassName } from "@/lib/salon/fonts";
+import "../salon-app.css";
 
 // The sign-in/onboarding tree is authenticated-user-only content (or a
 // pre-auth landing page with nothing to index) — never indexed,
@@ -10,5 +12,5 @@ export const metadata: Metadata = {
 };
 
 export default function IntroductionLayout({ children }: { children: ReactNode }) {
-  return children;
+  return <div className={salonAppClassName}>{children}</div>;
 }

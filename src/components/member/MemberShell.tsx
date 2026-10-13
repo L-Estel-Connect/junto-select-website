@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { signInRedirectPath } from "@/lib/account/signInRedirect";
 import { useAuth } from "@/lib/firebase/useAuth";
 import { IntroductionError, IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
@@ -11,6 +11,20 @@ import { logDebugEvent } from "@/lib/introduction/onboardingDebug";
 import { MemberUidProvider } from "./MemberContext";
 import MemberNav from "./MemberNav";
 import RequireAccountChoice from "@/components/account/RequireAccountChoice";
+import { OnboardingHeader, inOnboarding } from "@/components/introduction/OnboardingFrame";
+import { useSharedProfile } from "@/lib/introduction/profileCache";
+
+/**
+ * While a profile is still being completed, its pages (/member/profile/**)
+ * use the focused onboarding header instead of the member menu, whose
+ * destinations would only send an unconfirmed profile back here.
+ */
+function ShellHeader({ uid }: { uid: string }) {
+  const pathname = usePathname();
+  const { profile } = useSharedProfile(uid);
+  if (pathname.startsWith("/member/profile") && inOnboarding(profile)) return <OnboardingHeader />;
+  return <MemberNav />;
+}
 
 /**
  * Privacidad/Términos moved out of the primary header nav (which should
@@ -94,7 +108,7 @@ export default function MemberShell({ children }: { children: ReactNode }) {
       <DebugOverlay />
       <RequireAccountChoice>
         <div className="flex min-h-svh flex-col">
-          <MemberNav />
+          <ShellHeader uid={user.uid} />
           <div className="flex-1">{children}</div>
           <MemberFooter />
         </div>

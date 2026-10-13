@@ -203,22 +203,34 @@ async function completeProfile(browser, kind) {
   // Preferences
   await page.getByRole("heading", { name: "Lo que buscas" }).waitFor();
   const row = (q) => page.locator("div.border-b", { has: page.locator(`p:text-is("${q}")`) });
-  await row("¿A quién te gustaría conocer?").getByRole("button", { name: "Hombres", exact: true }).click();
+  // Single-choice preferences are radios (segmented control); multi-choice are toggle buttons.
+  const opt = (r, name, exact = false) => r.getByRole("radio", { name, exact }).or(r.getByRole("button", { name, exact }));
+  check(`${tag}: preferences shows the five-stage stepper`, await page.getByTestId("onboarding-stepper").isVisible());
+  // Part 1 of 2: "Imprescindible para ti"
+  await opt(row("¿A quién te gustaría conocer?"), "Hombres", true).click();
   const age = row("Rango de edad").locator("input[type=number]");
   await age.nth(0).fill("45");
   await age.nth(1).fill("60");
-  await row("Distancia máxima").getByRole("button", { name: "En mi misma ciudad" }).click();
-  await row("Qué tipo de relación debe buscar la otra persona").getByRole("button", { name: "Una relación seria" }).click();
-  await row("¿Aceptarías a alguien que fuma?").getByRole("button", { name: "No", exact: true }).click();
-  await row("¿Te importaría que tuviera hijos menores de 15 años?").getByRole("button", { name: "No, no me importaría" }).click();
+  await opt(row("Distancia máxima"), "En mi misma ciudad").click();
+  await opt(row("Qué tipo de relación debe buscar la otra persona"), "Una relación seria").click();
+  await opt(row("¿Aceptarías a alguien que fuma?"), "No", true).click();
+  await opt(row("¿Te importaría que tuviera hijos menores de 15 años?"), "No, no me importaría").click();
+  check(`${tag}: preferences part 1 hides the optional group`, (await row("Rango de altura (opcional)").count()) === 0);
+  await page.waitForTimeout(800);
+  await shot(page, `${tag}-03-preferences`);
+  const prefCont1 = page.getByRole("button", { name: "Continuar", exact: true });
+  check(`${tag}: preferences part 1 Continuar enabled`, await prefCont1.isEnabled());
+  await prefCont1.click();
+  // Part 2 of 2: "Preferencias"
+  await row("Rango de altura (opcional)").waitFor({ timeout: 10000 });
   const h = row("Rango de altura (opcional)").locator("input[type=number]");
   await h.nth(0).fill("170");
   await h.nth(1).fill("195");
-  await row("¿Te importa que beba alcohol?").getByRole("button", { name: "Socialmente" }).click();
-  await row("Nivel de actividad física que prefieres").getByRole("button", { name: "Activo/a", exact: true }).click();
+  await opt(row("¿Te importa que beba alcohol?"), "Socialmente").click();
+  await opt(row("Nivel de actividad física que prefieres"), "Activo/a", true).click();
   await page.waitForTimeout(800);
-  await shot(page, `${tag}-03-preferences`);
-  const prefCont = page.getByRole("button", { name: "Continuar" });
+  await shot(page, `${tag}-03b-preferences-part2`);
+  const prefCont = page.getByRole("button", { name: "Continuar", exact: true });
   check(`${tag}: preferences Continuar enabled`, await prefCont.isEnabled());
   await prefCont.click();
   await page.waitForURL("**/member/profile/photos", { timeout: 20000 });
@@ -299,6 +311,12 @@ async function completeProfile(browser, kind) {
       const page = await ctx.newPage();
       const email = `onb.mobile.${Date.now()}@example.test`;
       await page.goto(`${APP}/introducciones`, { waitUntil: "networkidle" });
+      // Phones show one modalidad card at a time: Búsqueda activa first, a switch for the other.
+      check("mobile: passive card hidden until chosen", !(await page.getByRole("link", { name: "Crear mi perfil pasivo" }).isVisible()));
+      await page.locator("label[for=mod-passive]").click();
+      check("mobile: switch shows the passive card", await page.getByRole("link", { name: "Crear mi perfil pasivo" }).isVisible());
+      check("mobile: switch hides the active card", !(await page.getByRole("link", { name: "Empezar la búsqueda activa" }).isVisible()));
+      await shot(page, "mobile-introducciones-switch-passive");
       await page.getByRole("link", { name: "Crear mi perfil pasivo" }).first().click();
       await page.waitForURL("**/introduction**");
       await signInOnIntroduction(page, email, page.url());
@@ -326,8 +344,16 @@ async function completeProfile(browser, kind) {
         const d = await profileOf(uid);
         return d?.meta?.onboardingFinalized ? d : null;
       });
-      await page.waitForTimeout(1500);
+      await page.getByTestId("onboarding-complete").waitFor({ timeout: 20000 });
+      check("pasivo: completion screen shown", await page.getByText("Tu perfil ya forma parte de la red privada.").isVisible());
+      await page.waitForTimeout(500);
       await shot(page, "pasivo-07-finalized");
+      await page.getByRole("link", { name: "Ir a mi espacio" }).click();
+      await page.waitForURL(/\/member$/, { timeout: 20000 });
+      await page.getByText("Modalidad").waitFor({ timeout: 20000 });
+      await page.getByText("Perfil pasivo", { exact: true }).waitFor({ timeout: 20000 });
+      check("pasivo: member home shows 'Modalidad · Perfil pasivo'", true);
+      await shot(page, "pasivo-08-member-home");
       check("pasivo: meta.onboardingFinalized true", p?.meta?.onboardingFinalized === true);
       check("pasivo: meta.requestedService passive", p?.meta?.requestedService === "passive", p?.meta?.requestedService);
       check("pasivo: meta.searchStatus passive", p?.meta?.searchStatus === "passive", p?.meta?.searchStatus);
@@ -367,7 +393,9 @@ async function completeProfile(browser, kind) {
         const d = await profileOf(uid);
         return d?.meta?.onboardingFinalized ? d : null;
       }, 25000);
-      await page.waitForTimeout(3000);
+      await page.getByTestId("onboarding-complete").waitFor({ timeout: 20000 });
+      check("activa: completion screen shown", await page.getByText(/búsqueda activa ha comenzado/).isVisible());
+      await page.waitForTimeout(500);
       await shot(page, "activa-10-finalized");
       const billing = (await db.doc(`billing/${uid}`).get()).data();
       check("activa: meta.onboardingFinalized true", p?.meta?.onboardingFinalized === true);

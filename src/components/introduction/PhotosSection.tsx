@@ -15,6 +15,9 @@ import { getNextOnboardingRoute, getPrerequisiteRedirect } from "@/lib/introduct
 import { primaryButtonClasses } from "@/lib/styles";
 import PrivatePhotoThumbnail from "./PrivatePhotoThumbnail";
 import { IntroductionError, IntroductionLoading } from "./RequireIntroductionAuth";
+import { OnboardingStepper, inOnboarding } from "./OnboardingFrame";
+
+const PHOTO_TIPS = ["Una foto reciente", "Tu cara bien visible", "Luz natural, sin filtros"];
 
 const linkClasses =
   "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
@@ -130,18 +133,30 @@ export default function PhotosSection({ uid }: { uid: string }) {
   const canContinue = profile.photos.length >= 1;
 
   return (
-    <div className="mx-auto flex w-full max-w-[560px] flex-col px-6 py-14 sm:px-0">
-      <Link href="/member" className={`text-sm ${linkClasses}`}>
-        ← Volver a mi perfil
-      </Link>
+    <div className="mx-auto flex w-full max-w-[560px] flex-col py-14">
+      {inOnboarding(profile) ? (
+        <OnboardingStepper stage={3} fraction={canContinue ? 1 : 0.5} selectJourney={profile.meta.requestedService === "select"} />
+      ) : (
+        <Link href="/member/profile" className={`mb-6 text-sm ${linkClasses}`}>
+          ← Volver a mi perfil
+        </Link>
+      )}
 
-      <h1 className="mt-6 font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">
+      <h1 className="font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">
         Tus fotos
       </h1>
-      <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+      <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
         Añade al menos una foto. Son privadas: solo se usan dentro de Junto
         Select para tus futuras presentaciones.
       </p>
+      <ul className="mt-5 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-ink-soft">
+        {PHOTO_TIPS.map((tip) => (
+          <li key={tip} className="flex items-center gap-2">
+            <span aria-hidden className="h-1 w-1 rounded-full bg-[var(--laton,#a8875a)]" />
+            {tip}
+          </li>
+        ))}
+      </ul>
 
       <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
         {profile.photos.map((path, index) => (
@@ -226,14 +241,17 @@ export default function PhotosSection({ uid }: { uid: string }) {
         </p>
       )}
 
-      <button
-        type="button"
-        disabled={!canContinue}
-        onClick={() => router.push(getNextOnboardingRoute(profile))}
-        className={`${primaryButtonClasses} mt-10 w-full`}
-      >
-        Continuar
-      </button>
+      <div className="sticky bottom-0 z-10 -mx-6 mt-10 border-t border-hairline bg-paper px-6 pb-[max(env(safe-area-inset-bottom),16px)] pt-4 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
+        <button
+          type="button"
+          disabled={!canContinue}
+          onClick={() => router.push(getNextOnboardingRoute(profile))}
+          className={`${primaryButtonClasses} w-full`}
+        >
+          Continuar
+        </button>
+        {!canContinue && <p className="mt-2 text-center text-[13px] text-ink-soft">Añade una foto para continuar.</p>}
+      </div>
     </div>
   );
 }
