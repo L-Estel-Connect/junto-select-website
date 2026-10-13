@@ -48,11 +48,15 @@ const slug = (p) => (p === "/" ? "inicio" : p.replace(/^\//, "").replace(/[/?=&]
       await page.evaluate(async () => {
         for (let y = 0; y < document.body.scrollHeight; y += 600) {
           window.scrollTo(0, y);
-          await new Promise((r) => setTimeout(r, 60));
+          await new Promise((r) => setTimeout(r, 150));
         }
         window.scrollTo(0, 0);
       });
-      await page.waitForTimeout(600);
+      // Lazy photos: wait until every image has finished (or 10 s over a slow network).
+      await page
+        .waitForFunction(() => [...document.images].every((img) => img.complete), null, { timeout: 10000 })
+        .catch(() => {});
+      await page.waitForTimeout(300);
       await page.screenshot({ path: `${OUT}/${size}/${slug(path)}.png`, fullPage: true });
 
       const info = await page.evaluate(() => {
