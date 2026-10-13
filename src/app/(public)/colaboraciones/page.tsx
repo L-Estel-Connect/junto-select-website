@@ -3,7 +3,7 @@ import Image from "next/image";
 import SiteHeader from "@/components/salon/SiteHeader";
 import CollaborationForm from "@/components/colaboraciones/CollaborationForm";
 import { INSTAGRAM_URL } from "@/lib/site/content";
-import heroPhoto from "../../../../public/images/private-curated.png";
+import heroPhoto from "../../../../public/images/candlelit-lounge-table.jpg";
 import communityPhoto from "../../../../public/images/who-you-meet.png";
 
 const title = "Patrocinios y colaboraciones · Junto Select";
@@ -60,7 +60,7 @@ export default function CollaborationsPage() {
           <div className="photo">
             <Image
               src={heroPhoto}
-              alt="Encuentro Junto Select en un salón de Madrid, con velas y copas de champagne"
+              alt="Una mesa con velas y flores en un salón de Junto Select"
               fill
               priority
               sizes="(max-width: 1080px) 100vw, 50vw"

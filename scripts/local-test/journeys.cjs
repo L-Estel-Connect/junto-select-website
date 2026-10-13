@@ -118,7 +118,11 @@ async function main() {
     check("1 home has no '7 encuentros' or 'Gratis'", !/7 encuentros|gratis/i.test(body));
     await page.click("#ciudades a[href='/unete?ciudad=valencia']");
     await page.waitForURL("**/unete?ciudad=valencia");
-    check("1 city click preselects Valencia", await page.isChecked("input[name=ciudad][value=valencia]"));
+    check("1 city click preselects Valencia", (await page.inputValue("select[id$=-ciudad]")) === "valencia");
+    await page.goto(`${APP}/unete`);
+    check("1 Madrid is the default city", (await page.inputValue("select[id$=-ciudad]")) === "madrid");
+    check("1 form page is about invitations", (await page.locator("h1").innerText()).includes("invitaciones"));
+    await page.goto(`${APP}/unete?ciudad=valencia`);
     await shot(page, "1-unete-valencia-desktop");
     const m = await mobile.newPage();
     await m.goto(APP);
@@ -130,20 +134,33 @@ async function main() {
     await shot(m, "1-unete-otra-mobile");
   }
 
-  // 2. Community form and Brevo segmentation
+  // 2. Invitation form, consent and Brevo city segmentation
   {
     const page = await desktop.newPage();
     const email = `comunidad.valencia.${Date.now()}@example.test`;
     await page.goto(`${APP}/unete?ciudad=valencia`);
-    await page.fill("input[autocomplete=given-name], input[id$=-nombre]", "Prueba Valencia");
+    await page.fill("input[id$=-nombre]", "Prueba Valencia");
     await page.fill("input[type=email]", email);
+    await page.fill("input[id$=-telefono]", "+34 600 123 456");
+    await page.fill("input[id$=-empresa]", "Empresa de prueba");
     await page.check("input[name=genero][value=mujer]", { force: true });
     await page.check("input[name=rangoEdad][value='45-54']", { force: true });
     await page.check("input[value=eventos]", { force: true });
     await page.check("input[value=cenas]", { force: true });
-    const checks = page.locator("label.check input[type=checkbox]");
-    await checks.nth(0).check({ force: true });
-    await checks.nth(1).check({ force: true });
+    const boxes = page.locator("label.check input[type=checkbox]");
+    check("2 one consent box only", (await boxes.count()) === 1);
+    const consentLabel = (await page.locator("label.check").innerText()).replace(/\s+/g, " ").trim();
+    check("2 consent box states the purpose", consentLabel === "Quiero recibir por email las invitaciones y novedades de Junto Select. He leído la política de privacidad.", consentLabel);
+    check("2 old optional marketing box removed", !(await page.textContent("form")).includes("(Opcional)"));
+    check("2 basic privacy information shown", (await page.textContent("form")).includes("Información básica sobre protección de datos"));
+
+    // Without the box: refused, nothing stored.
+    await page.click("button[type=submit]");
+    await sleep(500);
+    check("2 consent box is required", (await page.locator(".err").allTextContents()).some((t) => t.includes("marca esta casilla")));
+    check("2 nothing stored without consent", (await db.collection("invitationRequests").where("email", "==", email).get()).empty);
+
+    await boxes.nth(0).check({ force: true });
     await page.click("button[type=submit]");
     await page.waitForSelector("text=al club, Prueba", { timeout: 15000 });
     await shot(page, "2-form-success-desktop");
@@ -151,37 +168,64 @@ async function main() {
     const snap = await db.collection("invitationRequests").where("email", "==", email).get();
     const doc = snap.docs[0]?.data();
     check("2 registration stored", Boolean(doc), doc ? `city=${doc.ciudad} sync=${doc.brevoSyncStatus}` : "");
+    check("2 phone, company and consent wording stored",
+      doc?.telefono === "+34 600 123 456" && doc?.empresa === "Empresa de prueba" && doc?.consentVersion === "invitaciones_v1" &&
+        doc?.consentText?.startsWith("Quiero recibir por email") && Boolean(doc?.aceptaMarketingAt));
     check("2 Brevo sync marked synced", doc?.brevoSyncStatus === "synced");
     const sent = mockLog().filter((e) => e.kind === "contact_upsert" && e.data.email === email).pop();
     const a = sent?.data.attributes ?? {};
     check(
-      "2 Brevo payload carries segmentation",
-      a.CIUDAD === "Valencia" && a.GENERO === "Mujer" && a.RANGO_EDAD === "45-54" && a.INT_EVENTOS === true &&
-        a.INT_CENAS === true && a.INT_INTRODUCCIONES === false && a.CONSENT_MARKETING === true && a.FUENTE === "web_ciudad_valencia",
+      "2 Brevo gets only NOMBRE, GENERO and CIUDAD (the attributes that exist in Brevo)",
+      JSON.stringify(a) === JSON.stringify({ NOMBRE: "Prueba Valencia", GENERO: "Mujer", CIUDAD: "Valencia" }),
       JSON.stringify(a),
     );
-    check("2 Brevo goes to the test community list only", JSON.stringify(sent?.data.listIds) === "[999]");
+    check("2 Brevo goes to list 12 only", JSON.stringify(sent?.data.listIds) === "[12]");
+    check("2 Brevo leaves subscription status as it is", !("emailBlacklisted" in (sent?.data ?? {})));
 
-    const email2 = `comunidad.sinconsent.${Date.now()}@example.test`;
+    // Madrid by default, optional fields left empty.
+    const email2 = `comunidad.madrid.${Date.now()}@example.test`;
     await page.goto(`${APP}/unete`);
     await page.fill("input[id$=-nombre]", "Prueba Madrid");
     await page.fill("input[type=email]", email2);
-    await page.check("input[name=ciudad][value=madrid]", { force: true });
     await page.check("input[name=genero][value=hombre]", { force: true });
-    await page.check("input[name=rangoEdad][value='55-64']", { force: true });
-    await page.check("input[value=introducciones]", { force: true });
     await page.locator("label.check input[type=checkbox]").nth(0).check({ force: true });
     await page.click("button[type=submit]");
     await page.waitForSelector("text=al club, Prueba", { timeout: 15000 });
     await sleep(800);
     const d2 = (await db.collection("invitationRequests").where("email", "==", email2).get()).docs[0]?.data();
-    check("2 without marketing consent: stored, not sent to Brevo",
-      d2?.brevoSyncStatus === "skipped_no_consent" && !mockLog().some((e) => e.data?.email === email2));
+    const sent2 = mockLog().filter((e) => e.kind === "contact_upsert" && e.data.email === email2).pop();
+    check("2 only name, email, género and consent needed (no age, no interests)", Boolean(d2) && d2.rangoEdad === null && d2.intereses.length === 0);
+    check("2 default Madrid registration synced to list 12",
+      d2?.ciudad === "madrid" && d2?.telefono === null && sent2?.data.attributes.CIUDAD === "Madrid" && JSON.stringify(sent2?.data.listIds) === "[12]");
+
+    // Género has no default and is required.
+    const email3 = `comunidad.singenero.${Date.now()}@example.test`;
+    await page.goto(`${APP}/unete`);
+    check("2 género has no default selection", (await page.locator("input[name=genero]:checked").count()) === 0);
+    await page.fill("input[id$=-nombre]", "Prueba Sin Genero");
+    await page.fill("input[type=email]", email3);
+    await page.locator("label.check input[type=checkbox]").nth(0).check({ force: true });
+    await page.click("button[type=submit]");
+    await sleep(600);
+    check("2 género required", (await page.locator(".err").allTextContents()).some((t) => t.includes("Selecciona una opción")));
+    check("2 nothing stored without género", (await db.collection("invitationRequests").where("email", "==", email3).get()).empty);
+    const r = await fetch(`${APP}/api/invitation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email3, genero: "mujer", aceptaInvitaciones: true }),
+    });
+    check("2 server also refuses a registration without a name", r.status === 400);
 
     await page.goto(`${APP}/unete`);
+    await page.fill("input[id$=-telefono]", "abc");
     await page.click("button[type=submit]");
     check("2 empty form shows errors", (await page.locator(".err, [role=alert]").count()) > 0);
+    check("2 invalid phone rejected", (await page.locator(".err").allTextContents()).some((t) => t.includes("teléfono válido")));
     await shot(page, "2-form-errors-desktop");
+    const m = await mobile.newPage();
+    await m.goto(`${APP}/unete`);
+    await shot(m, "2-form-mobile");
+    check("2 form has no horizontal scroll on mobile", !(await m.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)));
   }
 
   // 3. Membership page
@@ -245,6 +289,22 @@ async function main() {
     await page.goto(`${APP}/member`);
     await page.waitForURL("**/member/bienvenida**", { timeout: 20000 });
     check("4 paid member with unfinished profile is sent to welcome, not lost", true);
+    await page.waitForSelector("text=no necesitas un perfil de introducciones", { timeout: 20000 });
+    check("4 welcome says benefits need no profile", true);
+
+    // Membership benefits without an introductions profile: plan and settings open.
+    await page.goto(`${APP}/member/plan`);
+    await page.waitForSelector("text=Tu membresía está activa", { timeout: 20000 });
+    check("4 Mi plan opens without a finished profile", new URL(page.url()).pathname === "/member/plan");
+    check("4 Mi plan offers to manage the membership", (await page.locator("text=Gestionar").count()) > 0);
+    const nav = (await page.locator("header nav").first().innerText()).replace(/\s+/g, " ");
+    check("4 nav hides Selecciones and Conexiones before a profile", !nav.includes("Selecciones") && !nav.includes("Conexiones"), nav);
+    await shot(page, "4d2-plan-without-profile");
+    await page.goto(`${APP}/member/settings`);
+    await page.waitForSelector("text=Cerrar sesión", { timeout: 20000 });
+    check("4 Ajustes opens without a finished profile", new URL(page.url()).pathname === "/member/settings");
+    await page.goto(`${APP}/member/bienvenida`);
+    await page.waitForSelector("text=Completar mi perfil", { timeout: 20000 });
 
     // Simulate finishing the profile (the onboarding screens themselves are unchanged).
     await db.doc(`profiles/${newMember.id}`).update({ "meta.onboardingFinalized": true });

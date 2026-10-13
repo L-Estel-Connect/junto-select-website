@@ -12,6 +12,7 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "./client";
+import { forgetSignedIn } from "@/lib/account/signInRedirect";
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -33,6 +34,7 @@ export async function signInWithGoogle() {
 }
 
 export function signOutUser() {
+  forgetSignedIn();
   return signOut(auth);
 }
 

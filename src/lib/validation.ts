@@ -10,6 +10,9 @@ export type CommunityErrors = Partial<Record<keyof CommunityPayload, string>>;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const NAME_MAX = 80;
 const CITY_MAX = 80;
+const PHONE_MAX = 25;
+const COMPANY_MAX = 100;
+const PHONE_RE = /^\+?[0-9 ().-]+$/;
 const SOURCE_RE = /^[a-z0-9_]{1,48}$/;
 
 export function validateCommunity(data: CommunityPayload): CommunityErrors {
@@ -26,19 +29,33 @@ export function validateCommunity(data: CommunityPayload): CommunityErrors {
     errors.ciudad = "Elige tu ciudad.";
   } else if (data.ciudad === "otra") {
     const otra = data.ciudadOtra.trim();
-    if (!otra) errors.ciudadOtra = "Escribe tu ciudad.";
-    else if (otra.length > CITY_MAX) errors.ciudadOtra = "El nombre de la ciudad es demasiado largo.";
+    if (otra.length > CITY_MAX) errors.ciudadOtra = "El nombre de la ciudad es demasiado largo.";
   }
+
+  const telefono = data.telefono.trim();
+  if (telefono) {
+    const digits = telefono.replace(/\D/g, "").length;
+    if (telefono.length > PHONE_MAX || !PHONE_RE.test(telefono) || digits < 6 || digits > 15) {
+      errors.telefono = "Introduce un teléfono válido, o déjalo en blanco.";
+    }
+  }
+
+  if (data.empresa.trim().length > COMPANY_MAX) errors.empresa = "El nombre de la empresa es demasiado largo.";
 
   if (data.genero !== "mujer" && data.genero !== "hombre") errors.genero = "Selecciona una opción.";
 
-  if (!(AGE_RANGES as readonly string[]).includes(data.rangoEdad)) errors.rangoEdad = "Elige tu franja de edad.";
+  // Required: nombre, email, género and the consent box. Everything else is optional.
+  if (data.rangoEdad && !(AGE_RANGES as readonly string[]).includes(data.rangoEdad)) {
+    errors.rangoEdad = "Selección no válida.";
+  }
 
   if (data.intereses.some((i) => !(COMMUNITY_INTERESTS as readonly string[]).includes(i))) {
     errors.intereses = "Selección no válida.";
   }
 
-  if (!data.aceptaPrivacidad) errors.aceptaPrivacidad = "Necesitamos que aceptes la política de privacidad.";
+  if (!data.aceptaInvitaciones) {
+    errors.aceptaInvitaciones = "Para recibir nuestras invitaciones, marca esta casilla.";
+  }
 
   return errors;
 }
@@ -48,4 +65,4 @@ export function sanitizeSource(value: string): string {
   return SOURCE_RE.test(value) ? value : "web_unete";
 }
 
-export const communityLimits = { NAME_MAX, CITY_MAX };
+export const communityLimits = { NAME_MAX, CITY_MAX, PHONE_MAX, COMPANY_MAX };

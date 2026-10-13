@@ -142,30 +142,27 @@ browser.
    Firestore (`invitationRequests/{id}`, below) and the user-facing
    request still succeeds; only the Brevo sync itself is unavailable,
    recorded as `brevoSyncStatus: "failed"` on the document.
-2. `BREVO_LIST_ID` is set to `12` in `apphosting.yaml` — the account
-   owner's confirmed EXISTING Brevo list. Never point this at a new or
-   different list without the account owner explicitly saying so.
-3. **Attribute mapping is deliberately narrow** (`src/lib/brevoPayload.ts`,
-   pure/unit-tested): only `NOMBRE`, `GENERO`, `PROFESION` (only if
-   filled), `TELEFONO` (only if filled). `GENERO` reuses an EXISTING Brevo
-   attribute — the account owner confirmed its values are exactly `Mujer`
-   / `Hombre`, which is exactly what the homepage form's radio values map
-   to. `NOMBRE`/`PROFESION`/`TELEFONO` are assumed-common CRM field names
-   but **not independently verified** — confirm they exist in Brevo
-   (Contacts → Settings → Contact attributes) with these exact internal
-   names before relying on them being populated; if Brevo's API rejects
-   unrecognized attribute keys outright (behavior not verified against a
-   real account from this environment), an unrecognized name here would
-   fail the whole sync — which is now safe either way, since Firestore
-   (`invitationRequests/{id}`, below) is what actually captures the
-   submission, not Brevo.
-4. Age-confirmation and communications-consent data, and the free-text
-   "Cuéntanos sobre ti" bio, are **NOT sent to Brevo** — they were never
-   confirmed to be existing Brevo attributes, and the account owner asked
-   not to have new attributes created speculatively. The durable,
-   timestamped record of that consent lives in Firestore instead (next
-   section).
-5. The route uses `updateEnabled: true` with `email` as the sole identity
+2. **Community list.** The "Recibir invitaciones" form adds contacts to
+   the existing community list 12 (`BREVO_LIST_ID`, set to `"12"` in
+   `apphosting.yaml`). Lara decided (13 Oct 2026) not to create another
+   list: new cities are segmented inside list 12 by the `CIUDAD`
+   attribute, never by separate lists. Existing contacts were given
+   `CIUDAD = Madrid` in Brevo.
+3. **Attributes** (`src/lib/brevoPayload.ts`, pure and tested): only
+   `NOMBRE`, `GENERO` (`Mujer`/`Hombre`) and `CIUDAD` (`Madrid`,
+   `Valencia`, `Barcelona`, `Málaga` or `Otra`). All three exist in Brevo;
+   the code never creates attributes. Everything else (age range,
+   interests, the "other city" text, phone, company, consent text and
+   version) stays in Firestore only.
+4. **Consent.** The form has one required box ("Quiero recibir por email
+   las invitaciones y novedades de Junto Select. He leído la política de
+   privacidad."). Its exact text and version (`invitaciones_v1`) are stored
+   on the Firestore record. The Brevo payload carries no
+   `emailBlacklisted` flag, so an existing contact's consent and
+   subscription status are left exactly as they are.
+5. **Staging never calls Brevo** (`isStagingDeploy()`): the record is kept
+   with `brevoSyncStatus: "skipped_staging"`.
+6. The route uses `updateEnabled: true` with `email` as the sole identity
    key, so a repeat submission from the same address updates the existing
    Brevo contact rather than creating a duplicate.
 
@@ -1631,6 +1628,23 @@ firebase deploy --only firestore:rules,storage:rules
 
 or paste the contents of `firestore.rules` / `storage.rules` directly
 into Firebase Console → Firestore Database → Rules / Storage → Rules.
+
+### Storage CORS: one origin per site address
+
+Member photos are read by the browser straight from the Storage bucket, so
+the bucket needs a CORS rule listing every address the site is served
+from. Without it the upload succeeds but the photo shows "Cargando…" and
+then "No se pudo cargar la foto". Staging got its rule on 13 Oct 2026.
+Before production goes live on a new domain (e.g. juntoselect.com), add
+that origin to the production bucket:
+
+```json
+[{ "origin": ["https://<site-address>"], "method": ["GET", "HEAD"], "maxAgeSeconds": 3600 }]
+```
+
+```bash
+gcloud storage buckets update gs://<bucket> --cors-file=cors.json
+```
 
 ## Staging environment (not set up yet)
 

@@ -17,7 +17,7 @@ export default function SiteFooter() {
             </p>
           </div>
           <div>
-            <Link className="btn" href="/colaboraciones#propuesta">
+            <Link className="btn" href="/colaboraciones">
               Proponer una colaboración
             </Link>
           </div>
@@ -42,7 +42,8 @@ export default function SiteFooter() {
           <div>
             <h4>Tu cuenta</h4>
             <ul>
-              <li><Link href={joinHref()}>Únete al club</Link></li>
+              <li><Link href={joinHref()}>Recibir invitaciones</Link></li>
+              <li><Link href="/introducciones">Introducciones</Link></li>
               <li><Link href="/membresia#planes">Hazte miembro</Link></li>
               <li><Link href={SIGN_IN_HREF}>Acceder</Link></li>
             </ul>

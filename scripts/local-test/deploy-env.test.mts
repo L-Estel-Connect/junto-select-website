@@ -1,6 +1,7 @@
 // Pure tests for the staging isolation guard (no emulator needed):
 //   npx tsx --conditions=react-server scripts/local-test/deploy-env.test.mts
 import { assertNotProductionFirebase, assertStripeKeyAllowed, isStagingDeploy } from "../../src/lib/config/deployEnv";
+import { generatePresentationText } from "../../src/lib/ai/generatePresentation";
 
 let failed = 0;
 function check(name: string, ok: boolean) {
@@ -36,6 +37,17 @@ check("staging: separate project allowed", !throws(assertNotProductionFirebase))
 check("staging: live Stripe key refused", throws(() => assertStripeKeyAllowed("sk_live_x")));
 check("staging: restricted live key refused", throws(() => assertStripeKeyAllowed("rk_live_x")));
 check("staging: test key allowed", !throws(() => assertStripeKeyAllowed("sk_test_x")));
+reset();
+
+// Staging has no Anthropic key: the presentation draft is built from the
+// person's own answers, with no network call, so onboarding can finish.
+process.env.JUNTO_DEPLOY_ENV = "staging";
+const draft = await generatePresentationText({
+  firstName: "Ana", gender: "mujer", city: "Madrid", profession: "", activityLevel: null,
+  prompts: { freeTime: "Leer y caminar", values: "La confianza", aboutYou: "Que escucho" },
+});
+check("staging: presentation draft from own answers, no AI call",
+  draft.includes("Ana, Madrid") && draft.includes("Leer y caminar.") && draft.includes("Que escucho.") && draft.startsWith("[Borrador de prueba"));
 reset();
 
 console.log(failed ? `\n${failed} FAILED` : "\nAll passed");

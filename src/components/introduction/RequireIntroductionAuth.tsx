@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { signInRedirectPath } from "@/lib/account/signInRedirect";
 import { useAuth } from "@/lib/firebase/useAuth";
 import { logDebugEvent } from "@/lib/introduction/onboardingDebug";
 import DebugOverlay from "./DebugOverlay";
@@ -84,7 +85,7 @@ export default function RequireIntroductionAuth({
     // here from a page that already required a signed-in user, so this is
     // never a fresh, never-signed-in visit.
     if (!loading && !user) {
-      router.replace("/introduction?session=expired");
+      router.replace(signInRedirectPath(window.location.pathname));
     }
   }, [loading, user, router]);
 

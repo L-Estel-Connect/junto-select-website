@@ -14,9 +14,9 @@ export default function EventCards({ events }: { events: PublicEvent[] }) {
     return (
       <div className="empty">
         <h3>Estamos preparando el próximo encuentro.</h3>
-        <p className="txt">Únete al club y te avisaremos antes que a nadie en cuanto abramos reservas.</p>
+        <p className="txt">Recibe nuestras invitaciones y te avisaremos antes que a nadie en cuanto abramos reservas.</p>
         <Link className="btn btn-tinta" href={joinHref()}>
-          Únete al club
+          Recibir invitaciones
         </Link>
       </div>
     );

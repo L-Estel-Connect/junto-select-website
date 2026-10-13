@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import SiteHeader from "@/components/salon/SiteHeader";
-import { EVENT_BENEFIT } from "@/lib/site/content";
-import salonPhoto from "../../../../public/images/who-you-meet.png";
+import salonPhoto from "../../../../public/images/candlelit-lounge-table.jpg";
 
 export const metadata: Metadata = {
   title: "Introducciones privadas · Solteros a partir de 40 en Madrid",
@@ -12,10 +11,56 @@ export const metadata: Metadata = {
   alternates: { canonical: "/introducciones" },
 };
 
-/** Existing private Introductions app: sign-in creates the profile, then onboarding. */
-const CREATE_PROFILE_HREF = "/introduction";
 /** Members go straight to their profile hub after signing in. */
 const MEMBER_PROFILE_HREF = "/introduction?next=/member/profile";
+
+/**
+ * "Elige tu modalidad": both cards answer the same questions, row by row,
+ * so the difference between passive participation and active search reads
+ * at a glance. The choice is carried through sign-in (`?modalidad=`) and
+ * creates the profile with that service (see /api/account/choose).
+ */
+const MODES = [
+  {
+    key: "select",
+    eyebrow: "Búsqueda activa · Membresía Select",
+    title: "Nosotros buscamos por ti.",
+    href: "/introduction?modalidad=activa",
+    cta: "Empezar la búsqueda activa",
+    rows: [
+      { label: "Coste", text: "Desde 49 € al mes, con tres planes: 1, 3 o 6 meses." },
+      {
+        label: "Quién busca",
+        text: "Buscamos activamente entre los perfiles compatibles de Madrid, pasivos y Select.",
+      },
+      {
+        label: "Propuestas",
+        text: "Hasta tres propuestas de introducción por ciclo mensual, según compatibilidad, disponibilidad y las condiciones del servicio.",
+      },
+      { label: "Antes de presentaros", text: "Los dos tenéis que aceptar." },
+      { label: "Empieza", text: "Cuando tu perfil privado está completo y tu membresía activa." },
+      { label: "Además", text: "La membresía incluye un 20 % de descuento en un encuentro elegible por ciclo mensual." },
+    ],
+  },
+  {
+    key: "passive",
+    eyebrow: "Perfil pasivo · Gratuito",
+    title: "Formas parte de la red privada.",
+    href: "/introduction?modalidad=pasivo",
+    cta: "Crear mi perfil pasivo",
+    rows: [
+      { label: "Coste", text: "Sin coste." },
+      {
+        label: "Quién busca",
+        text: "No hacemos una búsqueda activa para ti: podemos proponerte a un miembro Select compatible.",
+      },
+      { label: "Propuestas", text: "Sin búsqueda activa ni introducciones garantizadas." },
+      { label: "Antes de presentaros", text: "Los dos tenéis que aceptar." },
+      { label: "Empieza", text: "Cuando tu perfil privado está completo." },
+      { label: "Si cambias de idea", text: "Puedes pasar a Select cuando quieras; conservas tu perfil tal como está." },
+    ],
+  },
+] as const;
 
 const STEPS = [
   {
@@ -60,52 +105,41 @@ export default function IntroductionsPage() {
         </div>
       </section>
 
-      <section className="p3-ways" aria-labelledby="ways-h">
+      <section className="p3-ways" id="modalidad" aria-labelledby="ways-h">
         <div className="wrap">
-          <p className="eyebrow">Dos formas de participar</p>
+          <p className="eyebrow">Introducciones privadas</p>
           <h2 id="ways-h">
-            Con Membresía Select <em>o sin ella.</em>
+            Elige tu <em>modalidad.</em>
           </h2>
           <div className="p3-cards">
-            <div className="p3-card mem">
-              <p className="eyebrow">Con Membresía Select</p>
-              <h3>Nosotros buscamos por ti.</h3>
-              <ul>
-                <li className="y">
-                  Podrás recibir hasta tres propuestas de introducción por ciclo mensual, según compatibilidad,
-                  disponibilidad y las condiciones del servicio.
-                </li>
-                <li className="y">Buscamos entre todos los perfiles de Madrid, con o sin membresía.</li>
-                <li className="y">La búsqueda empieza cuando tu perfil privado está completo.</li>
-              </ul>
-              <p className="small">Incluido en la Membresía Select, junto al {EVENT_BENEFIT.short}.</p>
-              <div className="acts">
-                <Link className="btn" href="/membresia">
-                  Ver la Membresía Select
-                </Link>
-                <Link className="link" href={MEMBER_PROFILE_HREF}>
-                  Ya soy miembro
-                </Link>
+            {MODES.map((m) => (
+              <div className={`p3-card${m.key === "select" ? " mem" : ""}`} key={m.key}>
+                <p className="eyebrow">{m.eyebrow}</p>
+                <h3>{m.title}</h3>
+                <dl className="p3-rows">
+                  {m.rows.map((r) => (
+                    <div key={r.label}>
+                      <dt>{r.label}</dt>
+                      <dd>{r.text}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <div className="acts">
+                  <Link className={m.key === "select" ? "btn" : "btn btn-tinta"} href={m.href}>
+                    {m.cta}
+                  </Link>
+                  {m.key === "select" && (
+                    <Link className="link" href={MEMBER_PROFILE_HREF}>
+                      Ya soy miembro
+                    </Link>
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="p3-card">
-              <p className="eyebrow">Sin membresía</p>
-              <h3>Formas parte del grupo de introducciones.</h3>
-              <ul>
-                <li className="y">Creas tu perfil privado, sin coste y sin compromiso.</li>
-                <li className="y">
-                  Podemos proponerte a un miembro Select compatible y, si los dos aceptáis, os presentamos.
-                </li>
-                <li className="n">La búsqueda activa queda reservada a los miembros Select.</li>
-              </ul>
-              <p className="small">Si más adelante te haces miembro, conservas tu perfil tal como está.</p>
-              <div className="acts">
-                <Link className="btn btn-tinta" href={CREATE_PROFILE_HREF}>
-                  Crear mi perfil privado
-                </Link>
-              </div>
-            </div>
+            ))}
           </div>
+          <p className="p3-already">
+            ¿Ya tienes cuenta? <Link href="/introduction">Acceder</Link>
+          </p>
         </div>
       </section>
 

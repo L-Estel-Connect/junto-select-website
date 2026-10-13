@@ -7,6 +7,7 @@ import Wordmark from "@/components/Wordmark";
 import { memberFetchJson } from "@/lib/member/memberFetch";
 import { useMemberQuery } from "@/lib/member/useMemberQuery";
 import { useMemberUid } from "./MemberContext";
+import { useSharedProfile } from "@/lib/introduction/profileCache";
 import type { MemberLifecycleSummary } from "@/lib/matching/memberLifecycleTypes";
 
 // "Ver mi perfil" and "Editar mi perfil" used to be two separate nav rows
@@ -48,6 +49,12 @@ export default function MemberNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const uid = useMemberUid();
+  // Selecciones and Conexiones only exist once an introductions profile is
+  // finished; a Select member without one uses the rest of the area.
+  const { profile } = useSharedProfile(uid);
+  const navItems = profile && !profile.meta.onboardingFinalized
+    ? NAV_ITEMS.filter((i) => i.href !== "/member/proposals" && i.href !== "/member/connections")
+    : NAV_ITEMS;
   const summaryQuery = useMemberQuery(
     () => memberFetchJson<{ summary: MemberLifecycleSummary }>("/api/member/lifecycle-summary"),
     [uid],
@@ -80,7 +87,7 @@ export default function MemberNav() {
         </Link>
 
         <nav className="hidden items-center gap-5 md:flex">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <Link
               key={item.label}
               href={item.href}
@@ -129,7 +136,7 @@ export default function MemberNav() {
             </div>
 
             <nav className="mt-8 flex flex-col">
-              {NAV_ITEMS.map((item) => (
+              {navItems.map((item) => (
                 <Link
                   key={item.label}
                   href={item.href}

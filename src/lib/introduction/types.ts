@@ -303,6 +303,13 @@ export type ProfileStatus = "draft" | "active_for_matching";
  */
 export type SearchStatus = "passive" | "active_search";
 
+/** See ProfileDocument.meta.requestedService. */
+export type RequestedService = "passive" | "select";
+
+export function isRequestedService(value: unknown): value is RequestedService {
+  return value === "passive" || value === "select";
+}
+
 /**
  * See README "Duplicate accounts / profile integrity" for the full
  * architecture. `clear`: normal eligibility. `suspected`: excluded BOTH as
@@ -421,6 +428,16 @@ export interface ProfileDocument {
      * written only. Absent on profiles that were never paused.
      */
     matchingPausedAt?: unknown | null;
+    /**
+     * The service the person chose on the Introducciones page ("Elige tu
+     * modalidad"): `passive` (free profile in the private network) or
+     * `select` (active search with Membresía Select). Absent on profiles
+     * created before that choice existed. Only a preference: it never
+     * grants or removes membership (billing does), and while a profile that
+     * has it is not finalized it stays out of the matching pool, so nobody
+     * joins the network before confirming their choice (eligibility.ts).
+     */
+    requestedService?: RequestedService | null;
     createdAt: unknown;
     updatedAt: unknown;
   };

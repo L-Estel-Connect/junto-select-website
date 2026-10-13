@@ -5,34 +5,34 @@ import SiteHeader from "@/components/salon/SiteHeader";
 import { PLAN_DISPLAY, PLAN_KEYS } from "@/lib/billing/plans";
 import { EVENT_BENEFIT, joinHref } from "@/lib/site/content";
 import doorPhoto from "../../../../public/images/private-curated.png";
-import salonPhoto from "../../../../public/images/who-you-meet.png";
+import salonPhoto from "../../../../public/images/guest-portrait-candlelight.jpg";
 
 export const metadata: Metadata = {
   title: "Membresía Select · Club privado para solteros a partir de 40",
   description:
-    "La Membresía Select de Junto Select: introducciones privadas en Madrid, un código del 20 % para un encuentro al mes y tu propia cuenta de miembro. Desde 49 € al mes.",
+    "La Membresía Select de Junto Select: una comunidad selecta, introducciones privadas en Madrid y un 20 % de descuento en un encuentro al mes. Desde 49 € al mes.",
   alternates: { canonical: "/membresia" },
 };
 
 const PRIVILEGES = [
   {
     n: "I",
+    title: "Una comunidad selecta",
+    text: "Formas parte de un círculo de solteros con trayectoria que comparten encuentros, conversación y lugares especiales.",
+    cond: "Hoy, en Madrid. Valencia, Barcelona y Málaga, próximamente.",
+  },
+  {
+    n: "II",
     title: "Introducciones privadas",
     text: "Te presentamos, con discreción, a personas compatibles con lo que buscas. Cada propuesta es privada y solo seguimos adelante si los dos aceptáis.",
     cond: "Hasta tres propuestas por ciclo mensual, según compatibilidad y disponibilidad. Requiere tu perfil privado completo. Hoy, en Madrid.",
     link: { href: "/introducciones", label: "Cómo funcionan" },
   },
   {
-    n: "II",
-    title: EVENT_BENEFIT.short,
+    n: "III",
+    title: "20 % de descuento en un encuentro al mes",
     text: EVENT_BENEFIT.text,
     cond: EVENT_BENEFIT.conditions,
-  },
-  {
-    n: "III",
-    title: "Tu cuenta de miembro",
-    text: "Tus códigos de descuento, tu perfil y tu membresía, en un solo lugar privado.",
-    cond: "Gestiona tu membresía o cancela la renovación cuando quieras.",
   },
 ];
 
@@ -65,8 +65,8 @@ export default function MembershipPage() {
           </h1>
           <div className="hero-row">
             <p>
-              Para solteros a partir de 40: introducciones privadas en Madrid, un 20 % en un encuentro al mes y tu
-              propia cuenta de miembro.
+              Para solteros a partir de 40: una comunidad selecta, introducciones privadas en Madrid y un 20 % de
+              descuento en un encuentro al mes.
             </p>
             <div className="hero-cta">
               <a className="btn btn-laton" href="#planes">
@@ -95,7 +95,7 @@ export default function MembershipPage() {
             </p>
           </div>
           <div className="photo">
-            <Image src={salonPhoto} alt="Invitados conversando en un encuentro" fill sizes="(max-width: 1080px) 100vw, 50vw" />
+            <Image src={salonPhoto} alt="Una invitada sonríe en una cena a la luz de las velas" fill sizes="(max-width: 1080px) 100vw, 50vw" />
           </div>
         </div>
       </section>

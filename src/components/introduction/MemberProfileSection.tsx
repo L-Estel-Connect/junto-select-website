@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { finalizeOnboarding } from "@/lib/introduction/profile";
+import { finalizeOnboarding, updateProfileFields } from "@/lib/introduction/profile";
+import { useBilling } from "@/lib/billing/useBilling";
+import { isEntitledStatus } from "@/lib/billing/types";
+import { isMarketAvailabilityEligible } from "@/lib/introduction/completion";
+import { PlanCheckoutForm } from "@/components/member/PlanSection";
 import { useSharedProfile } from "@/lib/introduction/profileCache";
 import { legacyFetchJson } from "@/lib/legacyImport/legacyFetch";
 import { memberFetchJson } from "@/lib/member/memberFetch";
@@ -33,6 +37,40 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
+  const { billing, loading: billingLoading } = useBilling(uid);
+  const entitled = !!billing && isEntitledStatus(billing.status);
+  const [checkoutParam, setCheckoutParam] = useState<string | null>(null);
+  const [activating, setActivating] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCheckoutParam(new URLSearchParams(window.location.search).get("checkout"));
+  }, []);
+
+  // "Búsqueda activa": the profile is confirmed only once Select is paid
+  // (the introductions consent was recorded just before Stripe). Until then
+  // it stays out of the matching pool, never silently turned passive.
+  const awaitingSelectPayment =
+    !!profile &&
+    !profile.meta.onboardingFinalized &&
+    !profile.meta.pendingLegacyActivation &&
+    profile.meta.requestedService === "select";
+
+  useEffect(() => {
+    if (!awaitingSelectPayment || billingLoading || !entitled || activating) return;
+    if (profile && getPrerequisiteRedirect(profile, "/member/profile")) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActivating(true);
+    void (async () => {
+      try {
+        await finalizeOnboarding(uid);
+        mutate((prev) => ({ ...prev, meta: { ...prev.meta, onboardingFinalized: true } }));
+        void memberFetchJson("/api/member/matching/reevaluate", { method: "POST" }).catch(() => {});
+      } catch {
+        setError("No hemos podido activar tu búsqueda. Recarga la página para intentarlo de nuevo.");
+      }
+    })();
+  }, [awaitingSelectPayment, billingLoading, entitled, activating, profile, uid, mutate]);
 
   useEffect(() => {
     if (!profile) return;
@@ -52,6 +90,23 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
   }
 
   const finalized = profile.meta.onboardingFinalized;
+
+  async function recordConsent() {
+    await memberFetchJson("/api/member/introductions-consent", {
+      method: "POST",
+      body: JSON.stringify({ introductionsConsent: true }),
+    });
+  }
+
+  async function choosePassive() {
+    if (!consent) {
+      setError("Para continuar, confirma que aceptas participar en las introducciones privadas.");
+      return;
+    }
+    await updateProfileFields(uid, {}, { requestedService: "passive" });
+    mutate((prev) => ({ ...prev, meta: { ...prev.meta, requestedService: "passive" } }));
+    await handleFinalize();
+  }
 
   async function handleFinalize() {
     if (!profile) return; // defensive only — guarded against above before this closure is ever reachable
@@ -184,7 +239,7 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
         </label>
       )}
 
-      {!finalized && (
+      {!finalized && !awaitingSelectPayment && (
         <button
           type="button"
           disabled={saving}
@@ -193,6 +248,60 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
         >
           {saving ? "Guardando…" : "Guardar y finalizar"}
         </button>
+      )}
+
+      {awaitingSelectPayment && (entitled || activating) && (
+        <p role="status" className="mt-8 text-[15px] text-ink-soft">
+          Tu membresía está activa. Estamos activando tu búsqueda…
+        </p>
+      )}
+
+      {awaitingSelectPayment && !entitled && !activating && (
+        <div className="mt-10 border-t border-hairline pt-8">
+          {checkoutParam === "success" && (
+            <p role="status" className="mb-6 rounded-xl border border-hairline bg-white p-4 text-[14px] text-ink-soft">
+              Estamos confirmando tu pago con Stripe. Esta página se actualizará sola en unos segundos.
+            </p>
+          )}
+          {checkoutParam === "cancel" && (
+            <p role="status" className="mb-6 rounded-xl border border-hairline bg-white p-4 text-[14px] text-ink-soft">
+              Has cancelado el pago. No se te ha cobrado nada. Tu perfil sigue guardado y no se propone a nadie
+              hasta que elijas.
+            </p>
+          )}
+          <p className="text-[12px] uppercase tracking-[0.22em] text-ink-soft">Último paso · Membresía Select</p>
+          <h2 className="mt-2 font-serif text-[24px] font-normal leading-snug text-ink">Elige tu plan</h2>
+          <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+            Tu búsqueda activa empieza en cuanto se confirme el pago. Los tres planes incluyen lo mismo; solo
+            cambian la duración y el precio.
+          </p>
+          <PlanCheckoutForm
+            marketEligible={isMarketAvailabilityEligible(profile)}
+            returnTo="profile"
+            beforeCheckout={recordConsent}
+            disabledReason={consent ? null : "Para continuar, marca la casilla de participación de arriba."}
+          />
+
+          <div className="mt-12 border-t border-hairline pt-8">
+            <p className="font-serif text-[20px] leading-snug text-ink">¿Prefieres no pagar ahora?</p>
+            <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+              Puedes formar parte de nuestra red privada sin coste, como perfil pasivo: podemos proponerte a un
+              miembro Select compatible, pero sin búsqueda activa por nuestra parte. Puedes pasar a Select más
+              adelante sin perder tu perfil.
+            </p>
+            <p className="mt-3 max-w-[46ch] text-[14px] leading-relaxed text-ink-soft">
+              Si no eliges ninguna opción, tu perfil queda guardado y no se propone a nadie.
+            </p>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void choosePassive()}
+              className="mt-6 inline-flex w-full items-center justify-center rounded-full border border-ink/30 px-9 py-4 text-[13px] font-medium uppercase tracking-[0.18em] text-ink transition-colors duration-200 hover:border-ink disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? "Guardando…" : "Quedarme como perfil pasivo, sin coste"}
+            </button>
+          </div>
+        </div>
       )}
 
       <div id="editar-perfil" className="mt-14 scroll-mt-10 border-t border-hairline pt-8">

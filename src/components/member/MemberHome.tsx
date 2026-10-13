@@ -57,7 +57,11 @@ export default function MemberHome({ uid }: { uid: string }) {
     // membership and event privilege alongside the "complete your profile"
     // step. Everyone else keeps going straight to onboarding, as before.
     if (billingLoading) return;
-    router.replace(billing && isEntitledStatus(billing.status) ? "/member/bienvenida" : redirect);
+    // Exception: a "Búsqueda activa" profile that is complete and just paid
+    // is confirmed on the profile page.
+    const entitled = !!billing && isEntitledStatus(billing.status);
+    const selectReady = profile.meta.requestedService === "select" && redirect === "/member/profile";
+    router.replace(entitled && !selectReady ? "/member/bienvenida" : redirect);
   }, [profile, router, billing, billingLoading]);
 
   if (!profile) {

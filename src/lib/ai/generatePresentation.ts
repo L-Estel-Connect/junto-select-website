@@ -1,6 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import type { ActivityLevel, Gender, PresentationPrompts } from "@/lib/introduction/types";
+import { isStagingDeploy } from "@/lib/config/deployEnv";
 
 const ACTIVITY_LABELS: Record<ActivityLevel, string> = {
   muy_activo: "muy activo/a, hace deporte casi a diario",
@@ -51,9 +52,29 @@ function buildUserMessage(facts: PresentationFacts): string {
   return `Datos proporcionados por la persona (usa solo estos hechos):\n${lines.join("\n")}\n\nEscribe la presentación ahora.`;
 }
 
+/**
+ * Staging has no Anthropic key, so a new user would be stuck at this step.
+ * There the draft is assembled from the person's own three answers, with no
+ * AI call, so the rest of onboarding (review, approval, finalizing) can be
+ * tested. Production always uses the model.
+ */
+export function stagingPresentationDraft(facts: PresentationFacts): string {
+  const sentence = (text: string) => {
+    const t = text.trim();
+    return /[.!?…]$/.test(t) ? t : `${t}.`;
+  };
+  return [
+    `[Borrador de prueba de staging, sin IA] ${facts.firstName}${facts.city ? `, ${facts.city}` : ""}.`,
+    sentence(facts.prompts.freeTime),
+    sentence(facts.prompts.values),
+    sentence(facts.prompts.aboutYou),
+  ].join(" ");
+}
+
 export async function generatePresentationText(
   facts: PresentationFacts,
 ): Promise<string> {
+  if (isStagingDeploy()) return stagingPresentationDraft(facts);
   const client = new Anthropic();
   const response = await client.messages.create({
     model: "claude-sonnet-5",

@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { BrevoConfigError, BrevoRequestError, upsertBrevoContact } from "@/lib/brevo";
+import { isStagingDeploy } from "@/lib/config/deployEnv";
 import {
+  COMMUNITY_CONSENT,
   COMMUNITY_INTERESTS,
   type CommunityInterest,
   type CommunityPayload,
@@ -25,26 +27,26 @@ function toPayload(body: unknown): CommunityPayload {
     email: str(source.email),
     ciudad: str(source.ciudad) as CommunityPayload["ciudad"],
     ciudadOtra: str(source.ciudadOtra),
+    telefono: str(source.telefono),
+    empresa: str(source.empresa),
     genero: source.genero === "mujer" || source.genero === "hombre" ? source.genero : "",
     rangoEdad: str(source.rangoEdad) as CommunityPayload["rangoEdad"],
     intereses: [...new Set(intereses)],
-    aceptaPrivacidad: source.aceptaPrivacidad === true,
-    aceptaMarketing: source.aceptaMarketing === true,
+    aceptaInvitaciones: source.aceptaInvitaciones === true,
     fuente: sanitizeSource(str(source.fuente)),
   };
 }
 
 /**
- * "Únete al club" — a Comunidad Junto Select registration. Creates no
- * account and no profile (see CommunityPayload). Firestore is written FIRST
- * and is the system of record, including the timestamped privacy and
- * marketing-consent evidence; Brevo is a best-effort marketing copy that
+ * "Recibir invitaciones" — a Comunidad Junto Select registration. Creates
+ * no account and no profile (see CommunityPayload). Firestore is written
+ * FIRST and is the system of record, including the timestamped consent and
+ * the exact wording agreed to (COMMUNITY_CONSENT); Brevo is a copy that
  * must never turn a captured registration into an error for the visitor.
  *
- * Brevo is only called WITH marketing consent. A registration without it
- * stays in Firestore only (`brevoSyncStatus: "skipped_no_consent"`), so an
- * existing Brevo contact's lists/consent are never touched by someone who
- * did not opt in here.
+ * The form's one required box is the consent to receive invitations, so
+ * every valid registration is synced to Brevo (except on staging, which
+ * never calls Brevo). Brevo adds the unsubscribe link to every campaign.
  */
 export async function POST(request: Request) {
   let body: unknown;
@@ -61,27 +63,34 @@ export async function POST(request: Request) {
   }
 
   const docRef = adminDb.collection("invitationRequests").doc();
+  const staging = isStagingDeploy();
   await docRef.set({
-    formVersion: "comunidad_v1",
+    formVersion: "comunidad_v2",
     nombre: payload.nombre.trim(),
     email: payload.email.trim().toLowerCase(),
     ciudad: payload.ciudad,
-    ciudadOtra: payload.ciudad === "otra" ? payload.ciudadOtra.trim() : null,
+    ciudadOtra: payload.ciudad === "otra" ? payload.ciudadOtra.trim() || null : null,
+    telefono: payload.telefono.trim() || null,
+    empresa: payload.empresa.trim() || null,
     genero: payload.genero,
-    rangoEdad: payload.rangoEdad,
+    rangoEdad: payload.rangoEdad || null,
     intereses: payload.intereses,
     fuente: payload.fuente,
+    consentVersion: COMMUNITY_CONSENT.version,
+    consentText: COMMUNITY_CONSENT.text,
+    // The one box covers both the privacy notice and the invitations, so
+    // both historical flags stay true for anything that reads them.
     aceptaPrivacidad: true,
     aceptaPrivacidadAt: FieldValue.serverTimestamp(),
-    aceptaMarketing: payload.aceptaMarketing,
-    aceptaMarketingAt: payload.aceptaMarketing ? FieldValue.serverTimestamp() : null,
+    aceptaMarketing: true,
+    aceptaMarketingAt: FieldValue.serverTimestamp(),
     createdAt: FieldValue.serverTimestamp(),
-    brevoSyncStatus: payload.aceptaMarketing ? "pending" : "skipped_no_consent",
+    brevoSyncStatus: staging ? "skipped_staging" : "pending",
     brevoSyncedAt: null,
     brevoSyncError: null,
   });
 
-  if (payload.aceptaMarketing) {
+  if (!staging) {
     try {
       await upsertBrevoContact(payload);
       await docRef.update({ brevoSyncStatus: "synced", brevoSyncedAt: FieldValue.serverTimestamp() });
