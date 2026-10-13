@@ -129,6 +129,14 @@ export interface MemberEventBenefitView {
   eventDate: string | null;
   checkoutUrl: string | null;
   ready: boolean;
+  /**
+   * "ready": the code works. "preparing": Ticket Tailor hasn't confirmed it
+   * yet. "failed": the last attempt failed; the member can retry (the same
+   * code, never a second one) and the scheduled scan retries too.
+   */
+  state: "ready" | "preparing" | "failed";
+  /** Staging only: a simulated code that does not exist in Ticket Tailor. */
+  simulated: boolean;
   code: string | null;
   percentage: number;
   validUntil: unknown | null;

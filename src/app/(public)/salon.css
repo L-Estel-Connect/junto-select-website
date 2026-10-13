@@ -229,7 +229,7 @@
   background-position: calc(100% - 14px) 52%, calc(100% - 8px) 52%; background-size: 6px 6px; background-repeat: no-repeat;
 }
 .salon .field-row { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 30px 24px; }
-.salon .field > label .opt { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--tinta-suave); }
+.salon .field > label .opt, .salon .field > legend .opt { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--tinta-suave); }
 .salon .privacy-basic { font-size: 12.5px; line-height: 1.6; color: var(--tinta-suave); }
 .salon .privacy-basic a { color: var(--tinta); }
 .salon .chips { display: flex; flex-wrap: wrap; gap: 10px; }

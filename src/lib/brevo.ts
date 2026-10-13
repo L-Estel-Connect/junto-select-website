@@ -27,11 +27,10 @@ function contactsUrl(): string {
 }
 
 /**
- * Syncs a Comunidad Junto Select registration to Brevo. The contact is
- * added to `BREVO_COMMUNITY_LIST_ID` — a NEW list, deliberately separate
- * from the historical `BREVO_LIST_ID` list, which this form no longer
- * writes to. Without `BREVO_COMMUNITY_LIST_ID` the contact is still
- * created/updated (with all attributes) but attached to no list.
+ * Syncs a "Recibir invitaciones" registration to Brevo: the contact is
+ * created or updated and added to `BREVO_LIST_ID` (list 12, the account
+ * owner's existing list). Without `BREVO_LIST_ID` the contact is still
+ * created or updated but joins no list.
  */
 export async function upsertBrevoContact(input: CommunityPayload) {
   const apiKey = process.env.BREVO_API_KEY;
@@ -43,9 +42,7 @@ export async function upsertBrevoContact(input: CommunityPayload) {
     throw new BrevoConfigError("BREVO_API_KEY is not configured");
   }
 
-  const listId = process.env.BREVO_COMMUNITY_LIST_ID
-    ? Number(process.env.BREVO_COMMUNITY_LIST_ID)
-    : undefined;
+  const listId = process.env.BREVO_LIST_ID ? Number(process.env.BREVO_LIST_ID) : undefined;
 
   const response = await fetch(contactsUrl(), {
     method: "POST",
@@ -55,10 +52,7 @@ export async function upsertBrevoContact(input: CommunityPayload) {
       "api-key": apiKey,
     },
     body: JSON.stringify(
-      buildBrevoContactPayload(input, {
-        listId: Number.isFinite(listId) ? listId : undefined,
-        today: new Date().toISOString().slice(0, 10),
-      }),
+      buildBrevoContactPayload(input, { listId: Number.isFinite(listId) ? listId : undefined }),
     ),
   });
 

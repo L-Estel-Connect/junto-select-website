@@ -3,8 +3,7 @@ import type { CommunityPayload } from "./types";
 export interface BrevoContactPayload {
   email: string;
   updateEnabled: true;
-  attributes: Record<string, string | boolean>;
-  emailBlacklisted: false;
+  attributes: Record<string, string>;
   listIds?: number[];
 }
 
@@ -17,66 +16,33 @@ const CITY_LABEL: Record<string, string> = {
 };
 
 /**
- * Pure Brevo contact payload for a Comunidad Junto Select registration —
+ * Pure Brevo contact payload for a "Recibir invitaciones" registration —
  * no secrets, no network, so it can be checked without a Brevo account.
  *
- * Attribute names are the ones listed in the readiness report and must be
- * created in Brevo (Contacts > Settings > Contact attributes) BEFORE this
- * runs against a real account; this code never creates attributes. Only
- * `GENERO` already exists (category "Mujer"/"Hombre"). The new ones are
- * deliberately text/boolean/date types so no category-option ids are
- * involved, and each one maps 1:1 to a Brevo segment condition:
- *   CIUDAD, CIUDAD_OTRA, RANGO_EDAD, FUENTE, TELEFONO, EMPRESA (text) ·
- *   INT_EVENTOS, INT_INTRODUCCIONES, INT_CENAS, INT_NOVEDADES,
- *   CONSENT_MARKETING (boolean) ·
- *   CONSENT_MARKETING_FECHA, FECHA_REGISTRO_COMUNIDAD (date, YYYY-MM-DD).
+ * Brevo setup confirmed by the account owner (13 Oct 2026): one list, the
+ * existing list 12 (`BREVO_LIST_ID`), and cities as a contact attribute,
+ * never as separate lists. Only attributes that exist in Brevo are sent:
+ * `NOMBRE` and `GENERO` (existing; "Mujer"/"Hombre") and `CIUDAD` (text,
+ * created for this form; "Madrid", "Valencia", "Barcelona", "Málaga" or
+ * "Otra"). A new city needs a Brevo segment on CIUDAD, not code.
  *
- * Every registration carries the explicit consent box (see the route), so
- * CONSENT_MARKETING is always true here; it is still sent explicitly so a
- * segment never has to infer consent from list membership. For the same
- * reason `emailBlacklisted: false`: someone who unsubscribed earlier and
- * signs up again is resubscribed only through this new, explicit consent.
- *
- * City segmentation: one community list, one Brevo segment per city
- * ("CIUDAD equals Madrid", …). Adding a city needs a segment, not code.
- *
- * TELEFONO is a plain text attribute on purpose: Brevo's built-in SMS
- * attribute demands international format and rejects a number already
- * used by another contact, which would fail the whole sync.
+ * Everything else the form collects (other city name, phone, company, age
+ * range, interests, consent wording and version) stays in Firestore
+ * (`invitationRequests`), the system of record.
  *
  * `email` is the dedup key (`updateEnabled: true`): an existing contact is
- * updated and added to the community list; Brevo keeps its other lists.
+ * updated and added to list 12; its other lists, attributes and its
+ * subscription status are left as they are (no `emailBlacklisted`).
  */
-export function buildBrevoContactPayload(
-  input: CommunityPayload,
-  options: { listId?: number; today: string },
-): BrevoContactPayload {
-  const has = (i: CommunityPayload["intereses"][number]) => input.intereses.includes(i);
-  const attributes: Record<string, string | boolean> = {
-    NOMBRE: input.nombre.trim(),
-    GENERO: input.genero === "mujer" ? "Mujer" : "Hombre",
-    CIUDAD: CITY_LABEL[input.ciudad] ?? "Otra",
-    RANGO_EDAD: input.rangoEdad,
-    INT_EVENTOS: has("eventos"),
-    INT_INTRODUCCIONES: has("introducciones"),
-    INT_CENAS: has("cenas"),
-    INT_NOVEDADES: has("novedades"),
-    FUENTE: input.fuente,
-    CONSENT_MARKETING: true,
-    CONSENT_MARKETING_FECHA: options.today,
-    FECHA_REGISTRO_COMUNIDAD: options.today,
-  };
-  if (input.ciudad === "otra" && input.ciudadOtra.trim()) {
-    attributes.CIUDAD_OTRA = input.ciudadOtra.trim();
-  }
-  if (input.telefono.trim()) attributes.TELEFONO = input.telefono.trim();
-  if (input.empresa.trim()) attributes.EMPRESA = input.empresa.trim();
-
+export function buildBrevoContactPayload(input: CommunityPayload, options: { listId?: number }): BrevoContactPayload {
   return {
     email: input.email.trim().toLowerCase(),
     updateEnabled: true,
-    attributes,
-    emailBlacklisted: false,
+    attributes: {
+      NOMBRE: input.nombre.trim(),
+      GENERO: input.genero === "mujer" ? "Mujer" : "Hombre",
+      CIUDAD: CITY_LABEL[input.ciudad] ?? "Otra",
+    },
     ...(options.listId ? { listIds: [options.listId] } : {}),
   };
 }

@@ -29,8 +29,7 @@ export function validateCommunity(data: CommunityPayload): CommunityErrors {
     errors.ciudad = "Elige tu ciudad.";
   } else if (data.ciudad === "otra") {
     const otra = data.ciudadOtra.trim();
-    if (!otra) errors.ciudadOtra = "Escribe tu ciudad.";
-    else if (otra.length > CITY_MAX) errors.ciudadOtra = "El nombre de la ciudad es demasiado largo.";
+    if (otra.length > CITY_MAX) errors.ciudadOtra = "El nombre de la ciudad es demasiado largo.";
   }
 
   const telefono = data.telefono.trim();
@@ -45,7 +44,10 @@ export function validateCommunity(data: CommunityPayload): CommunityErrors {
 
   if (data.genero !== "mujer" && data.genero !== "hombre") errors.genero = "Selecciona una opción.";
 
-  if (!(AGE_RANGES as readonly string[]).includes(data.rangoEdad)) errors.rangoEdad = "Elige tu franja de edad.";
+  // Required: nombre, email, género and the consent box. Everything else is optional.
+  if (data.rangoEdad && !(AGE_RANGES as readonly string[]).includes(data.rangoEdad)) {
+    errors.rangoEdad = "Selección no válida.";
+  }
 
   if (data.intereses.some((i) => !(COMMUNITY_INTERESTS as readonly string[]).includes(i))) {
     errors.intereses = "Selección no válida.";

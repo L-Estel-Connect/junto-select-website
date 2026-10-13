@@ -175,14 +175,12 @@ async function main() {
     const sent = mockLog().filter((e) => e.kind === "contact_upsert" && e.data.email === email).pop();
     const a = sent?.data.attributes ?? {};
     check(
-      "2 Brevo payload carries segmentation",
-      a.CIUDAD === "Valencia" && a.GENERO === "Mujer" && a.RANGO_EDAD === "45-54" && a.INT_EVENTOS === true &&
-        a.INT_CENAS === true && a.INT_INTRODUCCIONES === false && a.CONSENT_MARKETING === true && a.FUENTE === "web_ciudad_valencia" &&
-        a.TELEFONO === "+34 600 123 456" && a.EMPRESA === "Empresa de prueba",
+      "2 Brevo gets only NOMBRE, GENERO and CIUDAD (the attributes that exist in Brevo)",
+      JSON.stringify(a) === JSON.stringify({ NOMBRE: "Prueba Valencia", GENERO: "Mujer", CIUDAD: "Valencia" }),
       JSON.stringify(a),
     );
-    check("2 Brevo resubscribes only with this explicit consent", sent?.data.emailBlacklisted === false);
-    check("2 Brevo goes to the test community list only", JSON.stringify(sent?.data.listIds) === "[999]");
+    check("2 Brevo goes to list 12 only", JSON.stringify(sent?.data.listIds) === "[12]");
+    check("2 Brevo leaves subscription status as it is", !("emailBlacklisted" in (sent?.data ?? {})));
 
     // Madrid by default, optional fields left empty.
     const email2 = `comunidad.madrid.${Date.now()}@example.test`;
@@ -190,15 +188,33 @@ async function main() {
     await page.fill("input[id$=-nombre]", "Prueba Madrid");
     await page.fill("input[type=email]", email2);
     await page.check("input[name=genero][value=hombre]", { force: true });
-    await page.check("input[name=rangoEdad][value='55-64']", { force: true });
     await page.locator("label.check input[type=checkbox]").nth(0).check({ force: true });
     await page.click("button[type=submit]");
     await page.waitForSelector("text=al club, Prueba", { timeout: 15000 });
     await sleep(800);
     const d2 = (await db.collection("invitationRequests").where("email", "==", email2).get()).docs[0]?.data();
     const sent2 = mockLog().filter((e) => e.kind === "contact_upsert" && e.data.email === email2).pop();
-    check("2 default Madrid registration synced without phone or company",
-      d2?.ciudad === "madrid" && d2?.telefono === null && sent2?.data.attributes.CIUDAD === "Madrid" && !("TELEFONO" in sent2.data.attributes));
+    check("2 only name, email, género and consent needed (no age, no interests)", Boolean(d2) && d2.rangoEdad === null && d2.intereses.length === 0);
+    check("2 default Madrid registration synced to list 12",
+      d2?.ciudad === "madrid" && d2?.telefono === null && sent2?.data.attributes.CIUDAD === "Madrid" && JSON.stringify(sent2?.data.listIds) === "[12]");
+
+    // Género has no default and is required.
+    const email3 = `comunidad.singenero.${Date.now()}@example.test`;
+    await page.goto(`${APP}/unete`);
+    check("2 género has no default selection", (await page.locator("input[name=genero]:checked").count()) === 0);
+    await page.fill("input[id$=-nombre]", "Prueba Sin Genero");
+    await page.fill("input[type=email]", email3);
+    await page.locator("label.check input[type=checkbox]").nth(0).check({ force: true });
+    await page.click("button[type=submit]");
+    await sleep(600);
+    check("2 género required", (await page.locator(".err").allTextContents()).some((t) => t.includes("Selecciona una opción")));
+    check("2 nothing stored without género", (await db.collection("invitationRequests").where("email", "==", email3).get()).empty);
+    const r = await fetch(`${APP}/api/invitation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email3, genero: "mujer", aceptaInvitaciones: true }),
+    });
+    check("2 server also refuses a registration without a name", r.status === 400);
 
     await page.goto(`${APP}/unete`);
     await page.fill("input[id$=-telefono]", "abc");

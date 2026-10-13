@@ -15,6 +15,7 @@ NODE_PATH=$(npm root -g) node scripts/local-test/journeys.cjs            # journ
 node scripts/local-test/seed.mjs compare                                  # journey 5: existing profiles unchanged
 NODE_PATH=$(npm root -g) node scripts/local-test/journeys.cjs existing   # existing profiles paying
 NODE_PATH=$(npm root -g) node scripts/local-test/layout-audit.cjs        # 13 pages x 5 screen sizes: layout, photos, overflow (read-only; pass a URL to audit staging)
+NODE_PATH=$(npm root -g) node scripts/local-test/onboarding-ui.cjs        # new users, passive and active onboarding through the real screens
 NODE_PATH=$(npm root -g) node scripts/local-test/site-audit.cjs          # public site, Acceder, modalidad journeys, footer scroll, colaboraciones
 node scripts/local-test/seed.mjs                                          # reset: the runs above make a seeded profile a member
 node scripts/local-test/benefits-matching.cjs                             # 20 % monthly codes (1/3/6-month plans) and matching eligibility
@@ -24,6 +25,7 @@ NODE_PATH=$(npm root -g) node scripts/local-test/events-manager-ui.cjs   # admin
 npx tsx --conditions=react-server scripts/local-test/events-manager.test.mts   # link parsing, form rules, what the website shows
 npx tsx --conditions=react-server scripts/local-test/deploy-env.test.mts       # staging isolation guard
 npx tsx --conditions=react-server scripts/local-test/account.test.mts          # Acceder routing, modality and the matching pool
+npx tsx --conditions=react-server scripts/local-test/ticket-tailor-staging.test.mts  # staging simulates member codes, never writes to Ticket Tailor
 ```
 
 - Open http://localhost:3000 to click through by hand. Magic-link emails are

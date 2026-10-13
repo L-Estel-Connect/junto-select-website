@@ -1,7 +1,7 @@
 import "server-only";
 import { adminDb } from "@/lib/firebase/admin";
 import type { BillingDocument } from "@/lib/billing/types";
-import { getTicketTailorClient } from "@/lib/ticketTailor/client";
+import { getTicketTailorClient, STAGING_SIMULATED_DISCOUNT_PREFIX } from "@/lib/ticketTailor/client";
 import type { ProfileDocument } from "@/lib/introduction/types";
 import { generateUniqueEventBenefitCode } from "./codeGeneration";
 import {
@@ -60,6 +60,8 @@ function toMemberView(b: EventBenefitDocument, event: EligibleTicketTailorEventD
     eventDate: event?.eventDate ?? null,
     checkoutUrl: event?.ticketTailorCheckoutUrl ?? null,
     ready,
+    state: ready ? "ready" : b.status === "external_sync_failed" ? "failed" : "preparing",
+    simulated: !!b.ticketTailorDiscountId?.startsWith(STAGING_SIMULATED_DISCOUNT_PREFIX),
     code: ready ? b.code : null,
     percentage: b.percentage,
     validUntil: ready ? b.validUntil : null,
@@ -245,6 +247,9 @@ export async function claimCycleEventBenefit(uid: string, ticketTailorEventId: s
 
   if (outcome.kind === "error") return { ok: false, error: outcome.error };
 
+  // A new code, or the same request again ("Reintentar") for a code that is
+  // not live yet: activation only ever works on this one record and adopts
+  // an existing Ticket Tailor discount, so a retry never makes a second code.
   const ref = adminDb.doc(`eventBenefits/${outcome.benefitId}`);
   try {
     await activateEventBenefit(ref, event);

@@ -167,7 +167,9 @@ export default function CommunityForm({ initialCity, source }: { initialCity: Co
         {err("ciudad")}
         {data.ciudad === "otra" && (
           <div className="field" style={{ marginTop: 8 }}>
-            <label htmlFor={`${id}-ciudadOtra`}>¿Cuál?</label>
+            <label htmlFor={`${id}-ciudadOtra`}>
+              ¿Cuál? <span className="opt">(opcional)</span>
+            </label>
             <input
               id={`${id}-ciudadOtra`}
               className="input"
@@ -235,7 +237,9 @@ export default function CommunityForm({ initialCity, source }: { initialCity: Co
       </fieldset>
 
       <fieldset className="field">
-        <legend id={`${id}-rangoEdad`} tabIndex={-1}>Edad</legend>
+        <legend id={`${id}-rangoEdad`} tabIndex={-1}>
+          Edad <span className="opt">(opcional)</span>
+        </legend>
         <div className="chips">
           {AGE_RANGES.map((r) => (
             <label className="chip" key={r}>
@@ -248,7 +252,9 @@ export default function CommunityForm({ initialCity, source }: { initialCity: Co
       </fieldset>
 
       <fieldset className="field">
-        <legend>Me interesa</legend>
+        <legend>
+          Me interesa <span className="opt">(opcional)</span>
+        </legend>
         <p className="hint">Elige todo lo que quieras.</p>
         <div className="chips">
           {INTERESTS.map((i) => (

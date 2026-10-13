@@ -7,7 +7,8 @@
  *   - a Stripe key that is not a test key;
  *   - any Brevo call (contacts, lists, emails);
  *   - any Ticket Tailor write (discount codes). Read-only event lookups are
- *     still allowed, for the Events Manager import.
+ *     still allowed, for the Events Manager import; member codes are
+ *     simulated (src/lib/ticketTailor/client.ts) so the journey can be tested.
  * Unset everywhere else, so production and local testing are unaffected.
  */
 export const PRODUCTION_FIREBASE_PROJECT_ID = "select-dev-508407";

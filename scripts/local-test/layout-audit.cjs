@@ -24,6 +24,10 @@ const SIZES = {
   small: { width: 360, height: 740 },
 };
 
+// Pages whose photo repeats Lara accepted (13 Oct 2026): excluded from the
+// "used once" count, still checked for loading and stretching.
+const REPEATS_ACCEPTED = new Set(["/colaboraciones"]);
+
 const results = [];
 const warnings = new Set();
 function check(name, ok, detail = "") {
@@ -125,7 +129,7 @@ const slug = (p) => (p === "/" ? "inicio" : p.replace(/^\//, "").replace(/[/?=&]
           check(`${tag}: photo ${img.file} not stretched beyond ×2`, img.scale <= 2, `×${img.scale.toFixed(2)} in ${img.section}`);
           if (img.scale > 1.35) warnings.add(`${img.file} ×${img.scale.toFixed(2)} at ${size} in ${path} ${img.section}`);
         }
-        if (size === "desktop" && !img.event) {
+        if (size === "desktop" && !img.event && !REPEATS_ACCEPTED.has(path)) {
           if (!photoUse.has(img.file)) photoUse.set(img.file, new Set());
           photoUse.get(img.file).add(`${path} ${img.section}`);
         }

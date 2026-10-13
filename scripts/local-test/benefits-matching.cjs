@@ -221,6 +221,22 @@ async function benefitEdgeCases() {
   const s = await state(token);
   check("[tt down] member now sees the code", s.benefits.length === 1 && s.benefits[0].ready);
 
+  // Same outage, but the member presses "Reintentar" (the same request again).
+  const uid2 = "bm-ttretry";
+  await reset(uid2);
+  const t2 = await tokenFor(uid2);
+  await pay(t2, uid2, "monthly");
+  fs.writeFileSync(TT_FAIL, "1");
+  const first = await claim(t2, "tt-e1");
+  check("[tt down] member sees a failed state, not an endless wait", first.data?.benefit?.state === "failed" && (await state(t2)).benefits[0]?.state === "failed");
+  const stillDown = await claim(t2, "tt-e1");
+  check("[tt down] retry while still down: same code, still failed", stillDown.status === 200 && stillDown.data.benefit.state === "failed");
+  fs.rmSync(TT_FAIL);
+  const retried = await claim(t2, "tt-e1");
+  const docs2 = (await db.collection("eventBenefits").where("uid", "==", uid2).get()).docs.map((d) => d.data());
+  check("[tt down] member retry activates the same code",
+    retried.status === 200 && retried.data.benefit.state === "ready" && docs2.length === 1 && docs2[0].status === "active" && ttCreatesFor(docs2[0].code).length === 1);
+
   // A code from the earlier one-per-event engine stays valid and visible.
   const legacyUid = "bm-legacy";
   await reset(legacyUid);

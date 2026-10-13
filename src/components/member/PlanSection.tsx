@@ -12,6 +12,7 @@ import { memberFetchJson } from "@/lib/member/memberFetch";
 import { useMemberQuery } from "@/lib/member/useMemberQuery";
 import type { MemberEventBenefitState, MemberEventBenefitView } from "@/lib/eventBenefits/types";
 import { primaryButtonClasses } from "@/lib/styles";
+import { CONTACT_EMAIL } from "@/lib/site/content";
 
 const MARKET_NOT_AVAILABLE_MESSAGE =
   "Junto Select está disponible actualmente solo para Madrid. Para recibir selecciones, necesitas vivir en Madrid, cerca de Madrid o venir a Madrid con cierta frecuencia. Si tu situación cambia, podrás actualizar esta respuesta más adelante.";
@@ -102,7 +103,15 @@ function PlanCard({
  * (see the Ticket Tailor API audit) — showing nothing false is safer than
  * showing an unverified claim.
  */
-function EventBenefitCard({ benefit }: { benefit: MemberEventBenefitView }) {
+function EventBenefitCard({
+  benefit,
+  onRetry,
+  retrying,
+}: {
+  benefit: MemberEventBenefitView;
+  onRetry: () => void;
+  retrying: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   const eventDate = formatEventDate(benefit.eventDate);
   const validUntil = formatDate(benefit.validUntil);
@@ -138,6 +147,11 @@ function EventBenefitCard({ benefit }: { benefit: MemberEventBenefitView }) {
             </button>
           </div>
           {validUntil && <p className="mt-2 text-[12px] text-ink-soft">Válido hasta el {validUntil}.</p>}
+          {benefit.simulated && (
+            <p className="mt-2 text-[12px] text-[#8a3b3b]">
+              Código de prueba del entorno de staging: no existe en Ticket Tailor y no funciona al comprar.
+            </p>
+          )}
           {benefit.checkoutUrl && (
             <a
               href={benefit.checkoutUrl}
@@ -149,8 +163,30 @@ function EventBenefitCard({ benefit }: { benefit: MemberEventBenefitView }) {
             </a>
           )}
         </>
+      ) : benefit.state === "failed" ? (
+        <div className="mt-3">
+          <p role="alert" className="text-[13px] text-[#8a3b3b]">
+            No hemos podido generar tu código todavía. Tu código está reservado: no perderás el beneficio de este
+            ciclo.
+          </p>
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={retrying}
+            className="mt-2 text-[12px] font-medium uppercase tracking-[0.1em] text-ink underline decoration-hairline underline-offset-4 disabled:opacity-50"
+          >
+            {retrying ? "Reintentando…" : "Reintentar"}
+          </button>
+          <p className="mt-2 text-[12px] text-ink-soft">
+            Si sigue sin aparecer, escríbenos a{" "}
+            <a className="underline" href={`mailto:${CONTACT_EMAIL}`}>
+              {CONTACT_EMAIL}
+            </a>
+            .
+          </p>
+        </div>
       ) : (
-        <p className="mt-3 text-[13px] text-ink-soft">Estamos preparando tu código para este evento.</p>
+        <p className="mt-3 text-[13px] text-ink-soft">Estamos preparando tu código para este evento. Solo tarda unos segundos.</p>
       )}
     </div>
   );
@@ -178,6 +214,7 @@ export function EventBenefitSection({ uid }: { uid: string }) {
   );
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [claimError, setClaimError] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
 
   const loading = !benefitQuery.data && !benefitQuery.error;
   const benefits = benefitQuery.data?.benefits ?? [];
@@ -188,6 +225,37 @@ export function EventBenefitSection({ uid }: { uid: string }) {
   const lastDay = cycle
     ? formatEventDate(new Date(Date.parse(`${cycle.cycleEnd}T00:00:00Z`) - 86400000).toISOString().slice(0, 10))
     : null;
+
+  // A code still being prepared is re-read a few times, so it appears
+  // without a page reload as soon as Ticket Tailor confirms it.
+  const preparing = (benefitQuery.data?.benefits ?? []).some((b) => b.state === "preparing");
+  const [polls, setPolls] = useState(0);
+  useEffect(() => {
+    if (!preparing || polls >= 6) return;
+    const t = setTimeout(() => {
+      setPolls((n) => n + 1);
+      benefitQuery.reload();
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [preparing, polls, benefitQuery]);
+
+  // Asking again for the same event returns the same code and retries its
+  // activation: it can never create a second code.
+  async function handleRetry(ticketTailorEventId: string) {
+    setRetryingId(ticketTailorEventId);
+    try {
+      await memberFetchJson("/api/member/event-benefit", {
+        method: "POST",
+        body: JSON.stringify({ ticketTailorEventId }),
+      });
+    } catch {
+      // The card keeps showing the failed state and the contact address.
+    } finally {
+      setRetryingId(null);
+      setPolls(0);
+      benefitQuery.reload();
+    }
+  }
 
   async function handleClaim(ticketTailorEventId: string) {
     setClaimingId(ticketTailorEventId);
@@ -267,7 +335,12 @@ export function EventBenefitSection({ uid }: { uid: string }) {
           {benefits.length > 0 ? (
             <div className="mt-4 space-y-3">
               {benefits.map((benefit) => (
-                <EventBenefitCard key={`${benefit.ticketTailorEventId}-${benefit.code ?? "pending"}`} benefit={benefit} />
+                <EventBenefitCard
+                  key={`${benefit.ticketTailorEventId}-${benefit.code ?? "pending"}`}
+                  benefit={benefit}
+                  onRetry={() => handleRetry(benefit.ticketTailorEventId)}
+                  retrying={retryingId === benefit.ticketTailorEventId}
+                />
               ))}
             </div>
           ) : (
