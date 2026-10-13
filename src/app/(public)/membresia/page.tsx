@@ -10,29 +10,29 @@ import salonPhoto from "../../../../public/images/who-you-meet.png";
 export const metadata: Metadata = {
   title: "Membresía Select · Club privado para solteros a partir de 40",
   description:
-    "La Membresía Select de Junto Select: introducciones privadas en Madrid, un código del 20 % para un encuentro al mes y tu propia cuenta de miembro. Desde 49 € al mes.",
+    "La Membresía Select de Junto Select: una comunidad selecta, introducciones privadas en Madrid y un 20 % de descuento en un encuentro al mes. Desde 49 € al mes.",
   alternates: { canonical: "/membresia" },
 };
 
 const PRIVILEGES = [
   {
     n: "I",
+    title: "Una comunidad selecta",
+    text: "Formas parte de un círculo de solteros con trayectoria que comparten encuentros, conversación y lugares especiales.",
+    cond: "Hoy, en Madrid. Valencia, Barcelona y Málaga, próximamente.",
+  },
+  {
+    n: "II",
     title: "Introducciones privadas",
     text: "Te presentamos, con discreción, a personas compatibles con lo que buscas. Cada propuesta es privada y solo seguimos adelante si los dos aceptáis.",
     cond: "Hasta tres propuestas por ciclo mensual, según compatibilidad y disponibilidad. Requiere tu perfil privado completo. Hoy, en Madrid.",
     link: { href: "/introducciones", label: "Cómo funcionan" },
   },
   {
-    n: "II",
-    title: EVENT_BENEFIT.short,
+    n: "III",
+    title: "20 % de descuento en un encuentro al mes",
     text: EVENT_BENEFIT.text,
     cond: EVENT_BENEFIT.conditions,
-  },
-  {
-    n: "III",
-    title: "Tu cuenta de miembro",
-    text: "Tus códigos de descuento, tu perfil y tu membresía, en un solo lugar privado.",
-    cond: "Gestiona tu membresía o cancela la renovación cuando quieras.",
   },
 ];
 

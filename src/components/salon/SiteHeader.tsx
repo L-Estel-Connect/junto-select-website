@@ -39,7 +39,7 @@ export default function SiteHeader({ variant = "overlay" }: { variant?: "overlay
             Acceder
           </Link>
           <Link className="btn btn-laton" href={joinHref()}>
-            Únete al club
+            Recibir invitaciones
           </Link>
           <button
             className="burger"
@@ -79,7 +79,7 @@ export default function SiteHeader({ variant = "overlay" }: { variant?: "overlay
           </nav>
           <div className="ctas">
             <Link className="btn btn-tinta" href={joinHref()} onClick={() => setOpen(false)}>
-              Únete al club
+              Recibir invitaciones
             </Link>
             <Link className="btn btn-line" href="/membresia#planes" onClick={() => setOpen(false)}>
               Hazte miembro

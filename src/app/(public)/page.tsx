@@ -3,7 +3,7 @@ import Link from "next/link";
 import SiteHeader from "@/components/salon/SiteHeader";
 import EventCards from "@/components/salon/EventCards";
 import CityLinks from "@/components/salon/CityLinks";
-import { EVENT_BENEFIT, FIGURES, joinHref } from "@/lib/site/content";
+import { FIGURES, joinHref } from "@/lib/site/content";
 import { getUpcomingEvents } from "@/lib/site/events";
 import heroPhoto from "../../../public/images/hero.png";
 import clubPhoto from "../../../public/images/who-you-meet.png";
@@ -51,13 +51,13 @@ export default async function Home() {
             <div className="hero-cta">
               <div className="hero-links">
                 <Link className="btn btn-laton" href={joinHref()}>
-                  Únete al club
+                  Recibir invitaciones
                 </Link>
                 <Link className="link" href="/membresia">
                   Descubre la Membresía Select
                 </Link>
               </div>
-              <small>Únete sin compromiso.</small>
+              <small>Sin coste y sin compromiso.</small>
             </div>
           </div>
         </div>
@@ -105,9 +105,14 @@ export default async function Home() {
                 un encuentro elegible.
               </p>
             </div>
-            <Link className="link" href="/eventos">
-              Ver todos los encuentros
-            </Link>
+            <div className="sec-links">
+              <Link className="link" href="/eventos">
+                Ver todos los encuentros
+              </Link>
+              <Link className="link" href={joinHref()}>
+                Recibir invitaciones
+              </Link>
+            </div>
           </div>
           <EventCards events={events} />
         </div>
@@ -123,18 +128,22 @@ export default async function Home() {
             Más que asistir, <em>pertenecer.</em>
           </h2>
           <p className="txt">
-            La membresía de Junto Select abre la puerta a las introducciones privadas, a un 20 % en un encuentro
-            cada mes y a tu propio espacio en el club.
+            La membresía de Junto Select te da acceso a una comunidad selecta, a introducciones privadas y a un 20 %
+            de descuento en un encuentro al mes.
           </p>
           <ul className="sel-list">
-            <li><span>01</span>Introducciones privadas</li>
-            <li><span>02</span>{EVENT_BENEFIT.short}</li>
-            <li><span>03</span>Tu cuenta de miembro</li>
+            <li><span>01</span>Una comunidad selecta</li>
+            <li><span>02</span>Introducciones privadas</li>
+            <li><span>03</span>20 % de descuento en un encuentro al mes</li>
           </ul>
           <p className="meta">Disponible en Madrid · Desde 49 € al mes</p>
           <Link className="link" href="/membresia" style={{ justifySelf: "start" }}>
             Descubre la Membresía Select
           </Link>
+          <p className="sel-alt">
+            ¿Solo quieres venir a los encuentros? <Link href={joinHref()}>Recibir invitaciones</Link>, sin coste y sin
+            compromiso.
+          </p>
         </div>
       </section>
 

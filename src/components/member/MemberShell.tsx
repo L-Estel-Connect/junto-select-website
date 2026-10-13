@@ -3,12 +3,14 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signInRedirectPath } from "@/lib/account/signInRedirect";
 import { useAuth } from "@/lib/firebase/useAuth";
 import { IntroductionError, IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
 import DebugOverlay from "@/components/introduction/DebugOverlay";
 import { logDebugEvent } from "@/lib/introduction/onboardingDebug";
 import { MemberUidProvider } from "./MemberContext";
 import MemberNav from "./MemberNav";
+import RequireAccountChoice from "@/components/account/RequireAccountChoice";
 
 /**
  * Privacidad/Términos moved out of the primary header nav (which should
@@ -61,7 +63,7 @@ export default function MemberShell({ children }: { children: ReactNode }) {
     // the landing page can explain why someone was sent back here instead
     // of silently bouncing them with no context.
     if (!loading && !user) {
-      router.replace("/introduction?session=expired");
+      router.replace(signInRedirectPath(window.location.pathname));
     }
   }, [loading, user, router]);
 
@@ -90,11 +92,13 @@ export default function MemberShell({ children }: { children: ReactNode }) {
   return (
     <MemberUidProvider value={user.uid}>
       <DebugOverlay />
-      <div className="flex min-h-svh flex-col">
-        <MemberNav />
-        <div className="flex-1">{children}</div>
-        <MemberFooter />
-      </div>
+      <RequireAccountChoice>
+        <div className="flex min-h-svh flex-col">
+          <MemberNav />
+          <div className="flex-1">{children}</div>
+          <MemberFooter />
+        </div>
+      </RequireAccountChoice>
     </MemberUidProvider>
   );
 }

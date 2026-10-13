@@ -16,16 +16,20 @@ import { requireFinalized } from "@/lib/introduction/completion";
  * whatever copy is already in memory instead of each tab independently
  * re-fetching the same document.
  */
-export function useMemberProfile(uid: string) {
+export function useMemberProfile(uid: string, options: { allowUnfinished?: boolean | null } = {}) {
   const router = useRouter();
   const { profile, error, refresh } = useSharedProfile(uid);
+  // `allowUnfinished`: pages a Select member needs whether or not they
+  // have finished an introductions profile (Mi plan, Ajustes). `null`
+  // means "not known yet" (billing still loading): wait, don't redirect.
+  const { allowUnfinished = false } = options;
 
   useEffect(() => {
-    if (!profile) return;
+    if (!profile || allowUnfinished !== false) return;
     const redirect = requireFinalized(profile);
     if (redirect) router.replace(redirect);
-  }, [profile, router]);
+  }, [profile, router, allowUnfinished]);
 
-  const ready = Boolean(profile) && !requireFinalized(profile!);
+  const ready = Boolean(profile) && (allowUnfinished === true || !requireFinalized(profile!));
   return { profile, ready, error, refresh };
 }

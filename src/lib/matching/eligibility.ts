@@ -27,6 +27,7 @@ export function isProfileInEligiblePool(profile: ProfileDocument): boolean {
   // (types.ts) for why this is deliberate defense-in-depth on top of,
   // never instead of, the ordinary completion pipeline below.
   if (profile.meta.pendingLegacyActivation) return false;
+  if (isAwaitingServiceChoice(profile)) return false;
   if (profile.meta.profileStatus !== "active_for_matching") return false;
   if (
     profile.meta.duplicateStatus === "suspected" ||
@@ -41,8 +42,20 @@ export function isProfileInEligiblePool(profile: ProfileDocument): boolean {
   return true;
 }
 
+/**
+ * A profile started from "Elige tu modalidad" (it carries
+ * `meta.requestedService`) joins the pool only once its owner has finalized
+ * it: by choosing the passive network, or by paying for Select. Until then
+ * a complete profile is NOT silently treated as passive. Profiles created
+ * before that choice existed have no `requestedService` and are unaffected.
+ */
+export function isAwaitingServiceChoice(profile: ProfileDocument): boolean {
+  return !!profile.meta.requestedService && !profile.meta.onboardingFinalized;
+}
+
 export type EligibilityFailureReason =
   | "legacy_pending_activation"
+  | "awaiting_service_choice"
   | "profile_status_not_active"
   | "gender_preference_ambiguous"
   | "duplicate_suspected"
@@ -77,6 +90,7 @@ export interface EligibilityDiagnosis {
 export function explainIneligibility(profile: ProfileDocument): EligibilityDiagnosis {
   const reasons: EligibilityFailureReason[] = [];
   if (profile.meta.pendingLegacyActivation) reasons.push("legacy_pending_activation");
+  if (isAwaitingServiceChoice(profile)) reasons.push("awaiting_service_choice");
   if (profile.meta.profileStatus !== "active_for_matching") reasons.push("profile_status_not_active");
   // Called out as its own top-level reason (in addition to also showing
   // up inside profileStatus.sections.preferences.missingFields) because

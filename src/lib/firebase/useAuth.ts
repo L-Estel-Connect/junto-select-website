@@ -10,6 +10,7 @@ import {
 } from "./auth";
 import { auth } from "./client";
 import { logDebugEvent, shortUid } from "@/lib/introduction/onboardingDebug";
+import { rememberSignedIn } from "@/lib/account/signInRedirect";
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -71,7 +72,10 @@ export function useAuth() {
         "AUTH_RESOLVED",
         nextUser ? `uid=${shortUid(nextUser.uid)}` : "no user",
       );
-      if (nextUser) logDebugEvent("UID_PRESENT", shortUid(nextUser.uid));
+      if (nextUser) {
+        logDebugEvent("UID_PRESENT", shortUid(nextUser.uid));
+        rememberSignedIn();
+      }
       setUser(nextUser);
       authStateKnown = true;
       maybeStopLoading();

@@ -8,6 +8,8 @@ import { auth } from "@/lib/firebase/client";
 import { signOutUser } from "@/lib/firebase/auth";
 import { IntroductionError, IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
 import { useMemberProfile } from "./useMemberProfile";
+import { useBilling } from "@/lib/billing/useBilling";
+import { isEntitledStatus } from "@/lib/billing/types";
 
 const linkClasses =
   "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
@@ -125,7 +127,11 @@ function DeleteProfileModal({
 
 export default function SettingsSection({ uid }: { uid: string }) {
   const { user } = useAuth();
-  const { ready, error, refresh } = useMemberProfile(uid);
+  const { billing, loading: billingLoading } = useBilling(uid);
+  const { profile, ready, error, refresh } = useMemberProfile(uid, {
+    allowUnfinished: billingLoading ? null : !!billing && isEntitledStatus(billing.status),
+  });
+  const finalized = !!profile?.meta.onboardingFinalized;
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const router = useRouter();
   if (!ready) {
@@ -141,16 +147,20 @@ export default function SettingsSection({ uid }: { uid: string }) {
 
       <SettingsGroup title="Cuenta">
         <SettingsRow label="Email" value={user?.email ?? "—"} />
-        <div className="border-b border-hairline py-4">
-          <Link href="/member/profile#editar-perfil" className={`text-[14px] ${linkClasses}`}>
-            Editar información del perfil
-          </Link>
-        </div>
-        <div className="border-b border-hairline py-4">
-          <Link href="/member/profile/contact" className={`text-[14px] ${linkClasses}`}>
-            Preferencias de contacto
-          </Link>
-        </div>
+        {finalized && (
+          <>
+            <div className="border-b border-hairline py-4">
+              <Link href="/member/profile#editar-perfil" className={`text-[14px] ${linkClasses}`}>
+                Editar información del perfil
+              </Link>
+            </div>
+            <div className="border-b border-hairline py-4">
+              <Link href="/member/profile/contact" className={`text-[14px] ${linkClasses}`}>
+                Preferencias de contacto
+              </Link>
+            </div>
+          </>
+        )}
         <div className="border-b border-hairline py-4">
           <Link href="/member/plan" className={`text-[14px] ${linkClasses}`}>
             Gestionar mi membresía

@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   if (auth instanceof NextResponse) return auth;
   const { uid, email } = auth;
 
-  let body: { planKey?: unknown; termsAccepted?: unknown; immediateServiceRequested?: unknown };
+  let body: { planKey?: unknown; termsAccepted?: unknown; immediateServiceRequested?: unknown; returnTo?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -71,8 +71,10 @@ export async function POST(request: Request) {
     uid,
     email,
     planKey,
-    successPath: "/member/plan?checkout=success",
-    cancelPath: "/member/plan?checkout=cancel",
+    // "Búsqueda activa" pays on the last step of the profile and returns
+    // there; every other caller returns to Mi plan, as before.
+    successPath: body.returnTo === "profile" ? "/member/profile?checkout=success" : "/member/plan?checkout=success",
+    cancelPath: body.returnTo === "profile" ? "/member/profile?checkout=cancel" : "/member/plan?checkout=cancel",
   });
   if (!result.ok) {
     return NextResponse.json({ ok: false, error: result.error }, { status: result.status });

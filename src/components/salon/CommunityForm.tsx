@@ -31,7 +31,8 @@ type Status = "idle" | "submitting" | "success" | "error";
 
 export default function CommunityForm({ initialCity, source }: { initialCity: CommunityCity | ""; source: string }) {
   const id = useId();
-  const [data, setData] = useState<CommunityPayload>({ ...emptyCommunity, ciudad: initialCity, fuente: source });
+  // Madrid, the active city, is preselected unless a city link chose another.
+  const [data, setData] = useState<CommunityPayload>({ ...emptyCommunity, ciudad: initialCity || "madrid", fuente: source });
   const [errors, setErrors] = useState<CommunityErrors>({});
   const [status, setStatus] = useState<Status>("idle");
 
@@ -91,9 +92,7 @@ export default function CommunityForm({ initialCity, source }: { initialCity: Co
             : data.ciudad === "otra"
               ? `Ya formas parte de la comunidad Junto Select. Hemos anotado ${data.ciudadOtra.trim()} para saber dónde crecer.`
               : `Ya formas parte de la comunidad Junto Select. Serás de los primeros en saber cuándo llegamos a ${city?.name}.`}{" "}
-          {data.aceptaMarketing
-            ? "Te escribiremos con nuestras próximas invitaciones."
-            : "Como no has marcado recibir invitaciones por email, no te escribiremos; puedes volver a unirte cuando quieras para activarlas."}
+          Te escribiremos con nuestras próximas invitaciones. Puedes darte de baja desde cualquier email.
         </p>
         <Link className="link" href="/membresia">
           Descubre la Membresía Select
@@ -149,22 +148,22 @@ export default function CommunityForm({ initialCity, source }: { initialCity: Co
         {err("email")}
       </div>
 
-      <fieldset className="field">
-        <legend id={`${id}-ciudad`} tabIndex={-1}>Ciudad</legend>
-        <div className="chips" role="radiogroup" aria-labelledby={`${id}-ciudad`}>
+      <div className="field">
+        <label htmlFor={`${id}-ciudad`}>Ciudad</label>
+        <select
+          id={`${id}-ciudad`}
+          className="input select"
+          value={data.ciudad}
+          onChange={(e) => update("ciudad", e.target.value as CommunityCity)}
+          aria-invalid={Boolean(errors.ciudad)}
+          aria-describedby={described("ciudad")}
+        >
           {CITIES.map((c) => (
-            <label className="chip" key={c.slug}>
-              <input
-                type="radio"
-                name="ciudad"
-                value={c.slug}
-                checked={data.ciudad === c.slug}
-                onChange={() => update("ciudad", c.slug)}
-              />
-              <span>{c.slug === "otra" ? "Otra ciudad" : c.name}</span>
-            </label>
+            <option key={c.slug} value={c.slug}>
+              {c.slug === "otra" ? "Otra ciudad" : c.name}
+            </option>
           ))}
-        </div>
+        </select>
         {err("ciudad")}
         {data.ciudad === "otra" && (
           <div className="field" style={{ marginTop: 8 }}>
@@ -183,7 +182,44 @@ export default function CommunityForm({ initialCity, source }: { initialCity: Co
           </div>
         )}
         {data.ciudad && <p className="note">{CITY_NOTE[data.ciudad]}</p>}
-      </fieldset>
+      </div>
+
+      <div className="field-row">
+        <div className="field">
+          <label htmlFor={`${id}-telefono`}>
+            Teléfono <span className="opt">(opcional)</span>
+          </label>
+          <input
+            id={`${id}-telefono`}
+            className="input"
+            type="tel"
+            autoComplete="tel"
+            inputMode="tel"
+            maxLength={communityLimits.PHONE_MAX}
+            value={data.telefono}
+            onChange={(e) => update("telefono", e.target.value)}
+            aria-invalid={Boolean(errors.telefono)}
+            aria-describedby={described("telefono")}
+          />
+          {err("telefono")}
+        </div>
+        <div className="field">
+          <label htmlFor={`${id}-empresa`}>
+            Empresa <span className="opt">(opcional)</span>
+          </label>
+          <input
+            id={`${id}-empresa`}
+            className="input"
+            autoComplete="organization"
+            maxLength={communityLimits.COMPANY_MAX}
+            value={data.empresa}
+            onChange={(e) => update("empresa", e.target.value)}
+            aria-invalid={Boolean(errors.empresa)}
+            aria-describedby={described("empresa")}
+          />
+          {err("empresa")}
+        </div>
+      </div>
 
       <fieldset className="field">
         <legend id={`${id}-genero`} tabIndex={-1}>Soy</legend>
@@ -228,37 +264,39 @@ export default function CommunityForm({ initialCity, source }: { initialCity: Co
       <div className="field">
         <label className="check" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>
           <input
-            id={`${id}-aceptaPrivacidad`}
+            id={`${id}-aceptaInvitaciones`}
             type="checkbox"
-            checked={data.aceptaPrivacidad}
-            onChange={(e) => update("aceptaPrivacidad", e.target.checked)}
-            aria-invalid={Boolean(errors.aceptaPrivacidad)}
-            aria-describedby={described("aceptaPrivacidad")}
+            checked={data.aceptaInvitaciones}
+            onChange={(e) => update("aceptaInvitaciones", e.target.checked)}
+            aria-invalid={Boolean(errors.aceptaInvitaciones)}
+            aria-describedby={described("aceptaInvitaciones")}
           />
           <span>
-            He leído y acepto la{" "}
+            Quiero recibir por email las invitaciones y novedades de Junto Select. He leído la{" "}
             <Link href="/privacidad" target="_blank">
               política de privacidad
             </Link>
             .
           </span>
         </label>
-        {err("aceptaPrivacidad")}
-        <label className="check" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>
-          <input
-            type="checkbox"
-            checked={data.aceptaMarketing}
-            onChange={(e) => update("aceptaMarketing", e.target.checked)}
-          />
-          <span>Quiero recibir por email las invitaciones a los encuentros y las novedades del club. (Opcional)</span>
-        </label>
+        {err("aceptaInvitaciones")}
       </div>
 
       <button className="btn btn-tinta" type="submit" disabled={status === "submitting"}>
-        {status === "submitting" ? "Enviando…" : "Únete al club"}
+        {status === "submitting" ? "Enviando…" : "Recibir invitaciones"}
       </button>
       <p className="hint muted" style={{ fontSize: 13.5 }}>
-        Unirte a la comunidad es sin compromiso y no crea ninguna cuenta. La Membresía Select es opcional.
+        Sin coste. No crea ninguna cuenta ni perfil de introducciones.
+      </p>
+      <p className="privacy-basic">
+        <strong>Información básica sobre protección de datos.</strong> Responsable: L-Estel Connect SL. Finalidad:
+        enviarte por email nuestras invitaciones y novedades del club. Legitimación: tu consentimiento, que puedes
+        retirar en cualquier momento con el enlace de baja de cada email. Destinatarios: Brevo, nuestro proveedor
+        de envío de emails. Derechos: acceso, rectificación, supresión y los demás que explica nuestra{" "}
+        <Link href="/privacidad" target="_blank">
+          política de privacidad
+        </Link>
+        .
       </p>
     </form>
   );

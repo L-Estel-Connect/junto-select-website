@@ -1,5 +1,6 @@
 import { Instrument_Sans, Newsreader } from "next/font/google";
 import SiteFooter from "@/components/salon/SiteFooter";
+import ScrollToTop from "@/components/salon/ScrollToTop";
 import "./salon.css";
 
 // Typography B (approved v5): Newsreader Light for headings, Instrument Sans
@@ -27,6 +28,7 @@ const instrumentSans = Instrument_Sans({
 export default function PublicLayout({ children }: LayoutProps<"/">) {
   return (
     <div className={`salon ${newsreader.variable} ${instrumentSans.variable}`}>
+      <ScrollToTop />
       {children}
       <SiteFooter />
     </div>

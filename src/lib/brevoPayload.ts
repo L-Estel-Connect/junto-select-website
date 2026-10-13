@@ -4,6 +4,7 @@ export interface BrevoContactPayload {
   email: string;
   updateEnabled: true;
   attributes: Record<string, string | boolean>;
+  emailBlacklisted: false;
   listIds?: number[];
 }
 
@@ -25,14 +26,23 @@ const CITY_LABEL: Record<string, string> = {
  * `GENERO` already exists (category "Mujer"/"Hombre"). The new ones are
  * deliberately text/boolean/date types so no category-option ids are
  * involved, and each one maps 1:1 to a Brevo segment condition:
- *   CIUDAD, CIUDAD_OTRA, RANGO_EDAD, FUENTE (text) ·
+ *   CIUDAD, CIUDAD_OTRA, RANGO_EDAD, FUENTE, TELEFONO, EMPRESA (text) ·
  *   INT_EVENTOS, INT_INTRODUCCIONES, INT_CENAS, INT_NOVEDADES,
  *   CONSENT_MARKETING (boolean) ·
  *   CONSENT_MARKETING_FECHA, FECHA_REGISTRO_COMUNIDAD (date, YYYY-MM-DD).
  *
- * Only called for registrations WITH marketing consent (see the route), so
+ * Every registration carries the explicit consent box (see the route), so
  * CONSENT_MARKETING is always true here; it is still sent explicitly so a
- * segment never has to infer consent from list membership.
+ * segment never has to infer consent from list membership. For the same
+ * reason `emailBlacklisted: false`: someone who unsubscribed earlier and
+ * signs up again is resubscribed only through this new, explicit consent.
+ *
+ * City segmentation: one community list, one Brevo segment per city
+ * ("CIUDAD equals Madrid", …). Adding a city needs a segment, not code.
+ *
+ * TELEFONO is a plain text attribute on purpose: Brevo's built-in SMS
+ * attribute demands international format and rejects a number already
+ * used by another contact, which would fail the whole sync.
  *
  * `email` is the dedup key (`updateEnabled: true`): an existing contact is
  * updated and added to the community list; Brevo keeps its other lists.
@@ -59,11 +69,14 @@ export function buildBrevoContactPayload(
   if (input.ciudad === "otra" && input.ciudadOtra.trim()) {
     attributes.CIUDAD_OTRA = input.ciudadOtra.trim();
   }
+  if (input.telefono.trim()) attributes.TELEFONO = input.telefono.trim();
+  if (input.empresa.trim()) attributes.EMPRESA = input.empresa.trim();
 
   return {
     email: input.email.trim().toLowerCase(),
     updateEnabled: true,
     attributes,
+    emailBlacklisted: false,
     ...(options.listId ? { listIds: [options.listId] } : {}),
   };
 }

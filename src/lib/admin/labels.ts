@@ -152,6 +152,7 @@ export const PAIR_HISTORY_REASON_LABELS: Record<string, string> = {
  */
 export const ELIGIBILITY_REASON_LABELS: Record<string, string> = {
   legacy_pending_activation: "Contacto importado — pendiente de activación",
+  awaiting_service_choice: "Aún no ha confirmado su modalidad (perfil pasivo o Select)",
   profile_status_not_active: "Perfil incompleto (ver detalle más abajo)",
   gender_preference_ambiguous: "Debe elegir un único género en «Lo que buscas»",
   duplicate_suspected: "Cuenta duplicada — pendiente de revisión",

@@ -14,9 +14,9 @@ import { EventBenefitSection } from "@/components/member/PlanSection";
 
 /**
  * Landing page of the membership-first path (Stripe returns here). Unlike
- * every other /member page it does NOT require a finalized introductions
- * profile: a new Select member arrives here right after paying, before
- * the questionnaire, and this page is where they start it. A member whose
+ * the introductions pages it does NOT require a finalized profile: the
+ * membership benefits work without one, and the profile is offered as an
+ * optional next step for members who want active introductions. A member whose
  * profile is already finalized is simply sent on to /member.
  */
 export default function MemberWelcome({ uid }: { uid: string }) {
@@ -79,22 +79,25 @@ export default function MemberWelcome({ uid }: { uid: string }) {
       </h1>
       {plan && <p className="text-[15px] text-ink-soft">Plan: {plan.label}.</p>}
 
+      <p className="text-[15px] leading-relaxed text-ink-soft">
+        Tus ventajas de miembro ya están activas: no necesitas un perfil de introducciones para usar tu 20 % ni
+        para formar parte de la comunidad.
+      </p>
+
+      {/* The monthly event privilege is part of the membership, not of the
+          introductions profile, so it comes first here. */}
+      <EventBenefitSection uid={uid} />
+
       <div className="border-y border-hairline py-6">
-        <p className="font-serif text-[22px] leading-snug text-ink">Activa tus introducciones privadas</p>
+        <p className="font-serif text-[22px] leading-snug text-ink">Introducciones privadas, cuando quieras</p>
         <p className="mt-3 text-[15px] leading-relaxed text-ink-soft">
-          Cuéntanos quién eres y qué buscas. Tus introducciones empiezan en cuanto tu perfil privado esté completo,
-          así que te recomendamos hacerlo cuanto antes. Tu perfil nunca se publica: solo lo ven las personas a las
-          que te proponemos.
+          Si quieres que busquemos activamente por ti, completa tu perfil privado. La búsqueda empieza en cuanto
+          esté completo. Tu perfil nunca se publica: solo lo ven las personas a las que te proponemos.
         </p>
         <Link href={nextRoute} className={`${primaryButtonClasses} mt-6`}>
           {started ? "Continuar mi perfil" : "Completar mi perfil"}
         </Link>
       </div>
-
-      {/* The monthly event privilege is part of the membership, not of the
-          introductions profile, so it is shown here too — otherwise a member
-          who hasn't finished the questionnaire could never see their code. */}
-      <EventBenefitSection uid={uid} />
     </div>
   );
 }

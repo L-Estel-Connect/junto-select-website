@@ -142,30 +142,33 @@ browser.
    Firestore (`invitationRequests/{id}`, below) and the user-facing
    request still succeeds; only the Brevo sync itself is unavailable,
    recorded as `brevoSyncStatus: "failed"` on the document.
-2. `BREVO_LIST_ID` is set to `12` in `apphosting.yaml` — the account
-   owner's confirmed EXISTING Brevo list. Never point this at a new or
-   different list without the account owner explicitly saying so.
-3. **Attribute mapping is deliberately narrow** (`src/lib/brevoPayload.ts`,
-   pure/unit-tested): only `NOMBRE`, `GENERO`, `PROFESION` (only if
-   filled), `TELEFONO` (only if filled). `GENERO` reuses an EXISTING Brevo
-   attribute — the account owner confirmed its values are exactly `Mujer`
-   / `Hombre`, which is exactly what the homepage form's radio values map
-   to. `NOMBRE`/`PROFESION`/`TELEFONO` are assumed-common CRM field names
-   but **not independently verified** — confirm they exist in Brevo
-   (Contacts → Settings → Contact attributes) with these exact internal
-   names before relying on them being populated; if Brevo's API rejects
-   unrecognized attribute keys outright (behavior not verified against a
-   real account from this environment), an unrecognized name here would
-   fail the whole sync — which is now safe either way, since Firestore
-   (`invitationRequests/{id}`, below) is what actually captures the
-   submission, not Brevo.
-4. Age-confirmation and communications-consent data, and the free-text
-   "Cuéntanos sobre ti" bio, are **NOT sent to Brevo** — they were never
-   confirmed to be existing Brevo attributes, and the account owner asked
-   not to have new attributes created speculatively. The durable,
-   timestamped record of that consent lives in Firestore instead (next
-   section).
-5. The route uses `updateEnabled: true` with `email` as the sole identity
+2. **Community list.** The "Recibir invitaciones" form adds contacts to
+   `BREVO_COMMUNITY_LIST_ID`, one NEW community list, deliberately
+   separate from the historical list 12 (`BREVO_LIST_ID`, which this form
+   no longer writes to and which must not be touched). Production does not
+   set `BREVO_COMMUNITY_LIST_ID` yet: before any release, create the list
+   and one segment per city (`CIUDAD equals Madrid`, Valencia, Barcelona,
+   Málaga, Otra), verify them, then set the variable. Without it the
+   contact is still created but joins no list.
+3. **Attributes** (`src/lib/brevoPayload.ts`, pure and tested): `NOMBRE`,
+   `GENERO` (existing, `Mujer`/`Hombre`), `CIUDAD`, `CIUDAD_OTRA`,
+   `RANGO_EDAD`, `FUENTE`, `TELEFONO` and `EMPRESA` (text, only when
+   filled), `INT_EVENTOS`, `INT_INTRODUCCIONES`, `INT_CENAS`,
+   `INT_NOVEDADES`, `CONSENT_MARKETING` (boolean), `CONSENT_MARKETING_FECHA`,
+   `FECHA_REGISTRO_COMUNIDAD` (date). All except `GENERO` must be created in
+   Brevo (Contacts → Settings → Contact attributes) before release; the code
+   never creates attributes. `TELEFONO` is a text attribute on purpose
+   (Brevo's SMS field rejects numbers in local format or shared by two
+   contacts, which would fail the whole sync).
+4. **Consent.** The form has one required box ("Quiero recibir por email
+   las invitaciones y novedades de Junto Select. He leído la política de
+   privacidad."). Its exact text and version (`invitaciones_v1`) are stored
+   on the Firestore record; Brevo receives `CONSENT_MARKETING: true` and
+   `emailBlacklisted: false`, so someone who unsubscribed earlier is
+   resubscribed only by this new, explicit consent.
+5. **Staging never calls Brevo** (`isStagingDeploy()`): the record is kept
+   with `brevoSyncStatus: "skipped_staging"`.
+6. The route uses `updateEnabled: true` with `email` as the sole identity
    key, so a repeat submission from the same address updates the existing
    Brevo contact rather than creating a duplicate.
 

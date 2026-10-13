@@ -138,7 +138,7 @@ async function statusOf(path) {
       const items = await page.locator("#site-menu nav a").allTextContents();
       check("mobile menu lists Option 1", items.join(" · ") === "El Club · Encuentros · Introducciones · Membresía Select", items.join(" · "));
       const ctas = await page.locator("#site-menu .ctas a").allTextContents();
-      check("mobile menu has Únete al club and Hazte miembro", ctas.join("|") === "Únete al club|Hazte miembro");
+      check("mobile menu has Recibir invitaciones and Hazte miembro", ctas.join("|") === "Recibir invitaciones|Hazte miembro", ctas.join("|"));
       await page.screenshot({ path: `${SHOTS}/mobile-menu.png` });
       await page.keyboard.press("Escape");
       check("mobile menu closes with Escape", (await page.locator("#site-menu").count()) === 0);
@@ -156,7 +156,17 @@ async function statusOf(path) {
   const href = async (sel) => page.locator(sel).first().getAttribute("href");
 
   await page.goto(`${APP}/`);
-  check("home: Únete al club → /unete", (await href(".hero >> text=Únete al club")) === "/unete");
+  check("home: Recibir invitaciones → /unete", (await href(".hero >> text=Recibir invitaciones")) === "/unete");
+  check("home: header button is Recibir invitaciones → /unete", (await href("header >> text=Recibir invitaciones")) === "/unete");
+  check("home: events section offers invitations", (await href(".events .sec-links >> text=Recibir invitaciones")) === "/unete");
+  check("home: closing block keeps Únete al club → /unete", (await href(".cities >> text=Únete al club")) === "/unete");
+  {
+    const sel = (await page.locator(".select").innerText()).replace(/\s+/g, " ");
+    check("home: Membresía benefits are the approved three",
+      ["Una comunidad selecta", "Introducciones privadas", "20 % de descuento en un encuentro al mes"].every((t) => sel.includes(t)) &&
+        sel.includes("Más que asistir, pertenecer"));
+    check("home: no member-account benefit", !sel.includes("Tu cuenta de miembro") && !sel.includes("Tu propio espacio"));
+  }
   check("home: Descubre la Membresía Select → /membresia", (await href(".hero >> text=Descubre la Membresía Select")) === "/membresia");
   check("home: Ver todos los encuentros → /eventos", (await href("text=Ver todos los encuentros")) === "/eventos");
   check("home: Valencia → /unete?ciudad=valencia", (await page.locator('.clist a[href="/unete?ciudad=valencia"]').count()) === 1);
@@ -174,6 +184,13 @@ async function statusOf(path) {
     await p2.close();
   }
   check("membresía: Cómo funcionan → /introducciones", (await href("text=Cómo funcionan")) === "/introducciones");
+  {
+    const body = await page.locator("main").innerText();
+    check("membresía: no member-account benefit", !body.includes("Tu cuenta de miembro") && !body.includes("Tu propio espacio"));
+    check("membresía: benefits in approved order",
+      body.indexOf("Una comunidad selecta") > -1 && body.indexOf("Una comunidad selecta") < body.indexOf("Introducciones privadas") &&
+        body.indexOf("Introducciones privadas") < body.indexOf("20 % de descuento en un encuentro al mes"));
+  }
   check("membresía: closing link → /unete", (await href(".p2-close >> text=Únete al club sin compromiso")) === "/unete");
 
   await page.goto(`${APP}/membresia/alta?plan=monthly&checkout=cancel`, { waitUntil: "networkidle" });
@@ -181,14 +198,17 @@ async function statusOf(path) {
   check("cancelled checkout shows a no-charge message", (await page.locator("body").innerText()).includes("No se ha realizado ningún cargo"));
 
   await page.goto(`${APP}/introducciones`);
-  check("introducciones: Crear mi perfil privado → /introduction", (await href("text=Crear mi perfil privado")) === "/introduction");
-  check("introducciones: Ver la Membresía Select → /membresia", (await href("text=Ver la Membresía Select")) === "/membresia");
+  check("introducciones: Elige tu modalidad section", (await page.locator("#modalidad h2").innerText()).includes("modalidad"));
+  check("introducciones: Crear mi perfil pasivo → ?modalidad=pasivo", (await href("text=Crear mi perfil pasivo")) === "/introduction?modalidad=pasivo");
+  check("introducciones: Empezar la búsqueda activa → ?modalidad=activa", (await href("text=Empezar la búsqueda activa")) === "/introduction?modalidad=activa");
+  check("introducciones: both cards answer the same rows", (await page.locator(".p3-card").nth(0).locator("dt").allInnerTexts()).length === 6 &&
+    (await page.locator(".p3-card").nth(1).locator("dt").allInnerTexts()).length === 6);
   check("introducciones: Ya soy miembro → sign-in returning to /member/profile", (await href("text=Ya soy miembro")) === "/introduction?next=/member/profile");
   check("introducciones: Madrid only", (await page.locator(".p3-hero .city").innerText()).toLowerCase().includes("madrid"));
 
   // ---- 3. Free Introductions participant ----
   const freeEmail = `libre.${Date.now()}@example.test`;
-  await signInOnIntroduction(page, freeEmail, `${APP}/introduction`);
+  await signInOnIntroduction(page, freeEmail, `${APP}/introduction?modalidad=pasivo`);
   await page.waitForURL("**/introduction/onboarding**", { timeout: 20000 });
   check("free: new account lands in the Introductions onboarding", true);
   await page.waitForTimeout(2000);
@@ -199,6 +219,7 @@ async function statusOf(path) {
   check("free: private profile created without payment", !!freeUser);
   const billing = freeUser ? await db.doc(`billing/${freeUser.id}`).get() : null;
   check("free: no billing record, search stays passive", billing && !billing.exists && freeUser.data().meta.searchStatus === "passive");
+  check("free: chosen modality recorded as passive", freeUser?.data().meta.requestedService === "passive");
   await page.screenshot({ path: `${SHOTS}/free-1-onboarding.png`, fullPage: true });
 
   if (freeUser) {
@@ -254,6 +275,144 @@ async function statusOf(path) {
   await p3.waitForTimeout(2500);
   check("sign-in ignores a foreign next", new URL(p3.url()).host === "localhost:3000");
   await ctx2.close();
+
+  // ---- 4b. Acceder never creates a profile on its own ----
+  {
+    const c = await browser.newContext({ viewport: VIEWPORTS.desktop, locale: "es-ES" });
+    const pg = await c.newPage();
+    await pg.goto(`${APP}/member`);
+    await pg.waitForURL("**/introduction?**", { timeout: 20000 });
+    await pg.waitForTimeout(1500);
+    const u = new URL(pg.url());
+    check("fresh visitor to /member: sent to sign-in keeping next", u.searchParams.get("next") === "/member" && !u.searchParams.has("session"), pg.url());
+    check("fresh visitor to /member: no session-expired message", !(await pg.locator("body").innerText()).includes("caducado"));
+
+    const email = `acceder.${Date.now()}@example.test`;
+    await signInOnIntroduction(pg, email, `${APP}/introduction`);
+    await pg.waitForSelector("text=Tu cuenta aún no tiene un perfil", { timeout: 20000 });
+    await pg.screenshot({ path: `${SHOTS}/acceder-1-tu-cuenta.png`, fullPage: true });
+    const uid = await getAuth().getUserByEmail(email).then((x) => x.uid);
+    check("Acceder (new account): Tu cuenta shown, no profile created", !(await db.doc(`profiles/${uid}`).get()).exists);
+    await pg.goto(`${APP}/introduction/onboarding`);
+    await pg.waitForURL((url) => url.pathname === "/introduction", { timeout: 20000 });
+    await pg.waitForTimeout(1500);
+    check("opening the questionnaire directly creates no profile", !(await db.doc(`profiles/${uid}`).get()).exists);
+    await pg.goto(`${APP}/member/plan`);
+    await pg.waitForURL((url) => url.pathname === "/introduction", { timeout: 20000 });
+    await pg.waitForTimeout(1500);
+    check("opening the member area directly creates no profile", !(await db.doc(`profiles/${uid}`).get()).exists);
+    await pg.click("text=Crear mi perfil privado");
+    await pg.waitForURL("**/introduction/onboarding**", { timeout: 20000 });
+    await pg.waitForTimeout(1500);
+    const made = (await db.doc(`profiles/${uid}`).get()).data();
+    check("Tu cuenta: Crear mi perfil privado creates a passive profile", made?.meta.requestedService === "passive" && !made.meta.onboardingFinalized);
+    await c.close();
+
+    // An admin signed in on /admin who clicks Acceder: no profile, admin link offered.
+    const ca = await browser.newContext({ viewport: VIEWPORTS.desktop, locale: "es-ES" });
+    const pa = await ca.newPage();
+    const adminEmail = "admin.local@example.test";
+    const adminUid = await getAuth().getUserByEmail(adminEmail).then((x) => x.uid).catch(async () =>
+      (await getAuth().createUser({ email: adminEmail, emailVerified: true })).uid);
+    const hadProfile = (await db.doc(`profiles/${adminUid}`).get()).exists;
+    await signInOnIntroduction(pa, adminEmail, `${APP}/introduction`);
+    await pa.waitForSelector("text=Panel de administración", { timeout: 20000 });
+    if (!hadProfile) check("admin clicking Acceder: no profile created", !(await db.doc(`profiles/${adminUid}`).get()).exists);
+    check("admin clicking Acceder: link back to the admin panel", (await pa.locator("a[href='/admin']").count()) === 1);
+    await ca.close();
+  }
+
+  // ---- 4c. Active search: profile first, plan step inside the journey ----
+  for (const ending of ["pay", "passive"]) {
+    const c = await browser.newContext({ viewport: VIEWPORTS.desktop, locale: "es-ES" });
+    const pg = await c.newPage();
+    const email = `activa.${ending}.${Date.now()}@example.test`;
+    await signInOnIntroduction(pg, email, `${APP}/introduction?modalidad=activa`);
+    await pg.waitForURL("**/introduction/onboarding**", { timeout: 20000 });
+    await pg.waitForTimeout(1500);
+    const uid = await getAuth().getUserByEmail(email).then((x) => x.uid);
+    const cur = (await db.doc(`profiles/${uid}`).get()).data();
+    check(`activa/${ending}: profile created with Select chosen`, cur?.meta.requestedService === "select");
+    // Test only: complete answers, as in the free journey above.
+    await db.doc(`profiles/${uid}`).set({
+      ...cur,
+      visible: {
+        ...cur.visible, firstName: "Prueba Activa", gender: "hombre", city: "Madrid", profession: "Arquitecto",
+        educationLevel: "universidad", languages: ["es"], hasChildren: false, hasYoungChildren: false,
+        wantsFutureChildren: "no", relationshipIntention: "relacion_seria", smoking: "no", drinking: "socialmente",
+        activityLevel: "activo", market: "madrid", marketAvailability: "lives_in_market",
+      },
+      private: { ...cur.private, birthDate: new Date("1975-03-10T00:00:00Z"), incomeRange: "40k_80k" },
+      dealbreakers: {
+        ...cur.dealbreakers, gendersSought: ["mujer"], ageMin: 42, ageMax: 58, maxDistance: "misma_ciudad",
+        relationshipIntentionsAccepted: ["relacion_seria"], smokingAccepted: ["no"], partnerYoungChildrenMatters: false,
+      },
+      photos: [`profiles/${uid}/a.jpg`],
+      presentation: { ...cur.presentation, status: "approved" },
+      meta: { ...cur.meta, profileStatus: "active_for_matching", aboutMeComplete: true, photosComplete: true, preferencesComplete: true, presentationComplete: true },
+    });
+    await pg.goto(`${APP}/member/profile`);
+    await pg.waitForSelector("text=Elige tu plan", { timeout: 20000 });
+    check(`activa/${ending}: plan step shown inside the profile journey`, (await pg.locator("text=Guardar y finalizar").count()) === 0);
+    check(`activa/${ending}: passive option explained`, (await pg.locator("body").innerText()).includes("no se propone a nadie"));
+    await pg.screenshot({ path: `${SHOTS}/activa-${ending}-1-plan.png`, fullPage: true });
+
+    if (ending === "pay") {
+      await pg.check("text=Acepto participar en las introducciones privadas");
+      const boxes = pg.locator("label:has-text('He leído y acepto') input, label:has-text('Solicito que mi membresía') input");
+      for (let i = 0; i < (await boxes.count()); i++) await boxes.nth(i).check({ force: true });
+      await pg.click("text=Continuar al pago");
+      await pg.waitForURL("**/pay/**", { timeout: 20000 });
+      await pg.click("#pay");
+      await pg.waitForURL("**/member/profile?checkout=success**", { timeout: 20000 });
+      check(`activa/pay: payment returns to the profile`, true);
+      let after;
+      for (let i = 0; i < 20; i++) {
+        after = (await db.doc(`profiles/${uid}`).get()).data();
+        if (after.meta.onboardingFinalized) break;
+        await sleep(500);
+      }
+      check("activa/pay: profile finalized after payment, active search",
+        after.meta.onboardingFinalized === true && after.meta.searchStatus === "active_search" && after.meta.requestedService === "select",
+        `${after.meta.onboardingFinalized} ${after.meta.searchStatus}`);
+      await pg.screenshot({ path: `${SHOTS}/activa-pay-2-done.png`, fullPage: true });
+    } else {
+      await pg.click("text=Quedarme como perfil pasivo, sin coste");
+      await pg.waitForTimeout(1000);
+      check("activa/passive: staying passive refused without consent",
+        !(await db.doc(`profiles/${uid}`).get()).data().meta.onboardingFinalized &&
+          (await pg.locator("p[role=alert]").first().innerText()).includes("confirma que aceptas participar"));
+      await pg.check("text=Acepto participar en las introducciones privadas");
+      await pg.click("text=Quedarme como perfil pasivo, sin coste");
+      await pg.waitForTimeout(2500);
+      const after = (await db.doc(`profiles/${uid}`).get()).data();
+      check("activa/passive: finalized as passive by explicit choice",
+        after.meta.onboardingFinalized === true && after.meta.requestedService === "passive" && after.meta.searchStatus === "passive");
+      check("activa/passive: no billing record", !(await db.doc(`billing/${uid}`).get()).exists);
+    }
+    await c.close();
+  }
+
+  // ---- 4d. Footer links open at the top of the new page ----
+  {
+    const pg = await ctx.newPage();
+    for (const [label, path] of [["Proponer una colaboración", "/colaboraciones"], ["Política de privacidad", "/privacidad"], ["Aviso legal", "/aviso-legal"]]) {
+      await pg.goto(`${APP}/`);
+      await pg.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await pg.waitForTimeout(400);
+      const link = pg.locator(`footer >> text=${label}`).first();
+      if (!(await link.count())) {
+        check(`footer: ${label} link present`, false);
+        continue;
+      }
+      await link.click();
+      if (path) await pg.waitForURL(`**${path}`);
+      await pg.waitForTimeout(800);
+      const y = await pg.evaluate(() => window.scrollY);
+      check(`footer: ${label} opens at the top`, y < 5, `scrollY=${y} ${new URL(pg.url()).pathname}`);
+    }
+    await pg.close();
+  }
 
   // ---- 5. Collaboration form ----
   await page.goto(`${APP}/colaboraciones#propuesta`);

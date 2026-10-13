@@ -381,9 +381,159 @@ function ActiveMembership({
  * of payment — it's used only to choose which transient banner to show
  * while the real state (from the Firestore listener above) catches up.
  */
+
+/**
+ * The three plans, the required confirmations and the button to Stripe.
+ * Used on Mi plan and, for "Búsqueda activa", as the last step of the
+ * profile (`returnTo: "profile"` brings Stripe back to that step).
+ * `beforeCheckout` runs first (e.g. recording the introductions consent).
+ */
+export function PlanCheckoutForm({
+  marketEligible,
+  returnTo,
+  beforeCheckout,
+  disabledReason,
+}: {
+  marketEligible: boolean;
+  returnTo?: "profile";
+  beforeCheckout?: () => Promise<void>;
+  disabledReason?: string | null;
+}) {
+  const [selectedPlan, setSelectedPlan] = useState<PlanKey>("three_month");
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [immediateServiceRequested, setImmediateServiceRequested] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+  async function handleCheckout() {
+    setCheckoutError(null);
+    if (!termsAccepted) {
+      setCheckoutError("Debes aceptar los términos y condiciones para continuar.");
+      return;
+    }
+    if (!immediateServiceRequested) {
+      setCheckoutError("Debes confirmar que quieres empezar ya para continuar.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await beforeCheckout?.();
+      const url = await authedFetch("/api/billing/create-checkout-session", {
+        planKey: selectedPlan,
+        termsAccepted: true,
+        immediateServiceRequested: true,
+        ...(returnTo ? { returnTo } : {}),
+      });
+      window.location.href = url;
+    } catch (err) {
+      setCheckoutError(
+        err instanceof Error && err.message === "market_not_available"
+          ? MARKET_NOT_AVAILABLE_MESSAGE
+          : "No hemos podido iniciar el pago. Inténtalo de nuevo en unos minutos.",
+      );
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="mt-8 space-y-3">
+        {PLAN_KEYS.map((key) => (
+          <PlanCard key={key} planKey={key} selected={selectedPlan === key} onSelect={() => setSelectedPlan(key)} />
+        ))}
+      </div>
+
+      <div className="mt-8">
+        <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">
+          Antes de continuar
+        </p>
+        <ul className="mt-3 space-y-2 text-[13px] leading-relaxed text-ink-soft">
+          {DISCLOSURES.map((line) => (
+            <li key={line} className="flex gap-2">
+              <span aria-hidden className="mt-1 h-1 w-1 shrink-0 rounded-full bg-ink-soft" />
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <label className="mt-6 flex items-start gap-3 text-[13px] leading-relaxed text-ink">
+        <input
+          type="checkbox"
+          checked={termsAccepted}
+          onChange={(e) => setTermsAccepted(e.target.checked)}
+          className="mt-0.5 h-4 w-4 shrink-0"
+        />
+        <span>
+          He leído y acepto los{" "}
+          <a href="/terminos" target="_blank" className="underline decoration-hairline underline-offset-4">
+            Términos y condiciones
+          </a>{" "}
+          y la{" "}
+          <a href="/privacidad" target="_blank" className="underline decoration-hairline underline-offset-4">
+            Política de privacidad
+          </a>
+          , incluida la renovación automática.
+        </span>
+      </label>
+
+      <label className="mt-4 flex items-start gap-3 text-[13px] leading-relaxed text-ink">
+        <input
+          type="checkbox"
+          checked={immediateServiceRequested}
+          onChange={(e) => setImmediateServiceRequested(e.target.checked)}
+          className="mt-0.5 h-4 w-4 shrink-0"
+        />
+        <span>
+          Solicito que mi membresía y búsqueda activa comiencen inmediatamente. He leído y acepto
+          las condiciones aplicables al desistimiento recogidas en los{" "}
+          <a href="/terminos" target="_blank" className="underline decoration-hairline underline-offset-4">
+            Términos y condiciones
+          </a>
+          .
+        </span>
+      </label>
+
+      <div className="mt-6 flex items-center justify-between border-t border-hairline pt-4 text-[14px]">
+        <span className="text-ink">Total a pagar ahora</span>
+        <span className="font-medium text-ink">{PLAN_DISPLAY[selectedPlan].priceEuros} €</span>
+      </div>
+
+      {!marketEligible && (
+        <p role="alert" className="mt-4 text-[13px] leading-relaxed text-[#8a3b3b]">
+          {MARKET_NOT_AVAILABLE_MESSAGE}
+        </p>
+      )}
+
+      <button
+        type="button"
+        onClick={handleCheckout}
+        disabled={submitting || !termsAccepted || !immediateServiceRequested || !marketEligible || !!disabledReason}
+        className="mt-4 w-full rounded-full bg-ink px-9 py-4 text-center text-[13px] font-medium uppercase tracking-[0.18em] text-white transition-opacity disabled:opacity-40"
+      >
+        {submitting ? "Redirigiendo a Stripe…" : `Continuar al pago — ${PLAN_DISPLAY[selectedPlan].priceEuros} €`}
+      </button>
+      {disabledReason && !checkoutError && <p className="mt-3 text-[13px] text-ink-soft">{disabledReason}</p>}
+      {checkoutError && (
+        <p role="alert" className="mt-3 text-[13px] text-[#8a3b3b]">
+          {checkoutError}
+        </p>
+      )}
+      <p className="mt-3 text-[12px] text-ink-soft">
+        Serás redirigido/a a Stripe para completar el pago de forma segura. Junto Select nunca ve ni
+        almacena los datos de tu tarjeta.
+      </p>
+    </>
+  );
+}
+
 export default function PlanSection({ uid }: { uid: string }) {
-  const { profile, ready, error, refresh } = useMemberProfile(uid);
   const { billing, loading: billingLoading, error: billingError } = useBilling(uid);
+  // A Select member manages their membership here even without a finished
+  // introductions profile (membership benefits never require one).
+  const { profile, ready, error, refresh } = useMemberProfile(uid, {
+    allowUnfinished: billingLoading ? null : !!billing && isEntitledStatus(billing.status),
+  });
 
   // Read via a mount-gated effect, not directly during render: this value
   // depends on `window.location`, which doesn't exist during server
@@ -402,12 +552,8 @@ export default function PlanSection({ uid }: { uid: string }) {
     setCheckoutParam(new URLSearchParams(window.location.search).get("checkout"));
   }, []);
 
-  const [selectedPlan, setSelectedPlan] = useState<PlanKey>("three_month");
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [immediateServiceRequested, setImmediateServiceRequested] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [manageError, setManageError] = useState<string | null>(null);
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   if (!ready) {
     if (error) return <IntroductionError message={error} onRetry={() => void refresh()} />;
@@ -420,34 +566,6 @@ export default function PlanSection({ uid }: { uid: string }) {
 
   const entitled = isEntitledStatus(billing.status);
   const marketEligible = profile ? isMarketAvailabilityEligible(profile) : true;
-
-  async function handleCheckout() {
-    setCheckoutError(null);
-    if (!termsAccepted) {
-      setCheckoutError("Debes aceptar los términos y condiciones para continuar.");
-      return;
-    }
-    if (!immediateServiceRequested) {
-      setCheckoutError("Debes confirmar que quieres empezar ya para continuar.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const url = await authedFetch("/api/billing/create-checkout-session", {
-        planKey: selectedPlan,
-        termsAccepted: true,
-        immediateServiceRequested: true,
-      });
-      window.location.href = url;
-    } catch (err) {
-      setCheckoutError(
-        err instanceof Error && err.message === "market_not_available"
-          ? MARKET_NOT_AVAILABLE_MESSAGE
-          : "No hemos podido iniciar el pago. Inténtalo de nuevo en unos minutos.",
-      );
-      setSubmitting(false);
-    }
-  }
 
   async function handleManage() {
     setManageError(null);
@@ -500,11 +618,22 @@ export default function PlanSection({ uid }: { uid: string }) {
 
       {entitled ? (
         <>
-          <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-            Tu membresía está activa: Junto Select está buscando por ti y recibirás hasta 3 selecciones
-            al mes, siempre que encontremos perfiles compatibles con tus criterios en Madrid.
-          </p>
-          {!marketEligible && (
+          {profile?.meta.onboardingFinalized ? (
+            <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+              Tu membresía está activa: Junto Select está buscando por ti y recibirás hasta 3 selecciones
+              al mes, siempre que encontremos perfiles compatibles con tus criterios en Madrid.
+            </p>
+          ) : (
+            <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+              Tu membresía está activa. Tu 20 % en un encuentro al mes ya está disponible. Si quieres
+              introducciones privadas,{" "}
+              <a href="/member/bienvenida" className="underline decoration-hairline underline-offset-4">
+                completa tu perfil privado
+              </a>{" "}
+              cuando quieras: la búsqueda empieza en cuanto esté completo.
+            </p>
+          )}
+          {profile?.meta.onboardingFinalized && !marketEligible && (
             <div className="mt-4 rounded-xl border border-hairline bg-white p-4 text-[14px] text-ink-soft">
               Tus selecciones están en pausa porque Junto Select está disponible actualmente solo para
               Madrid. Actualiza tu disponibilidad en{" "}
@@ -538,91 +667,7 @@ export default function PlanSection({ uid }: { uid: string }) {
             </div>
           </div>
 
-          <div className="mt-8 space-y-3">
-            {PLAN_KEYS.map((key) => (
-              <PlanCard key={key} planKey={key} selected={selectedPlan === key} onSelect={() => setSelectedPlan(key)} />
-            ))}
-          </div>
-
-          <div className="mt-8">
-            <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">
-              Antes de continuar
-            </p>
-            <ul className="mt-3 space-y-2 text-[13px] leading-relaxed text-ink-soft">
-              {DISCLOSURES.map((line) => (
-                <li key={line} className="flex gap-2">
-                  <span aria-hidden className="mt-1 h-1 w-1 shrink-0 rounded-full bg-ink-soft" />
-                  <span>{line}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <label className="mt-6 flex items-start gap-3 text-[13px] leading-relaxed text-ink">
-            <input
-              type="checkbox"
-              checked={termsAccepted}
-              onChange={(e) => setTermsAccepted(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0"
-            />
-            <span>
-              He leído y acepto los{" "}
-              <a href="/terminos" target="_blank" className="underline decoration-hairline underline-offset-4">
-                Términos y condiciones
-              </a>{" "}
-              y la{" "}
-              <a href="/privacidad" target="_blank" className="underline decoration-hairline underline-offset-4">
-                Política de privacidad
-              </a>
-              , incluida la renovación automática.
-            </span>
-          </label>
-
-          <label className="mt-4 flex items-start gap-3 text-[13px] leading-relaxed text-ink">
-            <input
-              type="checkbox"
-              checked={immediateServiceRequested}
-              onChange={(e) => setImmediateServiceRequested(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0"
-            />
-            <span>
-              Solicito que mi membresía y búsqueda activa comiencen inmediatamente. He leído y acepto
-              las condiciones aplicables al desistimiento recogidas en los{" "}
-              <a href="/terminos" target="_blank" className="underline decoration-hairline underline-offset-4">
-                Términos y condiciones
-              </a>
-              .
-            </span>
-          </label>
-
-          <div className="mt-6 flex items-center justify-between border-t border-hairline pt-4 text-[14px]">
-            <span className="text-ink">Total a pagar ahora</span>
-            <span className="font-medium text-ink">{PLAN_DISPLAY[selectedPlan].priceEuros} €</span>
-          </div>
-
-          {!marketEligible && (
-            <p role="alert" className="mt-4 text-[13px] leading-relaxed text-[#8a3b3b]">
-              {MARKET_NOT_AVAILABLE_MESSAGE}
-            </p>
-          )}
-
-          <button
-            type="button"
-            onClick={handleCheckout}
-            disabled={submitting || !termsAccepted || !immediateServiceRequested || !marketEligible}
-            className="mt-4 w-full rounded-full bg-ink px-9 py-4 text-center text-[13px] font-medium uppercase tracking-[0.18em] text-white transition-opacity disabled:opacity-40"
-          >
-            {submitting ? "Redirigiendo a Stripe…" : `Continuar al pago — ${PLAN_DISPLAY[selectedPlan].priceEuros} €`}
-          </button>
-          {checkoutError && (
-            <p role="alert" className="mt-3 text-[13px] text-[#8a3b3b]">
-              {checkoutError}
-            </p>
-          )}
-          <p className="mt-3 text-[12px] text-ink-soft">
-            Serás redirigido/a a Stripe para completar el pago de forma segura. Junto Select nunca ve ni
-            almacena los datos de tu tarjeta.
-          </p>
+          <PlanCheckoutForm marketEligible={marketEligible} />
         </>
       )}
     </div>
