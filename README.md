@@ -1629,6 +1629,23 @@ firebase deploy --only firestore:rules,storage:rules
 or paste the contents of `firestore.rules` / `storage.rules` directly
 into Firebase Console → Firestore Database → Rules / Storage → Rules.
 
+### Storage CORS: one origin per site address
+
+Member photos are read by the browser straight from the Storage bucket, so
+the bucket needs a CORS rule listing every address the site is served
+from. Without it the upload succeeds but the photo shows "Cargando…" and
+then "No se pudo cargar la foto". Staging got its rule on 13 Oct 2026.
+Before production goes live on a new domain (e.g. juntoselect.com), add
+that origin to the production bucket:
+
+```json
+[{ "origin": ["https://<site-address>"], "method": ["GET", "HEAD"], "maxAgeSeconds": 3600 }]
+```
+
+```bash
+gcloud storage buckets update gs://<bucket> --cors-file=cors.json
+```
+
 ## Staging environment (not set up yet)
 
 Staging must be a **separate Firebase project**. `select-dev-508407` is
