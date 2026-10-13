@@ -6,11 +6,24 @@ const chipClasses = (checked: boolean) =>
   `rounded-full border px-5 py-3 text-[15px] transition-colors ${
     checked
       ? "border-rose-dark bg-rose-tint text-ink"
-      : "border-hairline text-ink hover:border-rose"
+      : "border-hairline bg-white/60 text-ink hover:border-rose"
+  }`;
+
+function Tick() {
+  return <span aria-hidden className="mr-1.5 text-rose-dark">✓</span>;
+}
+
+/**
+ * One answer only: options joined into a single switch, so it reads
+ * differently from the multiple-choice chips.
+ */
+const segmentClasses = (checked: boolean) =>
+  `min-h-[48px] px-3 py-3 text-center text-[15px] leading-snug transition-colors ${
+    checked ? "bg-rose-dark text-paper" : "bg-white/60 text-ink hover:bg-rose-tint"
   }`;
 
 const numberInputClasses =
-  "w-full rounded-md border border-hairline bg-paper px-4 py-3 text-[15px] text-ink placeholder:text-ink-soft/80 transition-colors focus:border-rose-dark focus:outline-none";
+  "w-full rounded-md border border-hairline bg-white/60 px-4 py-3 text-[15px] text-ink placeholder:text-ink-soft/80 transition-colors focus:border-rose-dark focus:outline-none";
 
 export function FieldRow({
   question,
@@ -23,7 +36,7 @@ export function FieldRow({
 }) {
   return (
     <div className="border-b border-hairline py-6 first:pt-0 last:border-b-0">
-      <p className="text-[16px] text-ink">{question}</p>
+      <p className="text-[17px] text-ink">{question}</p>
       {helper && <p className="mt-1 text-[13px] text-ink-soft">{helper}</p>}
       <div className="mt-4">{children}</div>
     </div>
@@ -53,17 +66,22 @@ export function MultiChipField({
   }
 
   return (
-    <div className="flex flex-wrap gap-2.5">
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => toggle(option.value)}
-          className={chipClasses(value.includes(option.value))}
-        >
-          {option.label}
-        </button>
-      ))}
+    <div>
+      <p className="mb-3 text-[13px] text-ink-soft">Puedes elegir varias.</p>
+      <div className="flex flex-wrap gap-2.5">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={value.includes(option.value)}
+            onClick={() => toggle(option.value)}
+            className={chipClasses(value.includes(option.value))}
+          >
+            {value.includes(option.value) && <Tick />}
+            {option.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -77,14 +95,39 @@ export function SingleChoiceField({
   value: string | null;
   onChange: (next: string) => void;
 }) {
+  if (options.length > 3) {
+    return (
+      <div role="radiogroup" className="flex flex-wrap gap-2.5">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={value === option.value}
+            onClick={() => onChange(option.value)}
+            className={chipClasses(value === option.value)}
+          >
+            {value === option.value && <Tick />}
+            {option.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
   return (
-    <div className="flex flex-wrap gap-2.5">
+    <div
+      role="radiogroup"
+      className="grid max-w-[440px] divide-x divide-hairline overflow-hidden rounded-md border border-hairline"
+      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+    >
       {options.map((option) => (
         <button
           key={option.value}
           type="button"
+          role="radio"
+          aria-checked={value === option.value}
           onClick={() => onChange(option.value)}
-          className={chipClasses(value === option.value)}
+          className={segmentClasses(value === option.value)}
         >
           {option.label}
         </button>
@@ -105,18 +148,22 @@ export function BooleanField({
   noLabel?: string;
 }) {
   return (
-    <div className="flex gap-2.5">
+    <div role="radiogroup" className="grid max-w-[440px] grid-cols-2 divide-x divide-hairline overflow-hidden rounded-md border border-hairline">
       <button
         type="button"
+        role="radio"
+        aria-checked={value === true}
         onClick={() => onChange(true)}
-        className={chipClasses(value === true)}
+        className={segmentClasses(value === true)}
       >
         {yesLabel}
       </button>
       <button
         type="button"
+        role="radio"
+        aria-checked={value === false}
         onClick={() => onChange(false)}
-        className={chipClasses(value === false)}
+        className={segmentClasses(value === false)}
       >
         {noLabel}
       </button>

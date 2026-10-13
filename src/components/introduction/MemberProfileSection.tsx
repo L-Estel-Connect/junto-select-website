@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { finalizeOnboarding, updateProfileFields } from "@/lib/introduction/profile";
@@ -18,7 +18,11 @@ import {
   isPreferencesComplete,
   isPresentationComplete,
 } from "@/lib/introduction/completion";
-import { primaryButtonClasses } from "@/lib/styles";
+import { primaryButtonClasses, secondaryButtonClasses } from "@/lib/styles";
+import { getAge } from "@/lib/introduction/age";
+import type { ProfileDocument } from "@/lib/introduction/types";
+import { OnboardingStepper } from "./OnboardingFrame";
+import PrivatePhotoThumbnail from "./PrivatePhotoThumbnail";
 import ProfileCard from "./ProfileCard";
 import { IntroductionError, IntroductionLoading } from "./RequireIntroductionAuth";
 
@@ -41,6 +45,11 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
   const entitled = !!billing && isEntitledStatus(billing.status);
   const [checkoutParam, setCheckoutParam] = useState<string | null>(null);
   const [activating, setActivating] = useState(false);
+  // Shown once, right after this visit finalizes the profile (passive
+  // finalize, legacy activation, or the active finalize after payment).
+  const [completed, setCompleted] = useState(false);
+  const [showFullProfile, setShowFullProfile] = useState(false);
+  const consentRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -65,6 +74,7 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
       try {
         await finalizeOnboarding(uid);
         mutate((prev) => ({ ...prev, meta: { ...prev.meta, onboardingFinalized: true } }));
+        setCompleted(true);
         void memberFetchJson("/api/member/matching/reevaluate", { method: "POST" }).catch(() => {});
       } catch {
         setError("No hemos podido activar tu búsqueda. Recarga la página para intentarlo de nuevo.");
@@ -101,6 +111,7 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
   async function choosePassive() {
     if (!consent) {
       setError("Para continuar, confirma que aceptas participar en las introducciones privadas.");
+      consentRef.current?.focus();
       return;
     }
     await updateProfileFields(uid, {}, { requestedService: "passive" });
@@ -137,11 +148,13 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
           ...prev,
           meta: { ...prev.meta, onboardingFinalized: true, pendingLegacyActivation: false },
         }));
+        setCompleted(true);
         void memberFetchJson("/api/member/matching/reevaluate", { method: "POST" }).catch(() => {});
         return;
       }
       if (!consent) {
         setError("Para finalizar, confirma que aceptas participar en las introducciones privadas.");
+        consentRef.current?.focus();
         return;
       }
       await memberFetchJson("/api/member/introductions-consent", {
@@ -150,6 +163,7 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
       });
       await finalizeOnboarding(uid);
       mutate((prev) => ({ ...prev, meta: { ...prev.meta, onboardingFinalized: true } }));
+      setCompleted(true);
       // A member who paid before finishing their profile starts matching
       // now rather than at the next scheduled scan. Best-effort: the scan
       // re-evaluates them anyway, so a failure here changes nothing.
@@ -191,86 +205,175 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
     },
   ];
 
-  return (
-    <div className="mx-auto flex w-full max-w-[560px] flex-col px-6 py-14 sm:px-0">
-      <Link href="/member" className={`text-sm ${linkClasses}`}>
-        ← Volver a mi perfil
-      </Link>
+  if (completed && finalized) {
+    return <CompletionScreen active={entitled} firstName={profile.visible.firstName} />;
+  }
 
-      <h1 className="mt-6 font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">
-        {finalized ? "Tu perfil" : "Así se verá tu perfil"}
+  const selectJourney = profile.meta.requestedService === "select";
+  const contactSection = sections[sections.length - 1];
+
+  const consentBox = (
+    <label className="flex items-start gap-3 text-left text-[14px] leading-relaxed text-ink">
+      <input
+        ref={consentRef}
+        type="checkbox"
+        checked={consent}
+        onChange={(e) => {
+          setConsent(e.target.checked);
+          if (e.target.checked) setError(null);
+        }}
+        className="mt-1 h-4 w-4 flex-none accent-ink"
+      />
+      <span>
+        Acepto participar en las introducciones privadas de Junto Select: podéis proponer mi perfil a
+        personas compatibles, y solo compartiréis mi contacto si los dos aceptamos. He leído los{" "}
+        <Link href="/terminos" target="_blank" className={linkClasses}>
+          Términos y Condiciones
+        </Link>{" "}
+        y la{" "}
+        <Link href="/privacidad" target="_blank" className={linkClasses}>
+          Política de Privacidad
+        </Link>
+        .
+      </span>
+    </label>
+  );
+
+  const errorNote = error && (
+    <p role="alert" className="mt-4 text-sm text-[#8a3b3b]">
+      {error}
+    </p>
+  );
+
+  if (finalized) {
+    return (
+      <div className="mx-auto flex w-full max-w-[560px] flex-col py-14">
+        <Link href="/member" className={`text-sm ${linkClasses}`}>
+          ← Volver al inicio
+        </Link>
+
+        <h1 className="mt-6 font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">Tu perfil</h1>
+        <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+          Así te verán las personas con las que Junto Select te presente.
+        </p>
+
+        <div className="mt-8">
+          <ProfileCard profile={profile} />
+        </div>
+
+        {errorNote}
+
+        <div id="editar-perfil" className="mt-14 scroll-mt-10 border-t border-hairline pt-8">
+          <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">Editar mi perfil</p>
+          <div className="mt-4">
+            {sections.map((section) => (
+              <Link key={section.label} href={section.href ?? "#"} className="block hover:opacity-70">
+                <div className="flex items-center justify-between border-b border-hairline py-4">
+                  <span className="text-[15px] text-ink">{section.label}</span>
+                  <span className={`text-[13px] ${section.complete ? "text-ink" : "text-ink-soft"}`}>
+                    {section.complete ? "Completado" : "Pendiente"}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto flex w-full max-w-[560px] flex-col pb-14 pt-8 sm:pt-12">
+      <OnboardingStepper stage={5} fraction={1} selectJourney={selectJourney} />
+
+      <h1 className="font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">
+        Así se verá tu perfil
       </h1>
-      <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-        {finalized
-          ? "Así te verán las personas con las que Junto Select te presente."
-          : "Revísalo antes de terminar. Podrás actualizar tu información más adelante."}
+      <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+        Revísalo antes de terminar. Podrás cambiarlo más adelante.
       </p>
 
       <div className="mt-8">
-        <ProfileCard profile={profile} />
-      </div>
-
-      {error && (
-        <p role="alert" className="mt-4 text-sm text-[#8a3b3b]">
-          {error}
-        </p>
-      )}
-
-      {!finalized && !profile.meta.pendingLegacyActivation && (
-        <label className="mt-8 flex items-start gap-3 text-left text-[14px] leading-relaxed text-ink-soft">
-          <input
-            type="checkbox"
-            checked={consent}
-            onChange={(e) => setConsent(e.target.checked)}
-            className="mt-1 h-4 w-4 flex-none accent-ink"
-          />
-          <span>
-            Acepto participar en las introducciones privadas de Junto Select: podéis proponer mi perfil a
-            personas compatibles, y solo compartiréis mi contacto si los dos aceptamos. He leído los{" "}
-            <Link href="/terminos" target="_blank" className={linkClasses}>
-              Términos y Condiciones
-            </Link>{" "}
-            y la{" "}
-            <Link href="/privacidad" target="_blank" className={linkClasses}>
-              Política de Privacidad
-            </Link>
-            .
-          </span>
-        </label>
-      )}
-
-      {!finalized && !awaitingSelectPayment && (
+        {showFullProfile ? <ProfileCard profile={profile} /> : <ProfileSummary profile={profile} />}
         <button
           type="button"
-          disabled={saving}
-          onClick={handleFinalize}
-          className={`${primaryButtonClasses} mt-8 w-full`}
+          onClick={() => setShowFullProfile((v) => !v)}
+          aria-expanded={showFullProfile}
+          className={`mt-3 text-sm ${linkClasses}`}
         >
-          {saving ? "Guardando…" : "Guardar y finalizar"}
+          {showFullProfile ? "Ver resumen" : "Ver perfil completo"}
         </button>
+      </div>
+
+      <div id="editar-perfil" className="mt-10 scroll-mt-10">
+        <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">Revisa cada parte</p>
+        <div className="mt-2 border-t border-hairline">
+          {sections.map((section) => {
+            const optional = section === contactSection;
+            return (
+              <div key={section.label} className="flex items-center justify-between border-b border-hairline py-3.5">
+                <span className="text-[15px] text-ink">
+                  {section.label}
+                  {optional && !section.complete && <span className="ml-2 text-[13px] text-ink-soft">Opcional</span>}
+                </span>
+                {section.href && (
+                  <Link href={section.href} className={`text-[13px] ${linkClasses}`}>
+                    {optional && !section.complete ? "Añadir" : "Editar"}
+                    <span className="sr-only"> {section.label}</span>
+                  </Link>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {!awaitingSelectPayment && (
+        <div className="mt-10">
+          {!profile.meta.pendingLegacyActivation && (
+            <fieldset className="rounded-md border border-hairline bg-white/60 p-5">
+              <legend className="px-1 text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">
+                Confirmación
+              </legend>
+              {consentBox}
+            </fieldset>
+          )}
+          <button
+            type="button"
+            disabled={saving}
+            onClick={handleFinalize}
+            className={`${primaryButtonClasses} mt-6 w-full`}
+          >
+            {saving ? "Guardando…" : "Guardar y finalizar"}
+          </button>
+          {errorNote}
+        </div>
       )}
 
       {awaitingSelectPayment && (entitled || activating) && (
-        <p role="status" className="mt-8 text-[15px] text-ink-soft">
-          Tu membresía está activa. Estamos activando tu búsqueda…
-        </p>
+        <>
+          <p role="status" className="mt-10 text-[15px] text-ink-soft">
+            Tu membresía está activa. Estamos activando tu búsqueda…
+          </p>
+          {errorNote}
+        </>
       )}
 
       {awaitingSelectPayment && !entitled && !activating && (
-        <div className="mt-10 border-t border-hairline pt-8">
+        <div className="mt-12 border-t border-hairline pt-8">
           {checkoutParam === "success" && (
-            <p role="status" className="mb-6 rounded-xl border border-hairline bg-white p-4 text-[14px] text-ink-soft">
+            <p role="status" className="mb-6 rounded-md border border-hairline bg-white/60 p-4 text-[14px] text-ink-soft">
               Estamos confirmando tu pago con Stripe. Esta página se actualizará sola en unos segundos.
             </p>
           )}
           {checkoutParam === "cancel" && (
-            <p role="status" className="mb-6 rounded-xl border border-hairline bg-white p-4 text-[14px] text-ink-soft">
+            <p role="status" className="mb-6 rounded-md border border-hairline bg-white/60 p-4 text-[14px] text-ink-soft">
               Has cancelado el pago. No se te ha cobrado nada. Tu perfil sigue guardado y no se propone a nadie
               hasta que elijas.
             </p>
           )}
-          <p className="text-[12px] uppercase tracking-[0.22em] text-ink-soft">Último paso · Membresía Select</p>
-          <h2 className="mt-2 font-serif text-[24px] font-normal leading-snug text-ink">Elige tu plan</h2>
+          <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">Membresía Select</p>
+          <h2 className="mt-2 font-serif text-[26px] font-normal leading-snug text-ink sm:text-[30px]">Elige tu plan</h2>
           <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
             Tu búsqueda activa empieza en cuanto se confirme el pago. Los tres planes incluyen lo mismo; solo
             cambian la duración y el precio.
@@ -279,16 +382,24 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
             marketEligible={isMarketAvailabilityEligible(profile)}
             returnTo="profile"
             beforeCheckout={recordConsent}
-            disabledReason={consent ? null : "Para continuar, marca la casilla de participación de arriba."}
+            disabledReason={consent ? null : "Para continuar, marca la casilla de participación."}
+            leadingConfirmation={consentBox}
+            leadingConfirmed={consent}
           />
 
           <div className="mt-12 border-t border-hairline pt-8">
-            <p className="font-serif text-[20px] leading-snug text-ink">¿Prefieres no pagar ahora?</p>
-            <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-              Puedes formar parte de nuestra red privada sin coste, como perfil pasivo: podemos proponerte a un
-              miembro Select compatible, pero sin búsqueda activa por nuestra parte. Puedes pasar a Select más
-              adelante sin perder tu perfil.
+            <p className="text-[15px] font-medium text-ink">¿Prefieres no pagar ahora?</p>
+            <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+              Puedes quedarte en la red privada sin coste, como perfil pasivo.
             </p>
+            <details className="group mt-2">
+              <summary className={`cursor-pointer list-none text-[14px] ${linkClasses}`}>Qué significa</summary>
+              <p className="mt-3 max-w-[46ch] text-[14px] leading-relaxed text-ink-soft">
+                Puedes formar parte de nuestra red privada sin coste, como perfil pasivo: podemos proponerte a un
+                miembro Select compatible, pero sin búsqueda activa por nuestra parte. Puedes pasar a Select más
+                adelante sin perder tu perfil.
+              </p>
+            </details>
             <p className="mt-3 max-w-[46ch] text-[14px] leading-relaxed text-ink-soft">
               Si no eliges ninguna opción, tu perfil queda guardado y no se propone a nadie.
             </p>
@@ -296,40 +407,88 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
               type="button"
               disabled={saving}
               onClick={() => void choosePassive()}
-              className="mt-6 inline-flex w-full items-center justify-center rounded-full border border-ink/30 px-9 py-4 text-[13px] font-medium uppercase tracking-[0.18em] text-ink transition-colors duration-200 hover:border-ink disabled:cursor-not-allowed disabled:opacity-60"
+              className={`${secondaryButtonClasses} mt-6 w-full`}
             >
               {saving ? "Guardando…" : "Quedarme como perfil pasivo, sin coste"}
             </button>
+            {errorNote}
           </div>
         </div>
       )}
+    </div>
+  );
+}
 
-      <div id="editar-perfil" className="mt-14 scroll-mt-10 border-t border-hairline pt-8">
-        <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">
-          Editar mi perfil
-        </p>
-        <div className="mt-4">
-          {sections.map((section) => {
-            const row = (
-              <div className="flex items-center justify-between border-b border-hairline py-4">
-                <span className="text-[15px] text-ink">{section.label}</span>
-                <span
-                  className={`text-[13px] ${section.complete ? "text-ink" : "text-ink-soft"}`}
-                >
-                  {section.complete ? "Completado" : "Pendiente"}
-                </span>
-              </div>
-            );
-            return section.href ? (
-              <Link key={section.label} href={section.href} className="block hover:opacity-70">
-                {row}
-              </Link>
-            ) : (
-              <div key={section.label}>{row}</div>
-            );
-          })}
+/** Compact first look at the profile on the review step; the full card is one tap away. */
+function ProfileSummary({ profile }: { profile: ProfileDocument }) {
+  const v = profile.visible;
+  const age = profile.private.birthDate
+    ? getAge(profile.private.birthDate.toDate().toISOString().slice(0, 10))
+    : null;
+  const excerpt = profile.presentation.approvedText ?? "";
+  return (
+    <div className="flex gap-5 rounded-md border border-hairline bg-white/60 p-4 sm:p-5">
+      {profile.photos[0] && (
+        <div className="w-[96px] shrink-0 sm:w-[120px]">
+          <PrivatePhotoThumbnail path={profile.photos[0]} />
         </div>
+      )}
+      <div className="min-w-0">
+        <p className="font-serif text-[24px] font-light leading-snug text-ink">
+          {v.firstName}
+          {age ? `, ${age}` : ""}
+        </p>
+        <p className="mt-1 text-[14px] text-ink-soft">{[v.city, v.profession].filter(Boolean).join(" · ")}</p>
+        {excerpt && (
+          <p className="mt-3 line-clamp-3 text-[14px] leading-relaxed text-ink-soft">{excerpt}</p>
+        )}
       </div>
+    </div>
+  );
+}
+
+/** The moment the profile joins: one clear sentence, what happens next, one way forward. */
+function CompletionScreen({ active, firstName }: { active: boolean; firstName: string | null }) {
+  const steps = active
+    ? [
+        "Buscamos personas compatibles contigo.",
+        "Recibirás hasta 3 propuestas al mes.",
+        "Solo compartimos tu contacto si los dos aceptáis.",
+      ]
+    : [
+        "Si encajas con un miembro Select, te enviaremos una propuesta.",
+        "Solo compartimos tu contacto si los dos aceptáis.",
+        "Puedes actualizar tu perfil cuando quieras.",
+      ];
+  return (
+    <div
+      data-testid="onboarding-complete"
+      className="mx-auto flex w-full max-w-[560px] flex-col py-16 sm:py-24"
+    >
+      <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">
+        {active ? "Búsqueda activa" : "Perfil completado"}
+      </p>
+      <h1 className="mt-3 font-serif text-[32px] font-light leading-[1.15] text-ink sm:text-[44px]">
+        {active
+          ? `${firstName ? `${firstName}, tu` : "Tu"} búsqueda activa ha comenzado.`
+          : "Tu perfil ya forma parte de la red privada."}
+      </h1>
+      <ol className="mt-10 space-y-4 border-t border-hairline pt-6">
+        {steps.map((step, i) => (
+          <li key={step} className="flex gap-4 text-[15px] leading-relaxed text-ink">
+            <span className="font-serif text-[18px] text-ink-soft">{`0${i + 1}`}</span>
+            <span>{step}</span>
+          </li>
+        ))}
+      </ol>
+      <Link href="/member" className={`${primaryButtonClasses} mt-10 w-full sm:w-auto sm:self-start`}>
+        Ir a mi espacio
+      </Link>
+      {!active && (
+        <Link href="/member/plan" className={`mt-5 text-sm ${linkClasses}`}>
+          Conocer la Membresía Select
+        </Link>
+      )}
     </div>
   );
 }

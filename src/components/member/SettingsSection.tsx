@@ -140,8 +140,8 @@ export default function SettingsSection({ uid }: { uid: string }) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[560px] flex-col px-6 py-14 sm:px-0">
-      <h1 className="font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">
+    <div className="mx-auto flex w-full max-w-[560px] flex-col py-14">
+      <h1 className="font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">
         Ajustes
       </h1>
 

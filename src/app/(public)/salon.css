@@ -337,12 +337,17 @@
 .salon .p3-already { margin-top: 28px; font-size: 14.5px; color: var(--tinta-suave); }
 .salon .p3-already a { color: var(--tinta); text-decoration: underline; text-underline-offset: 4px; }
 .salon .p3-how { padding-block: 70px 130px; }
-.salon .p3-how ol { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); margin: 28px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--linea); }
+.salon .p3-how ol { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); margin: 28px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--linea); }
 .salon .p3-how li { display: grid; align-content: start; gap: 10px; padding: 30px 26px 0 0; }
 .salon .p3-how li + li { padding-left: 26px; border-left: 1px solid var(--linea); }
 .salon .p3-how b { font-size: 11px; font-weight: 500; letter-spacing: .24em; color: var(--tinto); }
 .salon .p3-how h3 { font-size: 26px; line-height: 1.1; }
 .salon .p3-how p { font-size: 15px; line-height: 1.6; color: var(--tinta-suave); }
+.salon .p3-how .p3-how-note { margin-top: 40px; max-width: 60ch; padding-top: 20px; border-top: 1px solid var(--linea); }
+.salon .p3-how .p3-how-note strong { font-weight: 500; color: var(--tinta); }
+/* Mobile switch between the two modalidad cards (hidden on wider screens). */
+.salon .p3-switch-input { display: none; }
+.salon .p3-switch { display: none; }
 
 @media (max-width: 1080px) {
   .salon .ftr-partner { grid-template-columns: minmax(0,1fr); }
@@ -351,9 +356,6 @@
   .salon .p2-grid > div, .salon .p2-grid > div + div { padding: 30px 0; border-left: 0; border-bottom: 1px solid var(--arena); }
   .salon .p3-cards { grid-template-columns: minmax(0,1fr); }
   .salon .p3-rows > div { grid-template-columns: minmax(0,1fr); }
-  .salon .p3-how ol { grid-template-columns: repeat(2, minmax(0,1fr)); }
-  .salon .p3-how li:nth-child(3) { padding-left: 0; border-left: 0; }
-  .salon .p3-how li:nth-child(n+3) { padding-top: 30px; }
 }
 @media (max-width: 640px) {
   .salon .ftr-partner { margin-bottom: 40px; padding-bottom: 40px; }
@@ -367,6 +369,15 @@
   .salon .p3-ways h2 { margin-bottom: 36px; }
   .salon .p3-card { padding: 34px 24px; }
   .salon .p3-card .btn { width: 100%; }
+  .salon .p3-switch-input { display: block; position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .salon .p3-switch { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 16px; border: 1px solid var(--linea); }
+  .salon .p3-switch label { padding: 13px 8px; text-align: center; font-size: 12px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--tinta-suave); cursor: pointer; }
+  .salon #mod-select:checked ~ .p3-switch label[for="mod-select"],
+  .salon #mod-passive:checked ~ .p3-switch label[for="mod-passive"] { background: var(--tinta); color: var(--marfil); }
+  .salon #mod-select:focus-visible ~ .p3-switch label[for="mod-select"],
+  .salon #mod-passive:focus-visible ~ .p3-switch label[for="mod-passive"] { outline: 2px solid var(--laton); outline-offset: 2px; }
+  .salon #mod-select:checked ~ .p3-cards .p3-card:not(.mem),
+  .salon #mod-passive:checked ~ .p3-cards .p3-card.mem { display: none; }
   .salon .p3-how { padding-block: 40px 84px; }
   .salon .p3-how ol { grid-template-columns: minmax(0,1fr); }
   .salon .p3-how li, .salon .p3-how li + li { padding: 24px 0 20px; border-left: 0; border-bottom: 1px solid var(--linea); }

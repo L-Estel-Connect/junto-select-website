@@ -51,7 +51,7 @@ export default function ProfileCard({ profile }: { profile: ProfileDocument }) {
     <div className="rounded-md border border-hairline bg-paper px-6 py-8 sm:px-10 sm:py-10">
       {primaryPhoto && (
         <div className="mx-auto max-w-[280px]">
-          <PrivatePhotoThumbnail path={primaryPhoto} primary />
+          <PrivatePhotoThumbnail path={primaryPhoto} />
         </div>
       )}
 

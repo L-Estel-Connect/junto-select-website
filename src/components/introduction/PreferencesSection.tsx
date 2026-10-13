@@ -20,6 +20,21 @@ import {
 import type { Dealbreakers, Preferences } from "@/lib/introduction/types";
 import { primaryButtonClasses } from "@/lib/styles";
 import { IntroductionError, IntroductionLoading } from "./RequireIntroductionAuth";
+import { OnboardingStepper, inOnboarding } from "./OnboardingFrame";
+import { preferencesMissingFields } from "@/lib/introduction/completion";
+
+// What the "Continuar" hint names when something is still missing.
+const MISSING_LABELS: Record<string, string> = {
+  gendersSought: "a quién te gustaría conocer",
+  gendersSoughtAmbiguous: "a quién te gustaría conocer",
+  ageMin: "rango de edad",
+  ageMax: "rango de edad",
+  ageRange: "rango de edad",
+  maxDistance: "distancia máxima",
+  relationshipIntentionsAccepted: "tipo de relación",
+  smokingAccepted: "tabaco",
+  partnerYoungChildrenMatters: "hijos menores de 15 años",
+};
 
 const GENDER_OPTIONS = [
   { value: "mujer", label: "Mujeres" },
@@ -63,6 +78,10 @@ export default function PreferencesSection({ uid }: { uid: string }) {
   const { profile, error: profileError, refresh: refreshProfile, mutate } = useSharedProfile(uid);
   const [dealbreakers, setDealbreakers] = useState<Dealbreakers | null>(null);
   const [preferences, setPreferences] = useState<Preferences | null>(null);
+  // While the profile is being completed, the two existing groups are shown
+  // one after the other (same questions, same order); once confirmed, the
+  // page shows both at once for editing.
+  const [part, setPart] = useState<1 | 2>(1);
 
   // Adjusted during render (not in an effect) — initializes local state
   // from the loaded profile exactly once, then locally controlled: this
@@ -118,30 +137,52 @@ export default function PreferencesSection({ uid }: { uid: string }) {
     void savePreferences(uid, next);
   }
 
-  return (
-    <div className="mx-auto flex w-full max-w-[640px] flex-col px-6 py-14 sm:px-0">
-      <Link href="/member" className={`text-sm ${linkClasses}`}>
-        ← Volver a mi perfil
-      </Link>
+  const onboarding = inOnboarding(profile);
+  const showEssentials = !onboarding || part === 1;
+  const showPreferences = !onboarding || part === 2;
+  const missing = [...new Set(preferencesMissingFields(dealbreakers).map((f) => MISSING_LABELS[f] ?? f))];
 
-      <h1 className="mt-6 font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">
+  function goToPart(next: 1 | 2) {
+    setPart(next);
+    window.scrollTo({ top: 0 });
+  }
+
+  return (
+    <div className="mx-auto flex w-full max-w-[640px] flex-col py-14">
+      {onboarding ? (
+        <OnboardingStepper
+          stage={2}
+          fraction={part / 2}
+          detail={`${part} de 2`}
+          selectJourney={profile.meta.requestedService === "select"}
+          onBack={part === 2 ? () => goToPart(1) : undefined}
+        />
+      ) : (
+        <Link href="/member/profile" className={`mb-6 text-sm ${linkClasses}`}>
+          ← Volver a mi perfil
+        </Link>
+      )}
+
+      <h1 className="font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">
         Lo que buscas
       </h1>
-      <p className="mt-2 max-w-[52ch] text-[15px] leading-relaxed text-ink-soft">
-        Tus respuestas se guardan automáticamente. Puedes volver y cambiarlas
-        cuando quieras.
-      </p>
+      {!onboarding && (
+        <p className="mt-3 max-w-[52ch] text-[15px] leading-relaxed text-ink-soft">
+          Tus respuestas se guardan automáticamente.
+        </p>
+      )}
 
+      {showEssentials && (
       <div className="mt-10">
-        <h2 className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">
+        <h2 className="font-serif text-[24px] font-normal leading-snug text-ink">
           Imprescindible para ti
         </h2>
-        <p className="mt-2 text-[14px] leading-relaxed text-ink-soft">
+        <p className="mt-2 max-w-[52ch] text-[15px] leading-relaxed text-ink-soft">
           Esto determina a quién consideraremos para ti — nunca te
           presentaremos a alguien que no encaje aquí.
         </p>
 
-        <div className="mt-2">
+        <div className="mt-8">
           <FieldRow question="¿A quién te gustaría conocer?">
             {/* Single-selection by product design (V1: exactly one desired
                 partner gender) — see completion.ts preferencesMissingFields
@@ -238,16 +279,19 @@ export default function PreferencesSection({ uid }: { uid: string }) {
         </div>
       </div>
 
-      <div className="mt-12">
-        <h2 className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">
+      )}
+
+      {showPreferences && (
+      <div className={onboarding ? "mt-10" : "mt-14"}>
+        <h2 className="font-serif text-[24px] font-normal leading-snug text-ink">
           Preferencias
         </h2>
-        <p className="mt-2 text-[14px] leading-relaxed text-ink-soft">
+        <p className="mt-2 max-w-[52ch] text-[15px] leading-relaxed text-ink-soft">
           Nos ayuda a encontrar mejores afinidades, pero nunca descarta a
           alguien por sí solo.
         </p>
 
-        <div className="mt-2">
+        <div className="mt-8">
           <FieldRow question="Rango de altura (opcional)">
             <NumberRangeField
               min={140}
@@ -287,14 +331,25 @@ export default function PreferencesSection({ uid }: { uid: string }) {
         </div>
       </div>
 
-      <button
-        type="button"
-        disabled={!isPreferencesComplete(dealbreakers)}
-        onClick={() => router.push(getNextOnboardingRoute({ ...profile, dealbreakers }))}
-        className={`${primaryButtonClasses} mt-12 w-full`}
-      >
-        Continuar
-      </button>
+      )}
+
+      <div className="sticky bottom-0 z-10 -mx-6 mt-12 border-t border-hairline bg-paper px-6 pb-[max(env(safe-area-inset-bottom),16px)] pt-4 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
+        <button
+          type="button"
+          disabled={!isPreferencesComplete(dealbreakers)}
+          onClick={() =>
+            onboarding && part === 1
+              ? goToPart(2)
+              : router.push(getNextOnboardingRoute({ ...profile, dealbreakers }))
+          }
+          className={`${primaryButtonClasses} w-full`}
+        >
+          Continuar
+        </button>
+        {missing.length > 0 && (
+          <p className="mt-2 text-center text-[13px] text-ink-soft">Falta: {missing.join(", ")}.</p>
+        )}
+      </div>
     </div>
   );
 }

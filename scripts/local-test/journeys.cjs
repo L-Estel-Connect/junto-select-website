@@ -298,7 +298,7 @@ async function main() {
     check("4 Mi plan opens without a finished profile", new URL(page.url()).pathname === "/member/plan");
     check("4 Mi plan offers to manage the membership", (await page.locator("text=Gestionar").count()) > 0);
     const nav = (await page.locator("header nav").first().innerText()).replace(/\s+/g, " ");
-    check("4 nav hides Selecciones and Conexiones before a profile", !nav.includes("Selecciones") && !nav.includes("Conexiones"), nav);
+    check("4 nav hides Propuestas and Conexiones before a profile", !nav.includes("Propuestas") && !nav.includes("Conexiones"), nav);
     await shot(page, "4d2-plan-without-profile");
     await page.goto(`${APP}/member/settings`);
     await page.waitForSelector("text=Cerrar sesión", { timeout: 20000 });

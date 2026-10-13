@@ -75,11 +75,12 @@ const STEPS = [
     title: "Decidís los dos",
     text: "Solo si los dos aceptáis, compartimos el contacto que cada uno ha elegido.",
   },
-  {
-    title: "Si no vives en Madrid",
-    text: "Puedes crear tu perfil desde hoy. Te avisaremos cuando las introducciones lleguen a tu ciudad.",
-  },
 ];
+
+const OUTSIDE_MADRID = {
+  title: "Si no vives en Madrid",
+  text: "Puedes crear tu perfil desde hoy. Te avisaremos cuando las introducciones lleguen a tu ciudad.",
+};
 
 export default function IntroductionsPage() {
   return (
@@ -107,10 +108,17 @@ export default function IntroductionsPage() {
 
       <section className="p3-ways" id="modalidad" aria-labelledby="ways-h">
         <div className="wrap">
-          <p className="eyebrow">Introducciones privadas</p>
           <h2 id="ways-h">
             Elige tu <em>modalidad.</em>
           </h2>
+          {/* Phones show one card at a time; this CSS-only switch picks which
+              (see .p3-switch in salon.css). Wider screens show both side by side. */}
+          <input className="p3-switch-input" type="radio" name="modalidad" id="mod-select" aria-label="Ver búsqueda activa" defaultChecked />
+          <input className="p3-switch-input" type="radio" name="modalidad" id="mod-passive" aria-label="Ver perfil pasivo" />
+          <div className="p3-switch">
+            <label htmlFor="mod-select">Búsqueda activa</label>
+            <label htmlFor="mod-passive">Perfil pasivo</label>
+          </div>
           <div className="p3-cards">
             {MODES.map((m) => (
               <div className={`p3-card${m.key === "select" ? " mem" : ""}`} key={m.key}>
@@ -157,6 +165,9 @@ export default function IntroductionsPage() {
               </li>
             ))}
           </ol>
+          <p className="p3-how-note">
+            <strong>{OUTSIDE_MADRID.title}.</strong> {OUTSIDE_MADRID.text}
+          </p>
         </div>
       </section>
     </main>

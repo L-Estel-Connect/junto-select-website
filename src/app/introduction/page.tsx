@@ -7,6 +7,7 @@ import Section from "@/components/Section";
 import Wordmark from "@/components/Wordmark";
 import AuthButtons from "@/components/introduction/AuthButtons";
 import ConfirmEmailForLink from "@/components/introduction/ConfirmEmailForLink";
+import { OnboardingStagesPreview } from "@/components/introduction/OnboardingFrame";
 import { useAuth } from "@/lib/firebase/useAuth";
 import { signOutUser } from "@/lib/firebase/auth";
 import { memberFetchJson } from "@/lib/member/memberFetch";
@@ -137,26 +138,20 @@ export default function IntroductionLandingPage() {
   const copy = SIGN_IN_COPY[intent ?? "none"];
 
   return (
-    <Section
-      as="main"
-      size="sm"
-      className="flex min-h-[80svh] flex-col items-center justify-center gap-8 py-16 text-center"
-    >
-      <p className={eyebrowClasses}>{copy.eyebrow}</p>
+    <Section as="main" size="sm" className="flex min-h-[80svh] flex-col justify-center py-14 sm:py-20">
+      <Wordmark className="text-xl text-ink sm:text-2xl" />
 
-      <Wordmark className="text-2xl text-ink sm:text-3xl" />
-
-      <h1 className="max-w-[24ch] font-serif text-[28px] font-normal leading-snug text-ink sm:text-3xl">
+      <p className={`${eyebrowClasses} mt-10`}>{copy.eyebrow}</p>
+      <h1 className="mt-3 max-w-[22ch] font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">
         {copy.title}
       </h1>
-
-      <p className="max-w-[42ch] text-[15px] leading-relaxed text-ink-soft">{copy.text}</p>
+      <p className="mt-4 max-w-[44ch] text-[15px] leading-relaxed text-ink-soft">{copy.text}</p>
 
       {sessionExpired && (
-        <p className="max-w-[38ch] text-[13px] text-ink-soft">Tu sesión ha caducado. Vuelve a iniciar sesión.</p>
+        <p className="mt-6 max-w-[38ch] text-[13px] text-ink-soft">Tu sesión ha caducado. Vuelve a iniciar sesión.</p>
       )}
 
-      <div className="w-full max-w-[360px]">
+      <div className="mt-8 w-full max-w-[400px]">
         {needsEmailForLink ? (
           <ConfirmEmailForLink error={linkError} onConfirm={confirmEmailForLink} />
         ) : (
@@ -174,8 +169,17 @@ export default function IntroductionLandingPage() {
         )}
       </div>
 
+      {intent && (
+        <div className="mt-10 max-w-[400px]">
+          <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">Después, cinco pasos</p>
+          <div className="mt-3">
+            <OnboardingStagesPreview selectJourney={intent === "select"} />
+          </div>
+        </div>
+      )}
+
       {!intent && (
-        <p className="max-w-[40ch] text-[13px] leading-relaxed text-ink-soft">
+        <p className="mt-8 max-w-[40ch] text-[13px] leading-relaxed text-ink-soft">
           ¿Solo quieres venir a los encuentros? No necesitas cuenta:{" "}
           <Link href="/unete" className={linkClasses}>
             recibe nuestras invitaciones
@@ -184,7 +188,7 @@ export default function IntroductionLandingPage() {
         </p>
       )}
 
-      <p className="max-w-[38ch] text-xs leading-relaxed text-ink-soft">
+      <p className="mt-6 max-w-[44ch] text-xs leading-relaxed text-ink-soft">
         Al continuar, aceptas nuestros{" "}
         <Link href="/terminos" target="_blank" className={linkClasses}>
           Términos y Condiciones
@@ -208,12 +212,12 @@ const SIGN_IN_COPY: Record<RequestedService | "none", { eyebrow: string; title: 
   passive: {
     eyebrow: "Perfil pasivo · Gratuito",
     title: "Crea tu perfil privado",
-    text: "Primero, identifícate con Google o con tu email. Después crearás tu perfil privado; nunca se publica.",
+    text: "Identifícate con Google o con tu email. Tu perfil es privado y nunca se publica.",
   },
   select: {
     eyebrow: "Búsqueda activa · Membresía Select",
     title: "Empieza tu búsqueda activa",
-    text: "Primero, identifícate con Google o con tu email. Después completarás tu perfil privado y, al final, elegirás tu plan.",
+    text: "Identifícate con Google o con tu email. Después completas tu perfil privado y, al final, eliges tu plan.",
   },
 };
 
@@ -235,7 +239,7 @@ function AccountHome({
     <Section as="main" size="sm" className="flex min-h-[80svh] flex-col justify-center gap-8 py-16">
       <div className="space-y-3">
         <p className={eyebrowClasses}>Tu cuenta</p>
-        <h1 className="font-serif text-[28px] font-normal leading-snug text-ink sm:text-3xl">Hola{email ? `, ${email}` : ""}.</h1>
+        <h1 className="break-words font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">Hola{email ? <>, <span className="break-all">{email}</span></> : ""}.</h1>
         <p className="max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
           Tu cuenta aún no tiene un perfil de introducciones ni una Membresía Select. Elige cómo quieres participar;
           no se crea nada hasta que lo elijas.
@@ -243,7 +247,7 @@ function AccountHome({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-3 border border-hairline p-6">
+        <div className="flex flex-col gap-3 rounded-md border border-hairline bg-white/60 p-6">
           <p className={eyebrowClasses}>Perfil pasivo · Gratuito</p>
           <p className="text-[15px] leading-relaxed text-ink-soft">
             Crea tu perfil privado sin coste. Podemos proponerte a un miembro Select compatible.
@@ -260,7 +264,7 @@ function AccountHome({
             {busy ? "Creando…" : "Crear mi perfil privado"}
           </button>
         </div>
-        <div className="flex flex-col gap-3 border border-hairline p-6">
+        <div className="flex flex-col gap-3 rounded-md border border-hairline bg-white/60 p-6">
           <p className={eyebrowClasses}>Membresía Select</p>
           <p className="text-[15px] leading-relaxed text-ink-soft">
             Búsqueda activa, una comunidad selecta y un 20 % de descuento en un encuentro al mes.

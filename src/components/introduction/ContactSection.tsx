@@ -94,17 +94,17 @@ export default function ContactSection({ uid }: { uid: string }) {
   const additionalOptions = METHOD_OPTIONS.filter((o) => o.value !== prefs.preferredMethod);
 
   return (
-    <div className="mx-auto flex w-full max-w-[560px] flex-col px-6 py-14 sm:px-0">
+    <div className="mx-auto flex w-full max-w-[560px] flex-col py-14">
       <Link href="/member/profile#editar-perfil" className={`text-sm ${linkClasses}`}>
         ← Volver a mi perfil
       </Link>
 
-      <h1 className="mt-6 font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">
+      <h1 className="mt-6 font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">
         ¿Cómo prefieres que te contacten?
       </h1>
       <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
         Solo compartiremos estos datos cuando haya interés mutuo. Nunca
-        aparecen en tu perfil ni en tus selecciones.
+        aparecen en tu perfil ni en tus propuestas.
       </p>
 
       <div className="mt-8">

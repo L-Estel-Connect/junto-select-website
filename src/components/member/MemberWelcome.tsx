@@ -46,7 +46,7 @@ export default function MemberWelcome({ uid }: { uid: string }) {
 
   if (!entitled) {
     return (
-      <div className="mx-auto flex w-full max-w-[560px] flex-col gap-6 px-6 py-14 sm:px-0">
+      <div className="mx-auto flex w-full max-w-[560px] flex-col gap-6 py-14">
         {fromCheckout ? (
           <>
             <h1 className="font-serif text-[28px] font-normal leading-snug text-ink">Estamos confirmando tu pago…</h1>
@@ -72,7 +72,7 @@ export default function MemberWelcome({ uid }: { uid: string }) {
   const plan = billing?.planKey ? PLAN_DISPLAY[billing.planKey] : null;
 
   return (
-    <div className="mx-auto flex w-full max-w-[560px] flex-col gap-6 px-6 py-14 sm:px-0">
+    <div className="mx-auto flex w-full max-w-[560px] flex-col gap-6 py-14">
       <p className="text-[12px] uppercase tracking-[0.22em] text-ink-soft">Membresía Select</p>
       <h1 className="font-serif text-[30px] font-normal leading-snug text-ink sm:text-[34px]">
         Bienvenido/a al club. Tu membresía está activa.
