@@ -24,7 +24,7 @@ const fraunces = Fraunces({
 const siteUrl = getAppBaseUrl();
 const title = "Junto Select · Club social privado para solteros en Madrid";
 const description =
-  "Un club privado para solteros que buscan algo extraordinario. Encuentros exclusivos en Madrid, experiencias elegidas con cuidado e introducciones privadas. Pronto en Valencia, Barcelona y Málaga.";
+  "Un club privado para solteros que buscan algo extraordinario. Encuentros exclusivos en Madrid, experiencias elegidas con cuidado y un servicio de matchmaking privado. Pronto en Valencia, Barcelona y Málaga.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -39,8 +39,9 @@ export const metadata: Metadata = {
     "club privado para solteros",
     "eventos para solteros Madrid",
     "eventos exclusivos para solteros",
-    "introducciones privadas",
-    "matchmaking privado Madrid",
+    "matchmaking Madrid",
+    "matchmaking privado",
+    "matchmaking para profesionales",
   ],
   authors: [{ name: "Junto Select" }],
   alternates: {

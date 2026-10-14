@@ -52,7 +52,6 @@ export default function EventCards({ events }: { events: PublicEvent[] }) {
               <span>
                 {e.venue ? `${e.venue}, ${e.city}` : e.city}
                 {e.priceFromEuros != null && ` · desde ${e.priceFromEuros} €`}
-                {e.selectBenefit && " · 20 % con tu código Select"}
               </span>
               {e.status === "sold_out" ? (
                 <span>Completo</span>

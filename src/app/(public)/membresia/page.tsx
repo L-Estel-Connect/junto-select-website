@@ -12,6 +12,9 @@ export const metadata: Metadata = {
   description:
     "La Membresía Select de Junto Select: una comunidad selecta, búsqueda activa de introducciones en Madrid y un 20 % de descuento en un encuentro al mes. Desde 49 € al mes.",
   alternates: { canonical: "/membresia" },
+  // Retired from the public journey (Oct 2026): reachable by direct link for
+  // existing accounts and the member area, but no longer indexed.
+  robots: { index: false, follow: false },
 };
 
 const PRIVILEGES = [

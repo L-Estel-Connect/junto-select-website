@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CONTACT_EMAIL, INSTAGRAM_URL, NAV, SIGN_IN_HREF, joinHref } from "@/lib/site/content";
+import { CONTACT_EMAIL, INSTAGRAM_URL, MATCHMAKING_HREF, NAV, PRIVATE_POOL_HREF, SIGN_IN_HREF, joinHref } from "@/lib/site/content";
 
 export default function SiteFooter() {
   return (
@@ -40,11 +40,11 @@ export default function SiteFooter() {
             </ul>
           </div>
           <div>
-            <h4>Tu cuenta</h4>
+            <h4>Formar parte</h4>
             <ul>
               <li><Link href={joinHref()}>Recibir invitaciones</Link></li>
-              <li><Link href="/introducciones">Introducciones</Link></li>
-              <li><Link href="/membresia#planes">Hazte miembro</Link></li>
+              <li><Link href={MATCHMAKING_HREF}>Matchmaking privado</Link></li>
+              <li><Link href={PRIVATE_POOL_HREF}>La red privada</Link></li>
               <li><Link href={SIGN_IN_HREF}>Acceder</Link></li>
             </ul>
           </div>

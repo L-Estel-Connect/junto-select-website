@@ -22,7 +22,7 @@ const AUTH_EMU = `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}`;
 const SHOTS = ".local-test/shots-v5";
 fs.mkdirSync(SHOTS, { recursive: true });
 
-const PAGES = ["/", "/club", "/eventos", "/introducciones", "/membresia", "/unete", "/colaboraciones", "/membresia/alta?plan=three_month"];
+const PAGES = ["/", "/club", "/eventos", "/matchmaking", "/membresia", "/unete", "/colaboraciones", "/membresia/alta?plan=three_month"];
 const VIEWPORTS = { desktop: { width: 1366, height: 900 }, mobile: { width: 390, height: 844 } };
 
 const results = [];
@@ -108,10 +108,13 @@ async function statusOf(path) {
       check(`${tag}: headings in Newsreader Light`, /newsreader/i.test(info.h1Font) && info.h1Weight === "300", `${info.h1Font} ${info.h1Weight}`);
       check(`${tag}: body in Instrument Sans`, /instrument.sans/i.test(info.bodyFont), info.bodyFont);
       check(`${tag}: title and description set`, info.title.length > 10 && info.description.length > 40);
-      const banned = ["Compartamos", "cada encuentro Junto Select elegible", "privilegio mensual", "Gratis", "fundador"].filter((w) => info.text.includes(w));
+      const banned = ["Compartamos", "cada encuentro Junto Select elegible", "privilegio mensual", "Gratis", "fundador"].filter(
+        // The founder-led Select Privado is named on purpose on /matchmaking (Oct 2026).
+        (w) => info.text.includes(w) && !(w === "fundador" && path === "/matchmaking"),
+      );
       check(`${tag}: no rejected wording`, banned.length === 0, banned.join(", "));
       if (vpName === "desktop") {
-        check(`${tag}: nav is Option 1`, info.headerNav.join(" · ") === "El Club · Encuentros · Introducciones · Membresía Select", info.headerNav.join(" · "));
+        check(`${tag}: nav is Option 1`, info.headerNav.join(" · ") === "El Club · Encuentros · Matchmaking", info.headerNav.join(" · "));
       }
       const footerColab = info.links.filter((l) => l.inFooter && l.text === "Patrocinios y colaboraciones");
       check(`${tag}: one footer sponsorship link`, footerColab.length === 1 && footerColab[0].href === "/colaboraciones");
@@ -122,7 +125,9 @@ async function statusOf(path) {
           if (!l.href.startsWith("/")) continue;
           const [pathOnly, hash] = l.href.split("#");
           const status = await statusOf(pathOnly || path);
-          check(`${tag}: link "${l.text}" → ${l.href}`, status === 200, `HTTP ${status}`);
+          // /introducciones now redirects to /matchmaking; the retired /membresia page still links to it.
+          const ok = status === 200 || (pathOnly === "/introducciones" && status === 307);
+          check(`${tag}: link "${l.text}" → ${l.href}`, ok, `HTTP ${status}`);
           if (hash) {
             const html = await (await fetch(`${APP}${pathOnly || path}`)).text();
             check(`${tag}: anchor #${hash} exists`, html.includes(`id="${hash}"`));
@@ -136,16 +141,16 @@ async function statusOf(path) {
       await page.goto(`${APP}/`);
       await page.click("button.burger");
       const items = await page.locator("#site-menu nav a").allTextContents();
-      check("mobile menu lists Option 1", items.join(" · ") === "El Club · Encuentros · Introducciones · Membresía Select", items.join(" · "));
+      check("mobile menu lists Option 1", items.join(" · ") === "El Club · Encuentros · Matchmaking", items.join(" · "));
       const ctas = await page.locator("#site-menu .ctas a").allTextContents();
-      check("mobile menu has Recibir invitaciones and Hazte miembro", ctas.join("|") === "Recibir invitaciones|Hazte miembro", ctas.join("|"));
+      check("mobile menu has Recibir invitaciones and Solicitar una entrevista", ctas.join("|") === "Recibir invitaciones|Solicitar una entrevista", ctas.join("|"));
       await page.screenshot({ path: `${SHOTS}/mobile-menu.png` });
       await page.keyboard.press("Escape");
       check("mobile menu closes with Escape", (await page.locator("#site-menu").count()) === 0);
       await page.click("button.burger");
-      await page.click("#site-menu nav >> text=Introducciones");
-      await page.waitForURL("**/introducciones");
-      check("mobile menu link navigates", page.url().endsWith("/introducciones"));
+      await page.click("#site-menu nav >> text=Matchmaking");
+      await page.waitForURL("**/matchmaking");
+      check("mobile menu link navigates", page.url().endsWith("/matchmaking"));
     }
     await ctx.close();
   }
@@ -163,18 +168,21 @@ async function statusOf(path) {
   check("home: no free/no-cost wording", !/sin coste|sin compromiso|gratis|gratuit/i.test(await page.locator("main").innerText()));
   {
     const sel = (await page.locator(".select").innerText()).replace(/\s+/g, " ");
-    check("home: Membresía benefits are the approved three",
-      ["Una comunidad selecta", "Búsqueda activa de introducciones", "20 % de descuento en un encuentro al mes"].every((t) => sel.includes(t)) &&
-        sel.includes("Más que asistir, pertenecer"));
-    check("home: no member-account benefit", !sel.includes("Tu cuenta de miembro") && !sel.includes("Tu propio espacio"));
+    check("home: the band presents Matchmaking, not the membership",
+      sel.includes("Tú sabes lo que buscas") && !/Membresía|49 €|20 %/.test(sel));
+    check("home: band links to /matchmaking and the private pool",
+      (await href(".select >> text=Descubre el matchmaking privado")) === "/matchmaking" &&
+        (await href(".select >> text=Forma parte de nuestra red privada")) === "/introduction?modalidad=pasivo");
   }
-  check("home: Descubre la Membresía Select → /membresia", (await href(".hero >> text=Descubre la Membresía Select")) === "/membresia");
+  check("home: no Membresía anywhere", !/Membresía|Hazte miembro/.test(await page.locator("body").innerText()));
+  check("home: Descubre el matchmaking privado → /matchmaking", (await href(".hero >> text=Descubre el matchmaking privado")) === "/matchmaking");
   check("home: Ver todos los encuentros → /eventos", (await href("text=Ver todos los encuentros")) === "/eventos");
   check("home: Valencia → /unete?ciudad=valencia", (await page.locator('.clist a[href="/unete?ciudad=valencia"]').count()) === 1);
   check("home: Acceder → /introduction", (await href("header >> text=Acceder")) === "/introduction");
   check("home: logo → /", (await href("header a.word")) === "/");
 
   await page.goto(`${APP}/membresia`);
+  check("membresía: retired page is not indexed", /noindex/.test((await page.locator('meta[name="robots"]').getAttribute("content")) || ""));
   for (const [key, price] of [["monthly", "49 €"], ["three_month", "129 €"], ["six_month", "234 €"]]) {
     const btn = page.locator(`a[href="/membresia/alta?plan=${key}"]`);
     check(`membresía: plan ${key} button present`, (await btn.count()) === 1);
@@ -199,13 +207,25 @@ async function statusOf(path) {
   check("cancelled checkout shows a no-charge message", (await page.locator("body").innerText()).includes("No se ha realizado ningún cargo"));
 
   await page.goto(`${APP}/introducciones`);
-  check("introducciones: Elige tu modalidad section", (await page.locator("#modalidad h2").innerText()).includes("modalidad"));
-  check("introducciones: Crear mi perfil privado → ?modalidad=pasivo", (await href(".p3-cards >> text=Crear mi perfil privado")) === "/introduction?modalidad=pasivo");
-  check("introducciones: Empezar la búsqueda activa → ?modalidad=activa", (await href("text=Empezar la búsqueda activa")) === "/introduction?modalidad=activa");
-  check("introducciones: both cards answer the same rows", (await page.locator(".p3-card").nth(0).locator("dt").allInnerTexts()).length === 6 &&
-    (await page.locator(".p3-card").nth(1).locator("dt").allInnerTexts()).length === 6);
-  check("introducciones: Ya soy miembro → sign-in returning to /member/profile", (await href("text=Ya soy miembro")) === "/introduction?next=/member/profile");
-  check("introducciones: Madrid only", (await page.locator(".p3-hero .city").innerText()).toLowerCase().includes("madrid"));
+  check("introducciones redirects to /matchmaking", page.url().endsWith("/matchmaking"));
+  {
+    const body = await page.locator("main").innerText();
+    check("matchmaking: both programmes with VAT-inclusive prices", body.includes("1.950 €") && body.includes("4.800 €") && (body.match(/IVA incluido/gi) || []).length === 2);
+    check("matchmaking: both cards answer the same rows", (await page.locator(".mm-card").nth(0).locator("dt").allInnerTexts()).join() ===
+      (await page.locator(".mm-card").nth(1).locator("dt").allInnerTexts()).join());
+    check("matchmaking: no guarantee or refund promise", !/garantizamos|garantía de|reembolso|devolución/i.test(body));
+    check("matchmaking: no Membresía", !/Membresía|Hazte miembro/.test(await page.locator("body").innerText()));
+    check("matchmaking: one h1", (await page.locator("h1").count()) === 1);
+    check("matchmaking: header button → consultation", (await href("header .hdr-actions .btn")) === "/matchmaking#entrevista");
+    check("matchmaking: private pool → ?modalidad=pasivo", (await href(".mm-pool >> text=Crear mi perfil privado")) === "/introduction?modalidad=pasivo");
+    const ld = await page.locator('script[type="application/ld+json"]').first().textContent();
+    check("matchmaking: Service and FAQPage structured data", ld.includes('"Service"') && ld.includes('"FAQPage"') && ld.includes("4800"));
+    await page.click(".mm-card >> nth=1 >> a.btn");
+    await page.waitForURL("**programa=privado**");
+    check("matchmaking: programme button preselects it in the request", (await page.locator("input[name=programa]:checked").getAttribute("value")) === "privado");
+    await page.click("#entrevista button[type=submit]");
+    check("matchmaking: request needs name and email", (await page.locator("#entrevista .err").count()) === 2);
+  }
 
   // ---- 3. Free Introductions participant ----
   const freeEmail = `libre.${Date.now()}@example.test`;

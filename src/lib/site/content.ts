@@ -1,12 +1,34 @@
 import type { CommunityCity } from "@/lib/types";
 
-/** Approved navigation (v5, Option 1). The logo links to Inicio; no Ciudades. */
+/**
+ * Public navigation. The logo links to Inicio; no Ciudades. Membresía Select
+ * is retired from the public journey (its pages, checkout and member area
+ * still work by direct link) and the public Introducciones service is now
+ * presented as Matchmaking; /introducciones redirects there (next.config.ts).
+ */
 export const NAV = [
   { href: "/club", label: "El Club" },
   { href: "/eventos", label: "Encuentros" },
-  { href: "/introducciones", label: "Introducciones" },
-  { href: "/membresia", label: "Membresía Select" },
+  { href: "/matchmaking", label: "Matchmaking" },
 ] as const;
+
+/** The paid matchmaking service and its consultation request. */
+export const MATCHMAKING_HREF = "/matchmaking";
+export const CONSULTATION_HREF = "/matchmaking#entrevista";
+
+/**
+ * The free private candidate pool ("red privada"). Until the candidate
+ * portal is approved, joining reuses the existing private-profile journey
+ * (passive Introducciones profile).
+ */
+export const PRIVATE_POOL_HREF = "/introduction?modalidad=pasivo";
+
+/**
+ * A booking page (Calendly, Cal.com…) for the consultation, once Junto has
+ * one. While it is null, the request is prepared as an email to
+ * CONTACT_EMAIL: nothing is stored by the website.
+ */
+export const CONSULTATION_BOOKING_URL: string | null = null;
 
 /**
  * The Select event benefit, worded once for every public page. Kept here so
