@@ -70,11 +70,16 @@ async function seed(uid, billing) {
 }
 
 async function del(uid) {
-  const custom = await auth.createCustomToken(uid);
-  const t = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${API_KEY}`, {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: custom, returnSecureToken: true }),
+  // Signs in through the email-link provider (same as "Continuar con email"):
+  // no custom token, so no iam.serviceAccounts.signBlob permission needed.
+  const email = `${uid}@junto-select-staging.test`;
+  const link = new URL(await auth.generateSignInWithEmailLink(email, { url: `${APP}/introduction`, handleCodeInApp: true }));
+  const oobCode = link.searchParams.get("oobCode");
+  const t = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithEmailLink?key=${API_KEY}`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, oobCode }),
   });
-  const { idToken } = await t.json();
+  const { idToken, error } = await t.json();
+  if (!idToken) throw new Error(`email-link sign-in failed: ${JSON.stringify(error)}`);
   const res = await fetch(`${APP}/api/member/delete-profile`, { method: "POST", headers: { Authorization: `Bearer ${idToken}` } });
   return { status: res.status, body: await res.json().catch(() => null) };
 }
