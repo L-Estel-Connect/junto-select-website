@@ -257,7 +257,7 @@ async function uiCase() {
     await page.check("input[type=checkbox]");
     await page.click("button:has-text('Eliminar mi perfil')");
     await page.waitForURL("**/perfil-eliminado", { timeout: 20000 });
-    const heading = await page.locator("h2").first().innerText();
+    const heading = await page.locator("main h1").first().innerText();
     fs.mkdirSync(".local-test/shots", { recursive: true });
     await page.screenshot({ path: ".local-test/shots/perfil-eliminado.png", fullPage: true });
     check("UI: confirmation page shown after deleting", /Tu perfil se ha eliminado/.test(heading), heading);

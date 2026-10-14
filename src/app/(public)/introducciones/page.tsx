@@ -7,7 +7,7 @@ import salonPhoto from "../../../../public/images/candlelit-lounge-table.jpg";
 export const metadata: Metadata = {
   title: "Introducciones privadas · Solteros a partir de 40 en Madrid",
   description:
-    "Introducciones privadas de Junto Select: un perfil que nunca se publica, propuestas cuidadas y la decisión siempre de los dos. Con Membresía Select o con un perfil privado sin coste. Hoy, en Madrid.",
+    "Introducciones privadas de Junto Select: un perfil que nunca se publica, propuestas cuidadas y la decisión siempre de los dos. Con búsqueda activa o con tu perfil privado. Hoy, en Madrid.",
   alternates: { canonical: "/introducciones" },
 };
 
@@ -31,7 +31,7 @@ const MODES = [
       { label: "Coste", text: "Desde 49 € al mes, con tres planes: 1, 3 o 6 meses." },
       {
         label: "Quién busca",
-        text: "Buscamos activamente entre los perfiles compatibles de Madrid, pasivos y Select.",
+        text: "Buscamos activamente por ti entre todos los perfiles compatibles de Madrid.",
       },
       {
         label: "Propuestas",
@@ -44,10 +44,10 @@ const MODES = [
   },
   {
     key: "passive",
-    eyebrow: "Perfil pasivo · Gratuito",
+    eyebrow: "Perfil privado",
     title: "Formas parte de la red privada.",
     href: "/introduction?modalidad=pasivo",
-    cta: "Crear mi perfil pasivo",
+    cta: "Crear mi perfil privado",
     rows: [
       { label: "Coste", text: "Sin coste." },
       {
@@ -114,10 +114,10 @@ export default function IntroductionsPage() {
           {/* Phones show one card at a time; this CSS-only switch picks which
               (see .p3-switch in salon.css). Wider screens show both side by side. */}
           <input className="p3-switch-input" type="radio" name="modalidad" id="mod-select" aria-label="Ver búsqueda activa" defaultChecked />
-          <input className="p3-switch-input" type="radio" name="modalidad" id="mod-passive" aria-label="Ver perfil pasivo" />
+          <input className="p3-switch-input" type="radio" name="modalidad" id="mod-passive" aria-label="Ver perfil privado" />
           <div className="p3-switch">
             <label htmlFor="mod-select">Búsqueda activa</label>
-            <label htmlFor="mod-passive">Perfil pasivo</label>
+            <label htmlFor="mod-passive">Perfil privado</label>
           </div>
           <div className="p3-cards">
             {MODES.map((m) => (

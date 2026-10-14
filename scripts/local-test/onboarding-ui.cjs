@@ -156,7 +156,7 @@ async function shot(page, name) {
 /** Runs the journey from /introducciones to /member/profile (pre-finalize). */
 async function completeProfile(browser, kind) {
   const tag = kind;
-  const cta = kind === "pasivo" ? "Crear mi perfil pasivo" : "Empezar la búsqueda activa";
+  const cta = kind === "pasivo" ? "Crear mi perfil privado" : "Empezar la búsqueda activa";
   const email = `onb.${kind}.${Date.now()}@example.test`;
   const firstName = kind === "pasivo" ? "Lucía" : "Carmen";
   const ctx = await browser.newContext({ viewport: DESKTOP, locale: "es-ES" });
@@ -312,12 +312,12 @@ async function completeProfile(browser, kind) {
       const email = `onb.mobile.${Date.now()}@example.test`;
       await page.goto(`${APP}/introducciones`, { waitUntil: "networkidle" });
       // Phones show one modalidad card at a time: Búsqueda activa first, a switch for the other.
-      check("mobile: passive card hidden until chosen", !(await page.getByRole("link", { name: "Crear mi perfil pasivo" }).isVisible()));
+      check("mobile: passive card hidden until chosen", !(await page.getByRole("link", { name: "Crear mi perfil privado" }).isVisible()));
       await page.locator("label[for=mod-passive]").click();
-      check("mobile: switch shows the passive card", await page.getByRole("link", { name: "Crear mi perfil pasivo" }).isVisible());
+      check("mobile: switch shows the passive card", await page.getByRole("link", { name: "Crear mi perfil privado" }).isVisible());
       check("mobile: switch hides the active card", !(await page.getByRole("link", { name: "Empezar la búsqueda activa" }).isVisible()));
       await shot(page, "mobile-introducciones-switch-passive");
-      await page.getByRole("link", { name: "Crear mi perfil pasivo" }).first().click();
+      await page.getByRole("link", { name: "Crear mi perfil privado" }).first().click();
       await page.waitForURL("**/introduction**");
       await signInOnIntroduction(page, email, page.url());
       await page.waitForURL("**/introduction/onboarding**", { timeout: 25000 });
@@ -351,8 +351,8 @@ async function completeProfile(browser, kind) {
       await page.getByRole("link", { name: "Ir a mi espacio" }).click();
       await page.waitForURL(/\/member$/, { timeout: 20000 });
       await page.getByText("Modalidad").waitFor({ timeout: 20000 });
-      await page.getByText("Perfil pasivo", { exact: true }).waitFor({ timeout: 20000 });
-      check("pasivo: member home shows 'Modalidad · Perfil pasivo'", true);
+      await page.getByText("Perfil privado", { exact: true }).waitFor({ timeout: 20000 });
+      check("pasivo: member home shows 'Modalidad · Perfil privado'", true);
       await shot(page, "pasivo-08-member-home");
       check("pasivo: meta.onboardingFinalized true", p?.meta?.onboardingFinalized === true);
       check("pasivo: meta.requestedService passive", p?.meta?.requestedService === "passive", p?.meta?.requestedService);

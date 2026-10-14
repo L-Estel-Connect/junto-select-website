@@ -57,7 +57,6 @@ export default async function Home() {
                   Descubre la Membresía Select
                 </Link>
               </div>
-              <small>Sin coste y sin compromiso.</small>
             </div>
           </div>
         </div>
@@ -128,12 +127,12 @@ export default async function Home() {
             Más que asistir, <em>pertenecer.</em>
           </h2>
           <p className="txt">
-            La membresía de Junto Select te da acceso a una comunidad selecta, a introducciones privadas y a un 20 %
-            de descuento en un encuentro al mes.
+            La Membresía Select te da acceso a una comunidad selecta, a la búsqueda activa de introducciones y a un
+            20 % de descuento en un encuentro al mes.
           </p>
           <ul className="sel-list">
             <li><span>01</span>Una comunidad selecta</li>
-            <li><span>02</span>Introducciones privadas</li>
+            <li><span>02</span>Búsqueda activa de introducciones</li>
             <li><span>03</span>20 % de descuento en un encuentro al mes</li>
           </ul>
           <p className="meta">Disponible en Madrid · Desde 49 € al mes</p>
@@ -141,8 +140,7 @@ export default async function Home() {
             Descubre la Membresía Select
           </Link>
           <p className="sel-alt">
-            ¿Solo quieres venir a los encuentros? <Link href={joinHref()}>Recibir invitaciones</Link>, sin coste y sin
-            compromiso.
+            ¿Solo quieres venir a los encuentros? <Link href={joinHref()}>Recibe nuestras invitaciones</Link>.
           </p>
         </div>
       </section>
@@ -161,9 +159,8 @@ export default async function Home() {
               llegamos a tu ciudad.
             </p>
             <Link className="btn btn-tinta" href={joinHref()}>
-              Únete al club
+              Recibir invitaciones
             </Link>
-            <small>Únete sin compromiso. La Membresía Select es opcional.</small>
           </div>
         </div>
       </section>

@@ -9,6 +9,7 @@ import { IntroductionError, IntroductionLoading } from "@/components/introductio
 import { useMemberProfile } from "./useMemberProfile";
 import { useBilling } from "@/lib/billing/useBilling";
 import { isEntitledStatus } from "@/lib/billing/types";
+import { getNextOnboardingRoute } from "@/lib/introduction/completion";
 
 const linkClasses =
   "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
@@ -40,7 +41,7 @@ function SettingsRow({ label, value }: { label: string; value: React.ReactNode }
  * Stripe billing immediately, so it must never be triggerable by a stray
  * or accidental click.
  */
-function DeleteProfileModal({
+export function DeleteProfileModal({
   onClose,
   onDeleted,
 }: {
@@ -127,10 +128,11 @@ function DeleteProfileModal({
 export default function SettingsSection({ uid }: { uid: string }) {
   const { user } = useAuth();
   const { billing, loading: billingLoading } = useBilling(uid);
-  const { profile, ready, error, refresh } = useMemberProfile(uid, {
-    allowUnfinished: billingLoading ? null : !!billing && isEntitledStatus(billing.status),
-  });
+  // Ajustes stays open to an unfinished profile too: signing out and
+  // deleting the account must be possible at any point of the questionnaire.
+  const { profile, ready, error, refresh } = useMemberProfile(uid, { allowUnfinished: true });
   const finalized = !!profile?.meta.onboardingFinalized;
+  const entitled = !billingLoading && !!billing && isEntitledStatus(billing.status);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   if (!ready) {
     if (error) return <IntroductionError message={error} onRetry={() => void refresh()} />;
@@ -159,11 +161,20 @@ export default function SettingsSection({ uid }: { uid: string }) {
             </div>
           </>
         )}
-        <div className="border-b border-hairline py-4">
-          <Link href="/member/plan" className={`text-[14px] ${linkClasses}`}>
-            Gestionar mi membresía
-          </Link>
-        </div>
+        {!finalized && profile && (
+          <div className="border-b border-hairline py-4">
+            <Link href={getNextOnboardingRoute(profile)} className={`text-[14px] ${linkClasses}`}>
+              Continuar mi perfil
+            </Link>
+          </div>
+        )}
+        {(finalized || entitled) && (
+          <div className="border-b border-hairline py-4">
+            <Link href="/member/plan" className={`text-[14px] ${linkClasses}`}>
+              Gestionar mi membresía
+            </Link>
+          </div>
+        )}
       </SettingsGroup>
 
       <SettingsGroup title="Privacidad">

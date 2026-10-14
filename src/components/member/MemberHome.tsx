@@ -78,7 +78,7 @@ export default function MemberHome({ uid }: { uid: string }) {
   const summary = summaryQuery.data?.summary ?? null;
   // Paid Select membership = "Búsqueda activa"; otherwise the finalized
   // profile is a passive one (it can still be proposed to Select members).
-  const modeLabel = billingLoading ? "…" : billing && isEntitledStatus(billing.status) ? "Búsqueda activa" : "Perfil pasivo";
+  const modeLabel = billingLoading ? "…" : billing && isEntitledStatus(billing.status) ? "Búsqueda activa" : "Perfil privado";
 
   const pendingCount = summary
     ? summary.proposalsWaitingForDecision + summary.invitationsWaitingForDecision

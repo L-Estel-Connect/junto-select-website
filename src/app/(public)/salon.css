@@ -245,7 +245,7 @@
 .salon .form-error { padding: 14px 18px; border: 1px solid #c9a3a3; background: #f7ecec; color: #7a2222; font-size: 15px; }
 .salon .done { display: grid; gap: 22px; padding: 56px 48px; background: var(--tinto-hondo); color: var(--marfil); }
 .salon .done .eyebrow { color: var(--laton-claro); }
-.salon .done h2 { font-size: clamp(38px, 4vw, 54px); }
+.salon .done h1, .salon .done h2 { font-size: clamp(38px, 4vw, 54px); }
 .salon .done p { max-width: 46ch; font-size: 17px; line-height: 1.65; color: #dccdbd; }
 .salon .done .link { justify-self: start; color: var(--marfil); }
 

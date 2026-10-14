@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Wordmark from "@/components/Wordmark";
+import { signOutUser } from "@/lib/firebase/auth";
 import type { ProfileDocument } from "@/lib/introduction/types";
 
 /**
@@ -38,7 +39,10 @@ export function inOnboarding(profile: Pick<ProfileDocument, "meta"> | null | und
 /**
  * Slim header used while a profile is being completed: the wordmark, a
  * reassurance that answers are saved, and a way out. The member menu only
- * appears once the profile is confirmed.
+ * appears once the profile is confirmed, so Ajustes (sign out, delete the
+ * account) is linked here directly. "Guardar y salir" signs out: answers
+ * are already saved, and leaving a half-finished private profile signed
+ * in on a shared device would expose it.
  */
 export function OnboardingHeader() {
   return (
@@ -47,9 +51,22 @@ export function OnboardingHeader() {
         <Wordmark className="text-[13px] text-ink" />
         <div className="flex items-center gap-5 text-[13px] text-ink-soft">
           <span className="hidden sm:inline">Se guarda automáticamente</span>
-          <Link href="/" className="underline decoration-hairline underline-offset-4 hover:text-ink">
-            Guardar y salir
+          <Link href="/member/settings" className="underline decoration-hairline underline-offset-4 hover:text-ink">
+            Ajustes
           </Link>
+          <button
+            type="button"
+            onClick={() => {
+              // A full page load, not router.push: the member shell would
+              // otherwise redirect the signed-out page to the sign-in screen.
+              void signOutUser()
+                .catch(() => {})
+                .finally(() => window.location.replace(window.location.origin));
+            }}
+            className="underline decoration-hairline underline-offset-4 hover:text-ink"
+          >
+            Guardar y salir
+          </button>
         </div>
       </div>
     </header>

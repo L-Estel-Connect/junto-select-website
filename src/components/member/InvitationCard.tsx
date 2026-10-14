@@ -106,7 +106,7 @@ export default function InvitationCard({
       <p className="mt-3 max-w-[46ch] text-[18px] leading-snug text-ink">
         {name} está interesado/a en conocerte.
       </p>
-      <p className="mt-1 text-[13px] text-ink-soft">Responder es gratis.</p>
+      <p className="mt-1 text-[13px] text-ink-soft">Responder no requiere membresía.</p>
 
       <div className="mt-6">
         <PublicProfileCard profile={invitation.inviter} />

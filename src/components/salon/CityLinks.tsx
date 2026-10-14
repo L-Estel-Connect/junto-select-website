@@ -7,7 +7,7 @@ export default function CityLinks() {
     <ul className="clist">
       {CITIES.map((c) => (
         <li key={c.slug} className={c.status === "activo" ? "on" : undefined}>
-          <Link href={joinHref(c.slug)} aria-label={`${c.name}: ${c.statusLabel}. Únete al club`}>
+          <Link href={joinHref(c.slug)} aria-label={`${c.name}: ${c.statusLabel}. Recibir invitaciones`}>
             <h3>{c.name}</h3>
             <span>{c.statusLabel}</span>
           </Link>

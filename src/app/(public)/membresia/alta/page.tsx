@@ -20,8 +20,8 @@ export default function MembershipSignupPage() {
               Hazte miembro <em>Select.</em>
             </h1>
             <p className="txt">
-              Tres pasos: tu plan, tu cuenta y el pago. Tus ventajas de miembro empiezan ese mismo día. Si quieres
-              introducciones privadas, podrás completar tu perfil privado cuando quieras.
+              Tres pasos: tu plan, tu cuenta y el pago. Tus ventajas de miembro empiezan ese mismo día. La búsqueda
+              activa de introducciones empieza cuando completes tu perfil privado.
             </p>
             <p className="note">Disponible en Madrid. Tu membresía empieza el día del pago.</p>
           </div>

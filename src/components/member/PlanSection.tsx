@@ -746,9 +746,8 @@ export default function PlanSection({ uid }: { uid: string }) {
       ) : (
         <>
           <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-            Formar parte de Junto Select es gratuito: tu perfil permanece en nuestra base privada y
-            puede aparecer como una posible selección para otros miembros. Para recibir tú mismo/a
-            hasta 3 propuestas al mes, hazte miembro.
+            Tu perfil privado forma parte de la red y podemos proponerlo a miembros Select
+            compatibles. Con la Membresía Select, además, buscamos activamente por ti.
           </p>
 
           <div className="mt-10 border-t border-hairline">

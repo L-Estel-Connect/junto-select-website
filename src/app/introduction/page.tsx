@@ -14,6 +14,7 @@ import { memberFetchJson } from "@/lib/member/memberFetch";
 import { serviceFromParam } from "@/lib/account/route";
 import type { RequestedService } from "@/lib/introduction/types";
 import { eyebrowClasses, primaryButtonClasses } from "@/lib/styles";
+import { DeleteProfileModal } from "@/components/member/SettingsSection";
 
 const linkClasses = "underline decoration-hairline underline-offset-4 hover:text-ink";
 
@@ -210,7 +211,7 @@ const SIGN_IN_COPY: Record<RequestedService | "none", { eyebrow: string; title: 
     text: "Tu perfil de introducciones y tu Membresía Select, en un solo lugar privado.",
   },
   passive: {
-    eyebrow: "Perfil pasivo · Gratuito",
+    eyebrow: "Perfil privado",
     title: "Crea tu perfil privado",
     text: "Identifícate con Google o con tu email. Tu perfil es privado y nunca se publica.",
   },
@@ -235,22 +236,24 @@ function AccountHome({
   onChoosePassive: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   return (
     <Section as="main" size="sm" className="flex min-h-[80svh] flex-col justify-center gap-8 py-16">
       <div className="space-y-3">
         <p className={eyebrowClasses}>Tu cuenta</p>
-        <h1 className="break-words font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">Hola{email ? <>, <span className="break-all">{email}</span></> : ""}.</h1>
+        <h1 className="font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">Hola.</h1>
         <p className="max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
           Tu cuenta aún no tiene un perfil de introducciones ni una Membresía Select. Elige cómo quieres participar;
           no se crea nada hasta que lo elijas.
         </p>
+        {email && <p className="break-all text-[13px] text-ink-soft">Has accedido como {email}</p>}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-3 rounded-md border border-hairline bg-white/60 p-6">
-          <p className={eyebrowClasses}>Perfil pasivo · Gratuito</p>
+          <p className={eyebrowClasses}>Perfil privado</p>
           <p className="text-[15px] leading-relaxed text-ink-soft">
-            Crea tu perfil privado sin coste. Podemos proponerte a un miembro Select compatible.
+            Formas parte de la red privada: podemos proponerte a un miembro Select compatible.
           </p>
           <button
             type="button"
@@ -295,7 +298,16 @@ function AccountHome({
         <button type="button" onClick={() => void signOutUser()} className={linkClasses}>
           Cerrar sesión
         </button>
+        <button type="button" onClick={() => setDeleting(true)} className={linkClasses}>
+          Eliminar mi cuenta
+        </button>
       </div>
+      {deleting && (
+        <DeleteProfileModal
+          onClose={() => setDeleting(false)}
+          onDeleted={() => window.location.replace("/perfil-eliminado")}
+        />
+      )}
     </Section>
   );
 }

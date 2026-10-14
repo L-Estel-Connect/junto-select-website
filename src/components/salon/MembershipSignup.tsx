@@ -284,7 +284,7 @@ function ActivationStep({ plan, email }: { plan: PlanKey; email: string | null }
         {market === "not_regular_in_market" && (
           <p className="note" role="alert">
             {ERRORS.market_not_available}{" "}
-            <Link href="/unete">Únete a la comunidad</Link> y te avisaremos.
+            <Link href="/unete">Recibe nuestras invitaciones</Link> y te avisaremos.
           </p>
         )}
       </fieldset>

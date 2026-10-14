@@ -388,18 +388,11 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
           />
 
           <div className="mt-12 border-t border-hairline pt-8">
-            <p className="text-[15px] font-medium text-ink">¿Prefieres no pagar ahora?</p>
+            <p className="text-[15px] font-medium text-ink">¿Prefieres empezar sin búsqueda activa?</p>
             <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-              Puedes quedarte en la red privada sin coste, como perfil pasivo.
+              Tu perfil privado forma parte de la red y podemos proponerte a un miembro Select compatible. Puedes
+              activar la búsqueda más adelante sin perder tu perfil.
             </p>
-            <details className="group mt-2">
-              <summary className={`cursor-pointer list-none text-[14px] ${linkClasses}`}>Qué significa</summary>
-              <p className="mt-3 max-w-[46ch] text-[14px] leading-relaxed text-ink-soft">
-                Puedes formar parte de nuestra red privada sin coste, como perfil pasivo: podemos proponerte a un
-                miembro Select compatible, pero sin búsqueda activa por nuestra parte. Puedes pasar a Select más
-                adelante sin perder tu perfil.
-              </p>
-            </details>
             <p className="mt-3 max-w-[46ch] text-[14px] leading-relaxed text-ink-soft">
               Si no eliges ninguna opción, tu perfil queda guardado y no se propone a nadie.
             </p>
@@ -409,7 +402,7 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
               onClick={() => void choosePassive()}
               className={`${secondaryButtonClasses} mt-6 w-full`}
             >
-              {saving ? "Guardando…" : "Quedarme como perfil pasivo, sin coste"}
+              {saving ? "Guardando…" : "Continuar con mi perfil privado"}
             </button>
             {errorNote}
           </div>

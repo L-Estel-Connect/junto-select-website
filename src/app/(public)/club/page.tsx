@@ -8,25 +8,25 @@ import clubPhoto from "../../../../public/images/conversation-champagne.jpg";
 export const metadata: Metadata = {
   title: "El Club · Comunidad privada de solteros",
   description:
-    "Así es Junto Select: un club social privado para solteros a partir de 40. Encuentros con plazas limitadas en lugares con encanto, una comunidad que crece y, para los miembros, introducciones privadas.",
+    "Así es Junto Select: un club social privado para solteros a partir de 40. Encuentros con plazas limitadas en lugares con encanto, una comunidad que crece e introducciones privadas.",
   alternates: { canonical: "/club" },
 };
 
 const LEVELS = [
   {
     n: "I",
-    title: "Comunidad Junto Select",
-    text: "Únete sin compromiso. Recibes nuestras invitaciones, descubres cada nuevo encuentro y eres de los primeros en saber cuándo llegamos a tu ciudad.",
+    title: "La comunidad",
+    text: "Recibes nuestras invitaciones a los encuentros, abiertos a todos y con plazas limitadas, y eres de los primeros en saber cuándo llegamos a tu ciudad.",
   },
   {
     n: "II",
-    title: "Encuentros",
-    text: "Abiertos a todos, con plazas limitadas, en algunos de los lugares más especiales de Madrid. Reservas tu plaza y vienes cuando quieras.",
+    title: "Introducciones privadas",
+    text: "Creas tu perfil privado, que nunca se publica, y podemos presentarte a un miembro Select compatible. La decisión es siempre de los dos.",
   },
   {
     n: "III",
     title: "Membresía Select",
-    text: "Para quienes quieren formar parte del club por completo: una comunidad selecta, introducciones privadas y un 20 % de descuento en un encuentro al mes.",
+    text: "Para quienes quieren formar parte del club por completo: buscamos activamente por ti, una comunidad selecta y un 20 % de descuento en un encuentro al mes.",
   },
 ];
 
@@ -98,7 +98,7 @@ export default function ClubPage() {
           </h2>
           <div className="acts">
             <Link className="btn btn-laton" href={joinHref()}>
-              Únete al club
+              Recibir invitaciones
             </Link>
             <Link className="link" href="/membresia">
               Descubre la Membresía Select

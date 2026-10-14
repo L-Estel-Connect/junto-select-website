@@ -6,7 +6,7 @@ import { COMMUNITY_CITIES, type CommunityCity } from "@/lib/types";
 export const metadata: Metadata = {
   title: "Recibir invitaciones",
   description:
-    "Recibe las invitaciones de Junto Select a encuentros exclusivos para solteros a partir de 40, sin coste y sin compromiso, y sé de los primeros cuando lleguemos a tu ciudad.",
+    "Recibe las invitaciones de Junto Select a encuentros exclusivos para solteros a partir de 40 y sé de los primeros cuando lleguemos a tu ciudad.",
   alternates: { canonical: "/unete" },
 };
 
@@ -22,13 +22,12 @@ export default async function JoinPage({ searchParams }: PageProps<"/unete">) {
       <section className="form-page">
         <div className="wrap form-grid">
           <div className="form-aside">
-            <p className="eyebrow">Comunidad Junto Select</p>
+            <p className="eyebrow">La comunidad</p>
             <h1>
               Recibe nuestras <em>invitaciones.</em>
             </h1>
             <p className="txt">
               Te escribimos con cada nuevo encuentro y serás de los primeros en saber cuándo llegamos a tu ciudad.
-              Sin coste y sin compromiso: no crea ninguna cuenta ni perfil de introducciones.
             </p>
             <p className="note">
               Hoy, los encuentros y las introducciones privadas funcionan en Madrid. Valencia, Barcelona y Málaga

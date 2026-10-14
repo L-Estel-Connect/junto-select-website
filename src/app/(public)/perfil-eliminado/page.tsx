@@ -18,7 +18,7 @@ export default function ProfileDeletedPage() {
         <div className="wrap">
           <div className="done" role="status">
             <p className="eyebrow">Junto Select</p>
-            <h2>Tu perfil se ha eliminado.</h2>
+            <h1>Tu perfil se ha eliminado.</h1>
             <p>
               Hemos eliminado de forma permanente tu perfil, tus fotografías y tu acceso. Ya no aparecerás en
               ninguna nueva propuesta de introducción. Si tenías una membresía activa, se ha cancelado y no

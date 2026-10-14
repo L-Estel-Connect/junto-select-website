@@ -10,7 +10,7 @@ import salonPhoto from "../../../../public/images/guest-portrait-candlelight.jpg
 export const metadata: Metadata = {
   title: "Membresía Select · Club privado para solteros a partir de 40",
   description:
-    "La Membresía Select de Junto Select: una comunidad selecta, introducciones privadas en Madrid y un 20 % de descuento en un encuentro al mes. Desde 49 € al mes.",
+    "La Membresía Select de Junto Select: una comunidad selecta, búsqueda activa de introducciones en Madrid y un 20 % de descuento en un encuentro al mes. Desde 49 € al mes.",
   alternates: { canonical: "/membresia" },
 };
 
@@ -23,8 +23,8 @@ const PRIVILEGES = [
   },
   {
     n: "II",
-    title: "Introducciones privadas",
-    text: "Te presentamos, con discreción, a personas compatibles con lo que buscas. Cada propuesta es privada y solo seguimos adelante si los dos aceptáis.",
+    title: "Búsqueda activa de introducciones",
+    text: "Buscamos por ti y te presentamos, con discreción, a personas compatibles con lo que buscas. Cada propuesta es privada y solo seguimos adelante si los dos aceptáis.",
     cond: "Hasta tres propuestas por ciclo mensual, según compatibilidad y disponibilidad. Requiere tu perfil privado completo. Hoy, en Madrid.",
     link: { href: "/introducciones", label: "Cómo funcionan" },
   },
@@ -65,8 +65,8 @@ export default function MembershipPage() {
           </h1>
           <div className="hero-row">
             <p>
-              Para solteros a partir de 40: una comunidad selecta, introducciones privadas en Madrid y un 20 % de
-              descuento en un encuentro al mes.
+              Para solteros a partir de 40: una comunidad selecta, búsqueda activa de introducciones en Madrid y un
+              20 % de descuento en un encuentro al mes.
             </p>
             <div className="hero-cta">
               <a className="btn btn-laton" href="#planes">
@@ -175,7 +175,7 @@ export default function MembershipPage() {
               Hazte miembro
             </a>
             <small>
-              ¿Prefieres empezar sin membresía? <Link href={joinHref()}>Únete al club sin compromiso</Link>.
+              ¿Prefieres empezar por los encuentros? <Link href={joinHref()}>Recibe nuestras invitaciones</Link>.
             </small>
           </div>
         </div>

@@ -21,9 +21,9 @@ const INTERESTS: { value: CommunityInterest; label: string }[] = [
 
 const CITY_NOTE: Record<CommunityCity, string> = {
   madrid: "Madrid es nuestra ciudad activa: aquí celebramos los encuentros y funcionan las introducciones privadas.",
-  valencia: "Junto Select aún no está activo en Valencia. Únete y sé de los primeros en formar parte del club cuando lleguemos.",
-  barcelona: "Junto Select aún no está activo en Barcelona. Únete y sé de los primeros en formar parte del club cuando lleguemos.",
-  malaga: "Junto Select aún no está activo en Málaga. Únete y sé de los primeros en formar parte del club cuando lleguemos.",
+  valencia: "Junto Select aún no está activo en Valencia. Te avisaremos antes que a nadie cuando lleguemos.",
+  barcelona: "Junto Select aún no está activo en Barcelona. Te avisaremos antes que a nadie cuando lleguemos.",
+  malaga: "Junto Select aún no está activo en Málaga. Te avisaremos antes que a nadie cuando lleguemos.",
   otra: "De momento, los encuentros y las introducciones privadas solo funcionan en Madrid. Cuéntanos tu ciudad: así sabremos dónde crecer.",
 };
 
@@ -292,7 +292,7 @@ export default function CommunityForm({ initialCity, source }: { initialCity: Co
         {status === "submitting" ? "Enviando…" : "Recibir invitaciones"}
       </button>
       <p className="hint muted" style={{ fontSize: 13.5 }}>
-        Sin coste. No crea ninguna cuenta ni perfil de introducciones.
+        No crea ninguna cuenta ni perfil de introducciones.
       </p>
       <p className="privacy-basic">
         <strong>Información básica sobre protección de datos.</strong> Responsable: L-Estel Connect SL. Finalidad:

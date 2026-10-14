@@ -159,11 +159,12 @@ async function statusOf(path) {
   check("home: Recibir invitaciones → /unete", (await href(".hero >> text=Recibir invitaciones")) === "/unete");
   check("home: header button is Recibir invitaciones → /unete", (await href("header >> text=Recibir invitaciones")) === "/unete");
   check("home: events section offers invitations", (await href(".events .sec-links >> text=Recibir invitaciones")) === "/unete");
-  check("home: closing block keeps Únete al club → /unete", (await href(".cities >> text=Únete al club")) === "/unete");
+  check("home: closing block offers Recibir invitaciones → /unete", (await href(".cities >> text=Recibir invitaciones")) === "/unete");
+  check("home: no free/no-cost wording", !/sin coste|sin compromiso|gratis|gratuit/i.test(await page.locator("main").innerText()));
   {
     const sel = (await page.locator(".select").innerText()).replace(/\s+/g, " ");
     check("home: Membresía benefits are the approved three",
-      ["Una comunidad selecta", "Introducciones privadas", "20 % de descuento en un encuentro al mes"].every((t) => sel.includes(t)) &&
+      ["Una comunidad selecta", "Búsqueda activa de introducciones", "20 % de descuento en un encuentro al mes"].every((t) => sel.includes(t)) &&
         sel.includes("Más que asistir, pertenecer"));
     check("home: no member-account benefit", !sel.includes("Tu cuenta de miembro") && !sel.includes("Tu propio espacio"));
   }
@@ -189,9 +190,9 @@ async function statusOf(path) {
     check("membresía: no member-account benefit", !/cuenta de miembro|propio espacio/i.test(body));
     const titles = await page.locator(".p2-grid h3").allInnerTexts();
     check("membresía: benefits in approved order",
-      titles.slice(0, 3).join(" | ") === "Una comunidad selecta | Introducciones privadas | 20 % de descuento en un encuentro al mes", titles.join(" | "));
+      titles.slice(0, 3).join(" | ") === "Una comunidad selecta | Búsqueda activa de introducciones | 20 % de descuento en un encuentro al mes", titles.join(" | "));
   }
-  check("membresía: closing link → /unete", (await href(".p2-close >> text=Únete al club sin compromiso")) === "/unete");
+  check("membresía: closing link → /unete", (await href(".p2-close >> text=Recibe nuestras invitaciones")) === "/unete");
 
   await page.goto(`${APP}/membresia/alta?plan=monthly&checkout=cancel`, { waitUntil: "networkidle" });
   await page.waitForTimeout(1000);
@@ -199,7 +200,7 @@ async function statusOf(path) {
 
   await page.goto(`${APP}/introducciones`);
   check("introducciones: Elige tu modalidad section", (await page.locator("#modalidad h2").innerText()).includes("modalidad"));
-  check("introducciones: Crear mi perfil pasivo → ?modalidad=pasivo", (await href("text=Crear mi perfil pasivo")) === "/introduction?modalidad=pasivo");
+  check("introducciones: Crear mi perfil privado → ?modalidad=pasivo", (await href(".p3-cards >> text=Crear mi perfil privado")) === "/introduction?modalidad=pasivo");
   check("introducciones: Empezar la búsqueda activa → ?modalidad=activa", (await href("text=Empezar la búsqueda activa")) === "/introduction?modalidad=activa");
   check("introducciones: both cards answer the same rows", (await page.locator(".p3-card").nth(0).locator("dt").allInnerTexts()).length === 6 &&
     (await page.locator(".p3-card").nth(1).locator("dt").allInnerTexts()).length === 6);
@@ -377,13 +378,13 @@ async function statusOf(path) {
         `${after.meta.onboardingFinalized} ${after.meta.searchStatus}`);
       await pg.screenshot({ path: `${SHOTS}/activa-pay-2-done.png`, fullPage: true });
     } else {
-      await pg.click("text=Quedarme como perfil pasivo, sin coste");
+      await pg.click("text=Continuar con mi perfil privado");
       await pg.waitForTimeout(1000);
       check("activa/passive: staying passive refused without consent",
         !(await db.doc(`profiles/${uid}`).get()).data().meta.onboardingFinalized &&
           (await pg.locator("p[role=alert]").first().innerText()).includes("confirma que aceptas participar"));
       await pg.check("text=Acepto participar en las introducciones privadas");
-      await pg.click("text=Quedarme como perfil pasivo, sin coste");
+      await pg.click("text=Continuar con mi perfil privado");
       await pg.waitForTimeout(2500);
       const after = (await db.doc(`profiles/${uid}`).get()).data();
       check("activa/passive: finalized as passive by explicit choice",
