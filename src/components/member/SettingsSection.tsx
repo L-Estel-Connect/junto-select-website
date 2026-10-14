@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/firebase/useAuth";
 import { auth } from "@/lib/firebase/client";
 import { signOutUser } from "@/lib/firebase/auth";
@@ -133,7 +132,6 @@ export default function SettingsSection({ uid }: { uid: string }) {
   });
   const finalized = !!profile?.meta.onboardingFinalized;
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const router = useRouter();
   if (!ready) {
     if (error) return <IntroductionError message={error} onRetry={() => void refresh()} />;
     return <IntroductionLoading />;
@@ -222,8 +220,10 @@ export default function SettingsSection({ uid }: { uid: string }) {
         <DeleteProfileModal
           onClose={() => setShowDeleteModal(false)}
           onDeleted={() => {
-            void signOutUser();
-            router.replace("/");
+            // A full navigation, not router.replace + signOut: signing out
+            // first makes MemberShell redirect to the sign-in page before
+            // the confirmation can show. The confirmation page signs out.
+            window.location.replace("/perfil-eliminado");
           }}
         />
       )}

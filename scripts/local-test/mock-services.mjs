@@ -2,7 +2,8 @@
 // with the Firebase emulators. Nothing here talks to the real services.
 //
 //   Stripe: POST /v1/customers, POST /v1/checkout/sessions,
-//           GET /v1/subscriptions/:id, plus a fake hosted checkout page at
+//           GET and DELETE (cancel) /v1/subscriptions/:id (ids starting
+//           sub_fail answer 500; unknown ids answer resource_missing), plus a fake hosted checkout page at
 //           /pay/:sessionId whose "Pagar" button sends a signed
 //           checkout.session.completed webhook to the app, like Stripe does.
 //   Brevo:  POST /v3/contacts and /v3/smtp/email (recorded, never sent).
@@ -179,6 +180,25 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ---- Test controls ----
+    if (p === "/test/subscriptions" && req.method === "POST") {
+      // Creates an active subscription directly (no checkout, no webhook),
+      // for tests that seed billing/{uid} themselves.
+      const form = JSON.parse(body || "{}");
+      const now = Math.floor(Date.now() / 1000);
+      const sub = {
+        id: form.id || id("sub"),
+        object: "subscription",
+        customer: form.customer || id("cus"),
+        status: "active",
+        start_date: now,
+        canceled_at: null,
+        cancel_at_period_end: false,
+        metadata: form.metadata ?? {},
+        items: { data: [{ current_period_start: now, current_period_end: now + 30 * 86400, price: { id: "price_test_monthly" } }] },
+      };
+      subscriptions.set(sub.id, sub);
+      return json(res, 200, sub);
+    }
     const ctl = p.match(/^\/test\/subscriptions\/([^/]+)\/(renew|cancel|backdate)$/);
     if (ctl && req.method === "POST") {
       const sub = subscriptions.get(ctl[1]);
@@ -237,9 +257,26 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, session);
     }
     const subMatch = p.match(/^\/v1\/subscriptions\/([^/]+)$/);
-    if (subMatch && req.method === "GET") {
+    if (subMatch && subMatch[1].startsWith("sub_fail")) {
+      // Simulates Stripe being unreachable or erroring for this subscription.
+      log({ service: "stripe", kind: "subscription_error", id: subMatch[1], method: req.method });
+      return json(res, 500, { error: { type: "api_error", message: "mock: Stripe unavailable" } });
+    }
+    if (subMatch && (req.method === "GET" || req.method === "DELETE")) {
       const sub = subscriptions.get(subMatch[1]);
-      if (!sub) return json(res, 404, { error: { type: "invalid_request_error", message: "No such subscription" } });
+      if (!sub) {
+        // Same answer real Stripe gives for an id it doesn't know under this
+        // key, e.g. a test-mode subscription looked up with the live key.
+        return json(res, 404, {
+          error: { type: "invalid_request_error", code: "resource_missing", message: `No such subscription: '${subMatch[1]}'` },
+        });
+      }
+      if (req.method === "DELETE") {
+        sub.status = "canceled";
+        sub.canceled_at = Math.floor(Date.now() / 1000);
+        log({ service: "stripe", kind: "subscription_cancel", id: sub.id });
+        await sendWebhook({ id: id("evt"), object: "event", type: "customer.subscription.deleted", data: { object: sub } });
+      }
       return json(res, 200, sub);
     }
 
