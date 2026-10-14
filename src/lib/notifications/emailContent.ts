@@ -175,5 +175,35 @@ export function buildEmailContent(
           "Junto Select",
       };
     }
+    case "matchmaking_inquiry": {
+      const str = (key: string) => (typeof data[key] === "string" ? (data[key] as string) : "");
+      return {
+        subject: `Nueva solicitud de matchmaking — ${str("programa") || "programa sin indicar"}`,
+        textContent:
+          "Nueva solicitud de entrevista privada desde /matchmaking:\n\n" +
+          `Nombre: ${str("nombre")}\n` +
+          `Email: ${str("email")}\n` +
+          `Teléfono: ${str("telefono")} (prefiere ${str("canal")})\n` +
+          `Edad: ${str("edad")} · Ciudad: ${str("ciudad")}\n` +
+          `Programa: ${str("programa")}\n` +
+          `Busca: ${str("objetivo")}, entre ${str("rango")} años\n\n` +
+          (str("busca") ? `En sus palabras:\n${str("busca")}\n\n` : "") +
+          `Gestionar en ${appBaseUrl}/admin/solicitudes\n\nJunto Select`,
+      };
+    }
+    case "matchmaking_inquiry_received": {
+      const nombre = typeof data.nombre === "string" && data.nombre ? data.nombre : "";
+      const privado = data.programa === "privado";
+      return {
+        subject: "Hemos recibido tu solicitud — Junto Select",
+        textContent:
+          `${nombre ? `Hola, ${nombre}:` : "Hola:"}\n\n` +
+          "Gracias por tu solicitud. La revisamos personalmente y te contactaremos en los próximos días, " +
+          "por el medio que has elegido, para acordar " +
+          (privado ? "una breve llamada previa." : "tu entrevista privada.") +
+          "\n\nTus datos se tratan con total confidencialidad y solo se usan para gestionar tu solicitud." +
+          "\n\nJunto Select",
+      };
+    }
   }
 }

@@ -168,7 +168,8 @@ export default function SettingsSection({ uid }: { uid: string }) {
             </Link>
           </div>
         )}
-        {(finalized || entitled) && (
+        {/* The dormant Membresía: only for accounts with a subscription record. */}
+        {(entitled || (!!billing && billing.status !== "none")) && (
           <div className="border-b border-hairline py-4">
             <Link href="/member/plan" className={`text-[14px] ${linkClasses}`}>
               Gestionar mi membresía

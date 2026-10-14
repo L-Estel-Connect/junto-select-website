@@ -8,6 +8,7 @@ import { memberFetchJson } from "@/lib/member/memberFetch";
 import { useMemberQuery } from "@/lib/member/useMemberQuery";
 import { useMemberUid } from "./MemberContext";
 import { useSharedProfile } from "@/lib/introduction/profileCache";
+import { useBilling } from "@/lib/billing/useBilling";
 import type { MemberLifecycleSummary } from "@/lib/matching/memberLifecycleTypes";
 
 // "Ver mi perfil" and "Editar mi perfil" used to be two separate nav rows
@@ -52,9 +53,15 @@ export default function MemberNav() {
   // Selecciones and Conexiones only exist once an introductions profile is
   // finished; a Select member without one uses the rest of the area.
   const { profile } = useSharedProfile(uid);
-  const navItems = profile && !profile.meta.onboardingFinalized
-    ? NAV_ITEMS.filter((i) => i.href !== "/member/proposals" && i.href !== "/member/connections")
-    : NAV_ITEMS;
+  // "Mi plan" is the dormant Membresía Select: shown only to accounts that
+  // have (or had) a subscription. /member/plan itself still exists.
+  const { billing } = useBilling(uid);
+  const hasPlan = Boolean(billing && billing.status !== "none");
+  const navItems = NAV_ITEMS.filter(
+    (i) =>
+      (i.href !== "/member/plan" || hasPlan) &&
+      !(profile && !profile.meta.onboardingFinalized && (i.href === "/member/proposals" || i.href === "/member/connections")),
+  );
   const summaryQuery = useMemberQuery(
     () => memberFetchJson<{ summary: MemberLifecycleSummary }>("/api/member/lifecycle-summary"),
     [uid],

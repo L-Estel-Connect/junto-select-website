@@ -22,8 +22,9 @@ const ACTIONABLE_PROPOSAL_STAGES: MemberProposalView["stage"][] = ["proposed", "
  * for them), shown FIRST regardless of membership status — see the
  * product principle "Do not make membership/payment the dominant element
  * when there is a human action waiting." Only once nothing is actionable
- * does this fall back to the original billing-status-driven "estamos
- * buscando por ti" / "hazte miembro" messaging.
+ * does this fall back to the billing-status-driven "estamos buscando por
+ * ti" (paying member) or private-network messaging (everyone else; the
+ * Membresía upsell is retired, Oct 2026).
  */
 export default function ProposalsSection({ uid }: { uid: string }) {
   const { profile, ready, error, refresh } = useMemberProfile(uid);
@@ -122,24 +123,20 @@ export default function ProposalsSection({ uid }: { uid: string }) {
       ) : (
         <>
           <div className="mt-14 flex flex-col items-center text-center">
-            <p className="text-[16px] text-ink">Junto Select no está buscando activamente por ti.</p>
+            <p className="text-[16px] text-ink">Formas parte de nuestra red privada.</p>
             <p className="mt-2 max-w-[42ch] text-[15px] leading-relaxed text-ink-soft">
-              Tu perfil puede seguir siendo seleccionado por otros miembros.
+              Si creemos que hay alguien para ti, te lo propondremos aquí, en privado. No tienes que hacer nada más.
             </p>
           </div>
 
           <div className="mt-10 rounded-2xl border border-hairline bg-white p-6 text-center">
-            <p className="text-[15px] font-medium text-ink">¿Quieres que Junto Select busque por ti?</p>
+            <p className="text-[15px] font-medium text-ink">¿Prefieres que busquemos por ti?</p>
             <p className="mt-2 text-[14px] leading-relaxed text-ink-soft">
-              Hazte miembro para recibir hasta 3 propuestas al mes, siempre que encontremos
-              perfiles con suficiente compatibilidad.
+              En nuestros programas de matchmaking privado, nuestro equipo hace una búsqueda personalizada para ti.
             </p>
-            <Link href="/member/plan" className={`${primaryButtonClasses} mt-5 inline-flex`}>
-              Hazte miembro
+            <Link href="/matchmaking" className={`${primaryButtonClasses} mt-5 inline-flex`}>
+              Conocer el matchmaking privado
             </Link>
-            <p className="mt-4 text-[12px] text-ink-soft">
-              Además, como miembro tendrás ventajas y descuentos en nuestros eventos.
-            </p>
           </div>
         </>
       )}

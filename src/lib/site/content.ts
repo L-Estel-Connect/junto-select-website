@@ -24,11 +24,16 @@ export const CONSULTATION_HREF = "/matchmaking#entrevista";
 export const PRIVATE_POOL_HREF = "/introduction?modalidad=pasivo";
 
 /**
- * A booking page (Calendly, Cal.com…) for the consultation, once Junto has
- * one. While it is null, the request is prepared as an email to
- * CONTACT_EMAIL: nothing is stored by the website.
+ * Booking pages (Calendly, Cal.com…) offered after a matchmaking request is
+ * sent: an interview with the team for Programa Select and a short
+ * qualification call for Select Privado (the founder's 45 minutes come after
+ * payment and are booked by the team). While a link is null, the
+ * confirmation says the team will write to arrange it.
  */
-export const CONSULTATION_BOOKING_URL: string | null = null;
+export const BOOKING_URLS: Record<"select" | "privado", string | null> = {
+  select: null,
+  privado: null,
+};
 
 /**
  * The Select event benefit, worded once for every public page. Kept here so

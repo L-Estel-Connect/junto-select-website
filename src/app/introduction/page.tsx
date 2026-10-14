@@ -208,7 +208,7 @@ const SIGN_IN_COPY: Record<RequestedService | "none", { eyebrow: string; title: 
   none: {
     eyebrow: "Junto Select",
     title: "Accede a tu cuenta",
-    text: "Tu perfil de introducciones y tu Membresía Select, en un solo lugar privado.",
+    text: "Tu perfil privado y tus propuestas, en un solo lugar.",
   },
   passive: {
     eyebrow: "Perfil privado",
@@ -243,8 +243,8 @@ function AccountHome({
         <p className={eyebrowClasses}>Tu cuenta</p>
         <h1 className="font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">Hola.</h1>
         <p className="max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-          Tu cuenta aún no tiene un perfil de introducciones ni una Membresía Select. Elige cómo quieres participar;
-          no se crea nada hasta que lo elijas.
+          Tu cuenta aún no tiene un perfil privado. Elige cómo quieres participar; no se crea nada hasta que lo
+          elijas.
         </p>
         {email && <p className="break-all text-[13px] text-ink-soft">Has accedido como {email}</p>}
       </div>
@@ -253,7 +253,7 @@ function AccountHome({
         <div className="flex flex-col gap-3 rounded-md border border-hairline bg-white/60 p-6">
           <p className={eyebrowClasses}>Perfil privado</p>
           <p className="text-[15px] leading-relaxed text-ink-soft">
-            Formas parte de la red privada: podemos proponerte a un miembro Select compatible.
+            Forma parte de nuestra red privada: si creemos que hay alguien para ti, te lo propondremos en privado.
           </p>
           <button
             type="button"
@@ -268,15 +268,12 @@ function AccountHome({
           </button>
         </div>
         <div className="flex flex-col gap-3 rounded-md border border-hairline bg-white/60 p-6">
-          <p className={eyebrowClasses}>Membresía Select</p>
+          <p className={eyebrowClasses}>Matchmaking privado</p>
           <p className="text-[15px] leading-relaxed text-ink-soft">
-            Búsqueda activa, una comunidad selecta y un 20 % de descuento en un encuentro al mes.
+            Nuestro equipo busca por ti, te presenta a personas seleccionadas y organiza la primera cita.
           </p>
-          <Link href="/introducciones#modalidad" className={`mt-auto text-[14px] text-ink ${linkClasses}`}>
-            Ver las modalidades
-          </Link>
-          <Link href="/membresia" className={`text-[14px] text-ink ${linkClasses}`}>
-            Descubrir la Membresía Select
+          <Link href="/matchmaking" className={`mt-auto text-[14px] text-ink ${linkClasses}`}>
+            Conocer el matchmaking privado
           </Link>
         </div>
       </div>

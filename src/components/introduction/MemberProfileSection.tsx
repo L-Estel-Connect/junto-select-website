@@ -449,7 +449,7 @@ function CompletionScreen({ active, firstName }: { active: boolean; firstName: s
         "Solo compartimos tu contacto si los dos aceptáis.",
       ]
     : [
-        "Si encajas con un miembro Select, te enviaremos una propuesta.",
+        "Si creemos que hay alguien para ti, te lo propondremos en privado.",
         "Solo compartimos tu contacto si los dos aceptáis.",
         "Puedes actualizar tu perfil cuando quieras.",
       ];
@@ -477,11 +477,6 @@ function CompletionScreen({ active, firstName }: { active: boolean; firstName: s
       <Link href="/member" className={`${primaryButtonClasses} mt-10 w-full sm:w-auto sm:self-start`}>
         Ir a mi espacio
       </Link>
-      {!active && (
-        <Link href="/member/plan" className={`mt-5 text-sm ${linkClasses}`}>
-          Conocer la Membresía Select
-        </Link>
-      )}
     </div>
   );
 }

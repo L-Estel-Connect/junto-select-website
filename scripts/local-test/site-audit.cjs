@@ -211,8 +211,12 @@ async function statusOf(path) {
   {
     const body = await page.locator("main").innerText();
     check("matchmaking: both programmes with VAT-inclusive prices", body.includes("1.950 €") && body.includes("4.800 €") && (body.match(/IVA incluido/gi) || []).length === 2);
-    check("matchmaking: both cards answer the same rows", (await page.locator(".mm-card").nth(0).locator("dt").allInnerTexts()).join() ===
-      (await page.locator(".mm-card").nth(1).locator("dt").allInnerTexts()).join());
+    check("matchmaking: six items per programme", (await page.locator(".mm-card").nth(0).locator(".mm-incl li").count()) === 6 &&
+      (await page.locator(".mm-card").nth(1).locator(".mm-incl li").count()) === 6);
+    check("matchmaking: section order hero → programmes → steps → request → network → FAQ",
+      (await page.locator("main.mm-page > section").evaluateAll((els) => els.map((e) => e.className.split(" ").find((c) => c.startsWith("mm-"))).join())) ===
+        "mm-hero,mm-progs,mm-how,mm-request,mm-pool,mm-faq");
+    check("matchmaking: three steps", (await page.locator(".mm-how li").count()) === 3);
     check("matchmaking: no guarantee or refund promise", !/garantizamos|garantía de|reembolso|devolución/i.test(body));
     check("matchmaking: no Membresía", !/Membresía|Hazte miembro/.test(await page.locator("body").innerText()));
     check("matchmaking: one h1", (await page.locator("h1").count()) === 1);
@@ -224,7 +228,23 @@ async function statusOf(path) {
     await page.waitForURL("**programa=privado**");
     check("matchmaking: programme button preselects it in the request", (await page.locator("input[name=programa]:checked").getAttribute("value")) === "privado");
     await page.click("#entrevista button[type=submit]");
-    check("matchmaking: request needs name and email", (await page.locator("#entrevista .err").count()) === 2);
+    check("matchmaking: empty request shows the required-field errors", (await page.locator("#entrevista .err").count()) === 9,
+      String(await page.locator("#entrevista .err").count()));
+    const form = page.locator("#entrevista form");
+    await form.getByRole("textbox", { name: "Nombre" }).fill("Prueba");
+    await form.getByRole("textbox", { name: "Apellidos" }).fill("Auditoría");
+    await form.getByRole("textbox", { name: "Email" }).fill("prueba-auditoria@example.com");
+    await form.getByRole("textbox", { name: "Teléfono o WhatsApp" }).fill("600 000 000");
+    await form.locator("input[name=canal][value=whatsapp]").check({ force: true });
+    await form.getByRole("textbox", { name: "Edad", exact: true }).fill("47");
+    await form.locator("input[name=objetivo][value=relacion_estable]").check({ force: true });
+    await form.getByRole("textbox", { name: "Desde (años)" }).fill("42");
+    await form.getByRole("textbox", { name: "Hasta (años)" }).fill("55");
+    await form.locator("input[type=checkbox]").check();
+    await page.click("#entrevista button[type=submit]");
+    await page.locator("#entrevista .done").waitFor({ timeout: 10000 }).catch(() => {});
+    check("matchmaking: a complete request is recorded and confirmed",
+      /Solicitud recibida/i.test(await page.locator("#entrevista").innerText()) && /llamada previa/.test(await page.locator("#entrevista").innerText()));
   }
 
   // ---- 3. Free Introductions participant ----

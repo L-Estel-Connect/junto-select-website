@@ -153,7 +153,7 @@ async function shot(page, name) {
   return p;
 }
 
-/** Runs the journey from /introducciones to /member/profile (pre-finalize). */
+/** Runs the journey from the entry link to /member/profile (pre-finalize). */
 async function completeProfile(browser, kind) {
   const tag = kind;
   const cta = kind === "pasivo" ? "Crear mi perfil privado" : "Empezar la búsqueda activa";
@@ -164,10 +164,16 @@ async function completeProfile(browser, kind) {
   const consoleErrors = [];
   page.on("pageerror", (e) => consoleErrors.push(String(e)));
 
-  // Landing + CTA
-  await page.goto(`${APP}/introducciones`, { waitUntil: "networkidle" });
-  await shot(page, `${tag}-00-introducciones`);
-  await page.getByRole("link", { name: cta }).first().click();
+  // Landing + CTA. /introducciones redirects to /matchmaking (Oct 2026): the
+  // private network starts from its section there; the dormant active
+  // (Membresía) journey has no public link and is reached directly.
+  if (kind === "pasivo") {
+    await page.goto(`${APP}/matchmaking`, { waitUntil: "networkidle" });
+    await shot(page, `${tag}-00-matchmaking`);
+    await page.locator(".mm-pool").getByRole("link", { name: cta }).click();
+  } else {
+    await page.goto(`${APP}/introduction?modalidad=activa`, { waitUntil: "networkidle" });
+  }
   await page.waitForURL("**/introduction**", { timeout: 15000 });
   const entryUrl = page.url();
   check(`${tag}: CTA "${cta}" leads to /introduction`, /\/introduction\?modalidad=/.test(entryUrl), entryUrl);
@@ -310,14 +316,9 @@ async function completeProfile(browser, kind) {
       const ctx = await browser.newContext({ viewport: MOBILE, locale: "es-ES", isMobile: true, hasTouch: true });
       const page = await ctx.newPage();
       const email = `onb.mobile.${Date.now()}@example.test`;
-      await page.goto(`${APP}/introducciones`, { waitUntil: "networkidle" });
-      // Phones show one modalidad card at a time: Búsqueda activa first, a switch for the other.
-      check("mobile: passive card hidden until chosen", !(await page.getByRole("link", { name: "Crear mi perfil privado" }).isVisible()));
-      await page.locator("label[for=mod-passive]").click();
-      check("mobile: switch shows the passive card", await page.getByRole("link", { name: "Crear mi perfil privado" }).isVisible());
-      check("mobile: switch hides the active card", !(await page.getByRole("link", { name: "Empezar la búsqueda activa" }).isVisible()));
-      await shot(page, "mobile-introducciones-switch-passive");
-      await page.getByRole("link", { name: "Crear mi perfil privado" }).first().click();
+      // /introducciones redirects to /matchmaking (Oct 2026); the private network starts from there.
+      await page.goto(`${APP}/matchmaking`, { waitUntil: "networkidle" });
+      await page.locator(".mm-pool").getByRole("link", { name: "Crear mi perfil privado" }).click();
       await page.waitForURL("**/introduction**");
       await signInOnIntroduction(page, email, page.url());
       await page.waitForURL("**/introduction/onboarding**", { timeout: 25000 });
