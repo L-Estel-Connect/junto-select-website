@@ -26,6 +26,8 @@ npx tsx --conditions=react-server scripts/local-test/events-manager.test.mts   #
 npx tsx --conditions=react-server scripts/local-test/deploy-env.test.mts       # staging isolation guard
 npx tsx --conditions=react-server scripts/local-test/account.test.mts          # Acceder routing, modality and the matching pool
 npx tsx --conditions=react-server scripts/local-test/ticket-tailor-staging.test.mts  # staging simulates member codes, never writes to Ticket Tailor
+NODE_PATH=$(npm root -g) node scripts/local-test/delete-profile.cjs           # Eliminar mi perfil: pre-live test account, live/canceled/failing Stripe, retry, other members untouched, confirmation page
+node scripts/local-test/delete-profile-staging.cjs                          # same on STAGING (junto-select-staging only, its own throwaway accounts)
 ```
 
 - Open http://localhost:3000 to click through by hand. Magic-link emails are
