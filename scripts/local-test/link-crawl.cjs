@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- plain Node test script */
 // Read-only crawl: every public page at desktop/tablet/mobile, every link and
 // anchor checked, console errors, broken images, overflow, headings, and where
 // signed-out visitors land on member/admin pages. Never submits a form.
@@ -127,7 +128,7 @@ const rec = (ok, name, detail = "") => { results.push({ ok, name, detail }); con
   // API guards: member/admin APIs must refuse anonymous calls
   const apis = [["GET", "/api/account/status"], ["POST", "/api/member/delete-profile"], ["GET", "/api/admin/dashboard/members"], ["GET", "/api/admin/dashboard/overview"], ["POST", "/api/admin/matching/run-cycle"], ["POST", "/api/billing/create-checkout-session"], ["POST", "/api/billing/create-portal-session"], ["GET", "/api/member/proposals"], ["POST", "/api/member/photo"], ["POST", "/api/introduction/generate-presentation"], ["POST", "/api/member/event-benefit"], ["GET", "/api/admin/events"], ["POST", "/api/membership/start"], ["GET", "/api/member/reconnect/active"]];
   for (const [m, a] of apis) {
-    let s; try { const r = await ctx.request.fetch(BASE + a, { method: m, data: m === "POST" ? {} : undefined }); s = r.status(); } catch (e) { s = "ERR"; }
+    let s; try { const r = await ctx.request.fetch(BASE + a, { method: m, data: m === "POST" ? {} : undefined }); s = r.status(); } catch { s = "ERR"; }
     rec([401, 403, 404, 405].includes(s), `anonymous ${m} ${a} refused`, `status ${s}`);
   }
 
