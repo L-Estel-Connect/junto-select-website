@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { MEMBERSHIP_SALES_OPEN } from "@/lib/billing/membershipSales";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -46,6 +48,8 @@ const PLAN_BUTTON: Record<string, string> = {
 };
 
 export default function MembershipPage() {
+  // Closed to new subscriptions: the page stays in the code for a later reopening.
+  if (!MEMBERSHIP_SALES_OPEN) redirect("/matchmaking");
   return (
     <main>
       <SiteHeader />

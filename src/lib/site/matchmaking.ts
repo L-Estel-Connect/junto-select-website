@@ -16,6 +16,8 @@ export interface Programme {
   priceEuros: number;
   /** Shown as "1.950 €". */
   priceLabel: string;
+  /** Where the search happens: the first difference a visitor should see. */
+  reach: string;
   promise: string;
   includes: string[];
   /** How the programme starts, under the list. */
@@ -29,16 +31,18 @@ export const PROGRAMMES: Programme[] = [
     name: "Programa Select",
     priceEuros: 1950,
     priceLabel: "1.950 €",
-    promise: "Buscamos por ti dentro de nuestra red privada.",
+    reach: "En tu ciudad · Nuestra red privada",
+    promise: "Buscamos por ti, dentro de nuestra red privada y en tu ciudad.",
     includes: [
-      "6 meses de búsqueda",
-      "Entrevista privada de 20 a 30 minutos con nuestro equipo de matchmaking",
-      "Búsqueda personalizada en nuestra red privada",
+      "Programa de seis meses",
+      "Búsqueda dentro de nuestra red privada",
+      "Búsqueda local, en tu ciudad",
       "Hasta 3 propuestas cualificadas",
-      "Cada propuesta, seleccionada por una persona",
+      "Entrevista inicial de 20 a 30 minutos",
+      "Revisión y selección humana de cada compatibilidad",
       "Organizamos la primera cita si el interés es mutuo",
     ],
-    start: "Empieza con tu entrevista privada.",
+    start: "Empieza con una breve llamada de cualificación.",
     cta: "Solicitar Programa Select",
   },
   {
@@ -46,19 +50,38 @@ export const PROGRAMMES: Programme[] = [
     name: "Select Privado",
     priceEuros: 4800,
     priceLabel: "4.800 €",
-    promise: "Una búsqueda a medida, dirigida por la fundadora, también fuera de nuestra red.",
+    reach: "En toda España · Dentro y fuera de nuestra red",
+    promise: "Una búsqueda personal, exclusiva y a medida, en toda España y más allá de nuestra red.",
     includes: [
-      "6 meses de búsqueda a medida",
-      "45 minutos con Lara Estelle, fundadora, al comenzar el programa",
-      "Búsqueda activa más allá de nuestra red: contactos, recomendaciones y búsqueda discreta",
+      "Programa de seis meses",
+      "Búsqueda personalizada en toda España",
+      "Búsqueda activa de candidatos, dentro y fuera de nuestra red",
       "Hasta 6 propuestas cualificadas",
-      "La fundadora dirige la búsqueda y aprueba cada propuesta",
-      "Citas organizadas a tu medida y seguimiento personal",
+      "45 minutos con Lara Estelle, fundadora, al contratar el programa",
+      "La fundadora dirige la búsqueda y la selección final",
+      "Atención, seguimiento y organización de citas más personales",
     ],
     start: "Empieza con una breve llamada de cualificación.",
     cta: "Solicitar Select Privado",
   },
 ];
+
+/** The free, passive private profile, shown as the third card. */
+export const PRIVATE_PROFILE = {
+  name: "Perfil privado pasivo",
+  priceLabel: "Gratis",
+  reach: "Red privada",
+  promise:
+    "Forma parte de nuestra red privada de personas solteras. Crea tu perfil para que podamos tenerte en cuenta en futuras búsquedas de compatibilidad.",
+  includes: [
+    "Sin suscripciones. Con total discreción.",
+    "Tu perfil no se publica: nadie puede buscarlo ni verlo",
+    "No navegas perfiles ni recibes propuestas automáticas",
+    "Te escribimos solo si creemos que hay alguien para ti",
+  ],
+  start: "Crear un perfil no garantiza que te contactemos ni una presentación.",
+  cta: "Crear mi perfil privado",
+};
 
 export const STEPS = [
   {

@@ -1,5 +1,6 @@
 "use client";
 
+import { MEMBERSHIP_SALES_OPEN } from "@/lib/billing/membershipSales";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -53,6 +54,13 @@ export default function MemberWelcome({ uid }: { uid: string }) {
             <p className="text-[15px] leading-relaxed text-ink-soft">
               Suele tardar unos segundos. Esta página se actualizará sola en cuanto Stripe nos lo confirme.
             </p>
+          </>
+        ) : !MEMBERSHIP_SALES_OPEN ? (
+          <>
+            <h1 className="font-serif text-[28px] font-normal leading-snug text-ink">Tu espacio privado</h1>
+            <Link href="/member" className={primaryButtonClasses}>
+              Ir a mi espacio
+            </Link>
           </>
         ) : (
           <>

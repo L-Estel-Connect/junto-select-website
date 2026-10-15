@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { MEMBERSHIP_SALES_OPEN } from "@/lib/billing/membershipSales";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import SiteHeader from "@/components/salon/SiteHeader";
@@ -9,6 +11,8 @@ export const metadata: Metadata = {
 };
 
 export default function MembershipSignupPage() {
+  // Closed to new subscriptions: the page stays in the code for a later reopening.
+  if (!MEMBERSHIP_SALES_OPEN) redirect("/matchmaking");
   return (
     <main>
       <SiteHeader variant="solid" />

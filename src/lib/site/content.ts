@@ -7,10 +7,14 @@ import type { CommunityCity } from "@/lib/types";
  * presented as Matchmaking; /introducciones redirects there (next.config.ts).
  */
 export const NAV = [
-  { href: "/club", label: "El Club" },
   { href: "/eventos", label: "Encuentros" },
   { href: "/matchmaking", label: "Matchmaking" },
 ] as const;
+
+/** The footer keeps El Club, which the header leaves to the homepage (Oct 2026). */
+export const FOOTER_NAV = [{ href: "/club", label: "El Club" }, ...NAV] as const;
+
+export const SIGN_IN_LABEL = "Acceder a mi perfil";
 
 /** The paid matchmaking service and its consultation request. */
 export const MATCHMAKING_HREF = "/matchmaking";
@@ -24,16 +28,27 @@ export const CONSULTATION_HREF = "/matchmaking#entrevista";
 export const PRIVATE_POOL_HREF = "/introduction?modalidad=pasivo";
 
 /**
- * Booking pages (Calendly, Cal.com…) offered after a matchmaking request is
- * sent: an interview with the team for Programa Select and a short
- * qualification call for Select Privado (the founder's 45 minutes come after
- * payment and are booked by the team). While a link is null, the
- * confirmation says the team will write to arrange it.
+ * Lara's Calendly event for the ~20-minute qualification call (one event for
+ * both programmes). While it is null, the programme buttons open the request
+ * form on /matchmaking instead.
  */
-export const BOOKING_URLS: Record<"select" | "privado", string | null> = {
-  select: null,
-  privado: null,
-};
+export const CALENDLY_URL: string | null = null;
+
+/**
+ * The booking link for a programme. Calendly fills its first invitee
+ * question ("Programa de interés") from `a1`, and keeps `utm_content` on the
+ * booking, so the programme arrives with the appointment either way.
+ */
+export function calendlyHref(programme?: { key: string; name: string }): string | null {
+  if (!CALENDLY_URL) return null;
+  const url = new URL(CALENDLY_URL);
+  if (programme) {
+    url.searchParams.set("a1", programme.name);
+    url.searchParams.set("utm_content", programme.key);
+  }
+  url.searchParams.set("utm_source", "junto-select-web");
+  return url.toString();
+}
 
 /**
  * The Select event benefit, worded once for every public page. Kept here so

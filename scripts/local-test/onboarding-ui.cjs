@@ -170,7 +170,7 @@ async function completeProfile(browser, kind) {
   if (kind === "pasivo") {
     await page.goto(`${APP}/matchmaking`, { waitUntil: "networkidle" });
     await shot(page, `${tag}-00-matchmaking`);
-    await page.locator(".mm-pool").getByRole("link", { name: cta }).click();
+    await page.locator(".mm-card.free").getByRole("link", { name: cta }).click();
   } else {
     await page.goto(`${APP}/introduction?modalidad=activa`, { waitUntil: "networkidle" });
   }
@@ -318,7 +318,7 @@ async function completeProfile(browser, kind) {
       const email = `onb.mobile.${Date.now()}@example.test`;
       // /introducciones redirects to /matchmaking (Oct 2026); the private network starts from there.
       await page.goto(`${APP}/matchmaking`, { waitUntil: "networkidle" });
-      await page.locator(".mm-pool").getByRole("link", { name: "Crear mi perfil privado" }).click();
+      await page.locator(".mm-card.free").getByRole("link", { name: "Crear mi perfil privado" }).click();
       await page.waitForURL("**/introduction**");
       await signInOnIntroduction(page, email, page.url());
       await page.waitForURL("**/introduction/onboarding**", { timeout: 25000 });
@@ -366,8 +366,11 @@ async function completeProfile(browser, kind) {
       await ctx.close();
     }
 
-    // ---- 2. Active journey ----
-    {
+    // ---- 2. Active journey: Membresía purchase, closed since 15 Oct 2026 ----
+    // Runs only when sales are open again; site-audit.cjs checks the closure.
+    const membershipOpen = (await fetch(`${APP}/membresia`, { redirect: "manual" })).status === 200;
+    if (!membershipOpen) note("activa: skipped, Membresía sales are closed");
+    if (membershipOpen) {
       const { ctx, page, uid } = await completeProfile(browser, "activa");
       check("activa: 'Elige tu plan' shown", await page.getByText("Elige tu plan").isVisible());
       check("activa: no 'Guardar y finalizar' before payment", (await page.getByRole("button", { name: "Guardar y finalizar" }).count()) === 0);

@@ -5,10 +5,9 @@ import { Suspense } from "react";
 import SiteHeader from "@/components/salon/SiteHeader";
 import ConsultationRequest from "@/components/salon/ConsultationRequest";
 import { getAppBaseUrl } from "@/lib/config/appBaseUrl";
-import { CONSULTATION_HREF, PRIVATE_POOL_HREF } from "@/lib/site/content";
-import { FAQ, PROGRAMMES, STEPS } from "@/lib/site/matchmaking";
+import { CONSULTATION_HREF, PRIVATE_POOL_HREF, calendlyHref } from "@/lib/site/content";
+import { FAQ, PRIVATE_PROFILE, PROGRAMMES, STEPS } from "@/lib/site/matchmaking";
 import heroPhoto from "../../../../public/images/candlelit-lounge-table.jpg";
-import poolPhoto from "../../../../public/images/conversation-champagne.jpg";
 
 export const metadata: Metadata = {
   title: "Matchmaking privado en Madrid para profesionales",
@@ -63,7 +62,7 @@ export default function MatchmakingPage() {
   return (
     <main className="mm-page">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData()) }} />
-      <SiteHeader cta={{ href: CONSULTATION_HREF, label: "Solicitar entrevista" }} />
+      <SiteHeader />
 
       {/* 1. Hero: the promise and one clear next step. */}
       <section className="hero mm-hero" aria-labelledby="mm-h">
@@ -101,7 +100,7 @@ export default function MatchmakingPage() {
         </div>
       </section>
 
-      {/* 2. The two programmes, prices first. */}
+      {/* 2. The two programmes, prices first, and the free private profile beside them. */}
       <section className="mm-progs" id="programas" aria-labelledby="pr-h">
         <div className="wrap">
           <p className="eyebrow">Dos programas · Seis meses</p>
@@ -109,30 +108,61 @@ export default function MatchmakingPage() {
             Elige cómo quieres <em>que busquemos.</em>
           </h2>
           <div className="mm-cards">
-            {PROGRAMMES.map((p) => (
-              <article className={`mm-card${p.key === "privado" ? " dark" : ""}`} key={p.key} aria-labelledby={`pg-${p.key}`}>
-                <header>
-                  <h3 id={`pg-${p.key}`}>{p.name}</h3>
-                  <p className="price">
-                    {p.priceLabel}
-                    <span>IVA incluido</span>
-                  </p>
-                  <p className="promise">{p.promise}</p>
-                </header>
-                <ul className="mm-incl">
-                  {p.includes.map((i) => (
-                    <li key={i}>{i}</li>
-                  ))}
-                </ul>
-                <p className="mm-start">{p.start}</p>
-                <Link className={p.key === "privado" ? "btn btn-laton" : "btn btn-tinta"} href={`?programa=${p.key}#entrevista`} scroll={false}>
-                  {p.cta}
-                </Link>
-              </article>
-            ))}
+            {PROGRAMMES.map((p) => {
+              const booking = calendlyHref(p);
+              const cls = p.key === "privado" ? "btn btn-laton" : "btn btn-tinta";
+              return (
+                <article className={`mm-card${p.key === "privado" ? " dark" : ""}`} key={p.key} aria-labelledby={`pg-${p.key}`}>
+                  <header>
+                    <p className="mm-reach">{p.reach}</p>
+                    <h3 id={`pg-${p.key}`}>{p.name}</h3>
+                    <p className="price">
+                      {p.priceLabel}
+                      <span>IVA incluido</span>
+                    </p>
+                    <p className="promise">{p.promise}</p>
+                  </header>
+                  <ul className="mm-incl">
+                    {p.includes.map((i) => (
+                      <li key={i}>{i}</li>
+                    ))}
+                  </ul>
+                  <p className="mm-start">{p.start}</p>
+                  {booking ? (
+                    <a className={cls} href={booking} target="_blank" rel="noopener noreferrer">
+                      {p.cta}
+                    </a>
+                  ) : (
+                    <Link className={cls} href={`/matchmaking?programa=${p.key}#entrevista`}>
+                      {p.cta}
+                    </Link>
+                  )}
+                </article>
+              );
+            })}
+            <article className="mm-card free" aria-labelledby="pg-perfil">
+              <header>
+                <p className="mm-reach">{PRIVATE_PROFILE.reach}</p>
+                <h3 id="pg-perfil">{PRIVATE_PROFILE.name}</h3>
+                <p className="price">
+                  {PRIVATE_PROFILE.priceLabel}
+                  <span>Sin suscripción</span>
+                </p>
+                <p className="promise">{PRIVATE_PROFILE.promise}</p>
+              </header>
+              <ul className="mm-incl">
+                {PRIVATE_PROFILE.includes.map((i) => (
+                  <li key={i}>{i}</li>
+                ))}
+              </ul>
+              <p className="mm-start">{PRIVATE_PROFILE.start}</p>
+              <Link className="btn btn-line" href={PRIVATE_POOL_HREF}>
+                {PRIVATE_PROFILE.cta}
+              </Link>
+            </article>
           </div>
           <p className="note-sm mm-cond">
-            Antes de contratar, recibes por escrito las condiciones completas del programa. Ninguna cita se organiza sin
+            Antes de contratar un programa, recibes por escrito sus condiciones completas. Ninguna cita se organiza sin
             el interés de las dos personas.
           </p>
         </div>
@@ -166,50 +196,33 @@ export default function MatchmakingPage() {
               Solicita tu <em>entrevista privada.</em>
             </h2>
             <p className="txt">
-              Cuéntanos quién eres y qué buscas. Revisamos cada solicitud personalmente y te contactamos para acordar
-              la entrevista: de 20 a 30 minutos con nuestro equipo para el Programa Select, o una breve llamada previa
-              para Select Privado.
+              Cuéntanos quién eres y qué buscas. Revisamos cada solicitud personalmente y te proponemos una breve
+              llamada de cualificación, de unos 20 minutos, para los dos programas.
             </p>
             <p className="note">
               La entrevista sirve para conocernos y saber si podemos ayudarte de verdad. Solo aceptamos las búsquedas
               en las que creemos poder hacerlo.
             </p>
           </div>
-          <Suspense fallback={null}>
-            <ConsultationRequest />
-          </Suspense>
+          {calendlyHref() ? (
+            <div className="mm-book">
+              <p className="txt">
+                Elige día y hora para una llamada de unos 20 minutos. Al reservar te pediremos los datos que necesitamos
+                para preparar la llamada.
+              </p>
+              <a className="btn btn-tinta" href={calendlyHref() ?? undefined} target="_blank" rel="noopener noreferrer">
+                Reservar mi llamada
+              </a>
+            </div>
+          ) : (
+            <Suspense fallback={null}>
+              <ConsultationRequest />
+            </Suspense>
+          )}
         </div>
       </section>
 
-      {/* 5. The private network: free, passive, separate from the programmes. */}
-      <section className="mm-pool" aria-labelledby="po-h">
-        <div className="photo" aria-hidden="true">
-          <Image src={poolPhoto} alt="" fill sizes="(max-width: 1080px) 100vw, 50vw" />
-        </div>
-        <div className="in">
-          <p className="eyebrow">La red privada</p>
-          <h2 id="po-h">
-            Forma parte de nuestra <em>red privada.</em>
-          </h2>
-          <p className="txt">
-            ¿No buscas un programa, pero te gustaría que pensáramos en ti? Crea tu perfil privado y podremos tenerte en
-            cuenta cuando busquemos para nuestros clientes. Si un día creemos que hay alguien para ti, te lo
-            propondremos en privado, y solo seguiremos adelante si los dos queréis.
-          </p>
-          <ul className="mm-pool-list">
-            <li>Discreto: tu perfil no se publica y nadie puede buscarlo ni verlo.</li>
-            <li>Sin aplicación, sin propuestas automáticas y sin suscripción.</li>
-            <li>No tienes que buscar nada: nosotros te escribimos si hay alguien para ti.</li>
-          </ul>
-          <p className="meta">Sin coste · Sin compromiso</p>
-          <Link className="btn btn-laton" href={PRIVATE_POOL_HREF} style={{ justifySelf: "start" }}>
-            Crear mi perfil privado
-          </Link>
-          <p className="sel-alt">Puedes revisar, cambiar o eliminar tu perfil cuando quieras.</p>
-        </div>
-      </section>
-
-      {/* 6. Short FAQ: the key objections only. */}
+      {/* 5. Short FAQ: the key objections only. */}
       <section className="mm-faq" aria-labelledby="fq-h">
         <div className="wrap">
           <h2 id="fq-h">

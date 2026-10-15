@@ -22,7 +22,7 @@ const AUTH_EMU = `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}`;
 const SHOTS = ".local-test/shots-v5";
 fs.mkdirSync(SHOTS, { recursive: true });
 
-const PAGES = ["/", "/club", "/eventos", "/matchmaking", "/membresia", "/unete", "/colaboraciones", "/membresia/alta?plan=three_month"];
+const PAGES = ["/", "/club", "/eventos", "/matchmaking", "/unete", "/colaboraciones"];
 const VIEWPORTS = { desktop: { width: 1366, height: 900 }, mobile: { width: 390, height: 844 } };
 
 const results = [];
@@ -110,11 +110,12 @@ async function statusOf(path) {
       check(`${tag}: title and description set`, info.title.length > 10 && info.description.length > 40);
       const banned = ["Compartamos", "cada encuentro Junto Select elegible", "privilegio mensual", "Gratis", "fundador"].filter(
         // The founder-led Select Privado is named on purpose on /matchmaking (Oct 2026).
-        (w) => info.text.includes(w) && !(w === "fundador" && path === "/matchmaking"),
+        // The founder-led programme and the free private-profile card are named on purpose there.
+        (w) => info.text.includes(w) && !((w === "fundador" || w === "Gratis") && path === "/matchmaking"),
       );
       check(`${tag}: no rejected wording`, banned.length === 0, banned.join(", "));
       if (vpName === "desktop") {
-        check(`${tag}: nav is Option 1`, info.headerNav.join(" · ") === "El Club · Encuentros · Matchmaking", info.headerNav.join(" · "));
+        check(`${tag}: nav is Encuentros · Matchmaking`, info.headerNav.join(" · ") === "Encuentros · Matchmaking", info.headerNav.join(" · "));
       }
       const footerColab = info.links.filter((l) => l.inFooter && l.text === "Patrocinios y colaboraciones");
       check(`${tag}: one footer sponsorship link`, footerColab.length === 1 && footerColab[0].href === "/colaboraciones");
@@ -141,7 +142,7 @@ async function statusOf(path) {
       await page.goto(`${APP}/`);
       await page.click("button.burger");
       const items = await page.locator("#site-menu nav a").allTextContents();
-      check("mobile menu lists Option 1", items.join(" · ") === "El Club · Encuentros · Matchmaking", items.join(" · "));
+      check("mobile menu lists Encuentros · Matchmaking", items.join(" · ") === "Encuentros · Matchmaking", items.join(" · "));
       const ctas = await page.locator("#site-menu .ctas a").allTextContents();
       check("mobile menu has Recibir invitaciones and Solicitar una entrevista", ctas.join("|") === "Recibir invitaciones|Solicitar una entrevista", ctas.join("|"));
       await page.screenshot({ path: `${SHOTS}/mobile-menu.png` });
@@ -178,54 +179,50 @@ async function statusOf(path) {
   check("home: Descubre el matchmaking privado → /matchmaking", (await href(".hero >> text=Descubre el matchmaking privado")) === "/matchmaking");
   check("home: Ver todos los encuentros → /eventos", (await href("text=Ver todos los encuentros")) === "/eventos");
   check("home: Valencia → /unete?ciudad=valencia", (await page.locator('.clist a[href="/unete?ciudad=valencia"]').count()) === 1);
-  check("home: Acceder → /introduction", (await href("header >> text=Acceder")) === "/introduction");
+  check("home: Acceder a mi perfil → /introduction", (await href("header .hdr-actions >> text=Acceder a mi perfil")) === "/introduction");
+  check("home: footer keeps El Club → /club", (await page.locator('footer a[href="/club"]').count()) === 1);
   check("home: logo → /", (await href("header a.word")) === "/");
 
-  await page.goto(`${APP}/membresia`);
-  check("membresía: retired page is not indexed", /noindex/.test((await page.locator('meta[name="robots"]').getAttribute("content")) || ""));
-  for (const [key, price] of [["monthly", "49 €"], ["three_month", "129 €"], ["six_month", "234 €"]]) {
-    const btn = page.locator(`a[href="/membresia/alta?plan=${key}"]`);
-    check(`membresía: plan ${key} button present`, (await btn.count()) === 1);
-    const p2 = await ctx.newPage();
-    await p2.goto(`${APP}/membresia/alta?plan=${key}`, { waitUntil: "networkidle" });
-    const txt = await p2.locator("body").innerText();
-    check(`membresía/alta keeps plan ${key}`, txt.includes(price), price);
-    await p2.close();
+  // Membresía is closed to new subscriptions (15 Oct 2026): pages redirect, APIs refuse.
+  for (const path of ["/membresia", "/membresia/alta?plan=three_month"]) {
+    const res = await fetch(`${APP}${path}`, { redirect: "manual" });
+    check(`membresía closed: ${path} redirects to /matchmaking`, [307, 308].includes(res.status) && (res.headers.get("location") || "").endsWith("/matchmaking"),
+      `${res.status} ${res.headers.get("location")}`);
   }
-  check("membresía: Cómo funcionan → /introducciones", (await href("text=Cómo funcionan")) === "/introducciones");
-  {
-    const body = await page.locator("main").innerText();
-    check("membresía: no member-account benefit", !/cuenta de miembro|propio espacio/i.test(body));
-    const titles = await page.locator(".p2-grid h3").allInnerTexts();
-    check("membresía: benefits in approved order",
-      titles.slice(0, 3).join(" | ") === "Una comunidad selecta | Búsqueda activa de introducciones | 20 % de descuento en un encuentro al mes", titles.join(" | "));
+  for (const api of ["/api/billing/create-checkout-session", "/api/membership/start"]) {
+    // Unauthenticated callers are refused too; the closure check runs before authentication.
+    const res = await fetch(`${APP}${api}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ planKey: "monthly" }) });
+    const body = await res.json().catch(() => ({}));
+    check(`membresía closed: ${api} refuses new purchases`, res.status === 403 && body.error === "membership_sales_closed", `${res.status} ${JSON.stringify(body)}`);
   }
-  check("membresía: closing link → /unete", (await href(".p2-close >> text=Recibe nuestras invitaciones")) === "/unete");
-
-  await page.goto(`${APP}/membresia/alta?plan=monthly&checkout=cancel`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(1000);
-  check("cancelled checkout shows a no-charge message", (await page.locator("body").innerText()).includes("No se ha realizado ningún cargo"));
 
   await page.goto(`${APP}/introducciones`);
   check("introducciones redirects to /matchmaking", page.url().endsWith("/matchmaking"));
   {
     const body = await page.locator("main").innerText();
     check("matchmaking: both programmes with VAT-inclusive prices", body.includes("1.950 €") && body.includes("4.800 €") && (body.match(/IVA incluido/gi) || []).length === 2);
-    check("matchmaking: six items per programme", (await page.locator(".mm-card").nth(0).locator(".mm-incl li").count()) === 6 &&
-      (await page.locator(".mm-card").nth(1).locator(".mm-incl li").count()) === 6);
-    check("matchmaking: section order hero → programmes → steps → request → network → FAQ",
+    check("matchmaking: three cards, the third the private profile", (await page.locator(".mm-card").count()) === 3 &&
+      (await page.locator(".mm-card.free h3").innerText()) === "Perfil privado pasivo");
+    check("matchmaking: seven items per programme", (await page.locator(".mm-card").nth(0).locator(".mm-incl li").count()) === 7 &&
+      (await page.locator(".mm-card").nth(1).locator(".mm-incl li").count()) === 7);
+    check("matchmaking: geography shown on the cards", body.includes("en tu ciudad") && body.includes("en toda España"));
+    check("matchmaking: Gratis appears once", (body.match(/gratis/gi) || []).length === 1, String((body.match(/gratis/gi) || []).length));
+    check("matchmaking: section order hero → programmes → steps → request → FAQ",
       (await page.locator("main.mm-page > section").evaluateAll((els) => els.map((e) => e.className.split(" ").find((c) => c.startsWith("mm-"))).join())) ===
-        "mm-hero,mm-progs,mm-how,mm-request,mm-pool,mm-faq");
+        "mm-hero,mm-progs,mm-how,mm-request,mm-faq");
     check("matchmaking: three steps", (await page.locator(".mm-how li").count()) === 3);
     check("matchmaking: no guarantee or refund promise", !/garantizamos|garantía de|reembolso|devolución/i.test(body));
     check("matchmaking: no Membresía", !/Membresía|Hazte miembro/.test(await page.locator("body").innerText()));
     check("matchmaking: one h1", (await page.locator("h1").count()) === 1);
-    check("matchmaking: header button → consultation", (await href("header .hdr-actions .btn")) === "/matchmaking#entrevista");
-    check("matchmaking: private pool → ?modalidad=pasivo", (await href(".mm-pool >> text=Crear mi perfil privado")) === "/introduction?modalidad=pasivo");
+    check("matchmaking: header button → Recibir invitaciones", (await href("header .hdr-actions .btn")) === "/unete");
+    check("matchmaking: private-profile card → ?modalidad=pasivo", (await href(".mm-card.free >> text=Crear mi perfil privado")) === "/introduction?modalidad=pasivo");
     const ld = await page.locator('script[type="application/ld+json"]').first().textContent();
     check("matchmaking: Service and FAQPage structured data", ld.includes('"Service"') && ld.includes('"FAQPage"') && ld.includes("4800"));
     await page.click(".mm-card >> nth=1 >> a.btn");
     await page.waitForURL("**programa=privado**");
+    await page.waitForTimeout(800);
+    check("matchmaking: programme button brings the request into view",
+      await page.locator("#entrevista form").evaluate((el) => { const r = el.getBoundingClientRect(); return r.top < window.innerHeight && r.bottom > 0; }));
     check("matchmaking: programme button preselects it in the request", (await page.locator("input[name=programa]:checked").getAttribute("value")) === "privado");
     await page.click("#entrevista button[type=submit]");
     check("matchmaking: empty request shows the required-field errors", (await page.locator("#entrevista .err").count()) === 9,
@@ -244,7 +241,7 @@ async function statusOf(path) {
     await page.click("#entrevista button[type=submit]");
     await page.locator("#entrevista .done").waitFor({ timeout: 10000 }).catch(() => {});
     check("matchmaking: a complete request is recorded and confirmed",
-      /Solicitud recibida/i.test(await page.locator("#entrevista").innerText()) && /llamada previa/.test(await page.locator("#entrevista").innerText()));
+      /Solicitud recibida/i.test(await page.locator("#entrevista").innerText()) && /llamada de cualificación/.test(await page.locator("#entrevista").innerText()));
   }
 
   // ---- 3. Free Introductions participant ----
@@ -363,18 +360,20 @@ async function statusOf(path) {
     await ca.close();
   }
 
-  // ---- 4c. Active search: profile first, plan step inside the journey ----
-  for (const ending of ["pay", "passive"]) {
+  // ---- 4c. Membresía closed: ?modalidad=activa starts a private profile, and a
+  // profile begun on the active journey before the closure finishes as private,
+  // with no plan or payment step. ----
+  {
     const c = await browser.newContext({ viewport: VIEWPORTS.desktop, locale: "es-ES" });
     const pg = await c.newPage();
-    const email = `activa.${ending}.${Date.now()}@example.test`;
+    const email = `activa.closed.${Date.now()}@example.test`;
     await signInOnIntroduction(pg, email, `${APP}/introduction?modalidad=activa`);
     await pg.waitForURL("**/introduction/onboarding**", { timeout: 20000 });
     await pg.waitForTimeout(1500);
     const uid = await getAuth().getUserByEmail(email).then((x) => x.uid);
     const cur = (await db.doc(`profiles/${uid}`).get()).data();
-    check(`activa/${ending}: profile created with Select chosen`, cur?.meta.requestedService === "select");
-    // Test only: complete answers, as in the free journey above.
+    check("activa (closed): the link starts a private profile", cur?.meta.requestedService === "passive", cur?.meta.requestedService);
+    // Test only: a complete profile that had chosen the active journey before the closure.
     await db.doc(`profiles/${uid}`).set({
       ...cur,
       visible: {
@@ -390,47 +389,23 @@ async function statusOf(path) {
       },
       photos: [`profiles/${uid}/a.jpg`],
       presentation: { ...cur.presentation, status: "approved" },
-      meta: { ...cur.meta, profileStatus: "active_for_matching", aboutMeComplete: true, photosComplete: true, preferencesComplete: true, presentationComplete: true },
+      meta: { ...cur.meta, requestedService: "select", profileStatus: "active_for_matching", aboutMeComplete: true, photosComplete: true, preferencesComplete: true, presentationComplete: true },
     });
     await pg.goto(`${APP}/member/profile`);
-    await pg.waitForSelector("text=Elige tu plan", { timeout: 20000 });
-    check(`activa/${ending}: plan step shown inside the profile journey`, (await pg.locator("text=Guardar y finalizar").count()) === 0);
-    check(`activa/${ending}: passive option explained`, (await pg.locator("body").innerText()).includes("no se propone a nadie"));
-    await pg.screenshot({ path: `${SHOTS}/activa-${ending}-1-plan.png`, fullPage: true });
-
-    if (ending === "pay") {
-      await pg.check("text=Acepto participar en las introducciones privadas");
-      const boxes = pg.locator("label:has-text('He leído y acepto') input, label:has-text('Solicito que mi membresía') input");
-      for (let i = 0; i < (await boxes.count()); i++) await boxes.nth(i).check({ force: true });
-      await pg.click("text=Continuar al pago");
-      await pg.waitForURL("**/pay/**", { timeout: 20000 });
-      await pg.click("#pay");
-      await pg.waitForURL("**/member/profile?checkout=success**", { timeout: 20000 });
-      check(`activa/pay: payment returns to the profile`, true);
-      let after;
-      for (let i = 0; i < 20; i++) {
-        after = (await db.doc(`profiles/${uid}`).get()).data();
-        if (after.meta.onboardingFinalized) break;
-        await sleep(500);
-      }
-      check("activa/pay: profile finalized after payment, active search",
-        after.meta.onboardingFinalized === true && after.meta.searchStatus === "active_search" && after.meta.requestedService === "select",
-        `${after.meta.onboardingFinalized} ${after.meta.searchStatus}`);
-      await pg.screenshot({ path: `${SHOTS}/activa-pay-2-done.png`, fullPage: true });
-    } else {
-      await pg.click("text=Continuar con mi perfil privado");
-      await pg.waitForTimeout(1000);
-      check("activa/passive: staying passive refused without consent",
-        !(await db.doc(`profiles/${uid}`).get()).data().meta.onboardingFinalized &&
-          (await pg.locator("p[role=alert]").first().innerText()).includes("confirma que aceptas participar"));
-      await pg.check("text=Acepto participar en las introducciones privadas");
-      await pg.click("text=Continuar con mi perfil privado");
-      await pg.waitForTimeout(2500);
-      const after = (await db.doc(`profiles/${uid}`).get()).data();
-      check("activa/passive: finalized as passive by explicit choice",
-        after.meta.onboardingFinalized === true && after.meta.requestedService === "passive" && after.meta.searchStatus === "passive");
-      check("activa/passive: no billing record", !(await db.doc(`billing/${uid}`).get()).exists);
-    }
+    await pg.waitForSelector("text=Continuar con mi perfil privado", { timeout: 20000 });
+    const body = await pg.locator("body").innerText();
+    check("activa (closed): no plan or payment step", !/Elige tu plan|Continuar al pago|Membresía/.test(body));
+    await pg.screenshot({ path: `${SHOTS}/activa-closed-1.png`, fullPage: true });
+    await pg.check("text=Acepto participar en las introducciones privadas");
+    await pg.click("text=Continuar con mi perfil privado");
+    await pg.waitForTimeout(2500);
+    const after = (await db.doc(`profiles/${uid}`).get()).data();
+    check("activa (closed): finalized as a private profile",
+      after.meta.onboardingFinalized === true && after.meta.requestedService === "passive" && after.meta.searchStatus === "passive");
+    check("activa (closed): no billing record", !(await db.doc(`billing/${uid}`).get()).exists);
+    await pg.goto(`${APP}/member/plan`);
+    await pg.waitForTimeout(2500);
+    check("activa (closed): Mi plan offers no purchase", !/Continuar al pago|Elige tu plan|49 €/.test(await pg.locator("body").innerText()));
     await c.close();
   }
 

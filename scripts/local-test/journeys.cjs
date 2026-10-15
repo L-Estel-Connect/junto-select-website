@@ -228,8 +228,14 @@ async function main() {
     check("2 form has no horizontal scroll on mobile", !(await m.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)));
   }
 
+  // 3–4 test the Membresía purchase, closed to new subscriptions since 15 Oct 2026
+  // (NEXT_PUBLIC_MEMBERSHIP_SALES_OPEN). They run only when sales are open again;
+  // site-audit.cjs checks the closure itself.
+  const membershipOpen = (await fetch(`${APP}/membresia`, { redirect: "manual" })).status === 200;
+  if (!membershipOpen) console.log("SKIP  3–4 Membresía purchase journeys (sales closed)");
+
   // 3. Membership page
-  {
+  if (membershipOpen) {
     const page = await desktop.newPage();
     await page.goto(`${APP}/membresia`);
     await shot(page, "3-membresia-desktop");
@@ -243,7 +249,7 @@ async function main() {
   }
 
   // 4. Choose plan → account → payment → member area → profile
-  {
+  if (membershipOpen) {
     const page = await desktop.newPage();
     const email = `nuevo.miembro.${Date.now()}@example.test`;
     await page.goto(`${APP}/membresia`);

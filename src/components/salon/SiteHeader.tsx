@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { CONSULTATION_HREF, NAV, PRIVATE_POOL_HREF, SIGN_IN_HREF, joinHref } from "@/lib/site/content";
+import { CONSULTATION_HREF, NAV, PRIVATE_POOL_HREF, SIGN_IN_HREF, SIGN_IN_LABEL, joinHref } from "@/lib/site/content";
 
 const INVITATIONS_CTA = { href: joinHref(), label: "Recibir invitaciones" };
 
@@ -48,7 +48,7 @@ export default function SiteHeader({
         </nav>
         <div className="hdr-actions">
           <Link className="acc" href={SIGN_IN_HREF}>
-            Acceder
+            {SIGN_IN_LABEL}
           </Link>
           <Link className="btn btn-laton" href={cta.href}>
             {cta.label}
@@ -99,7 +99,7 @@ export default function SiteHeader({
           </div>
           <div className="sec">
             <Link href={SIGN_IN_HREF} onClick={() => setOpen(false)}>
-              Acceder a mi cuenta
+              {SIGN_IN_LABEL}
             </Link>
             <Link href={PRIVATE_POOL_HREF} onClick={() => setOpen(false)}>
               Forma parte de la red privada

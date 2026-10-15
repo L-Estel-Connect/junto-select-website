@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useId, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BOOKING_URLS } from "@/lib/site/content";
 import {
   CHANNEL_OPTIONS,
   MAX_BUSCA_LENGTH,
@@ -102,34 +101,20 @@ export default function ConsultationRequest() {
 
   if (status === "sent") {
     const privado = data.programa === "privado";
-    const booking = privado ? BOOKING_URLS.privado : data.programa === "select" ? BOOKING_URLS.select : null;
     return (
       <div className="done" role="status">
         <p className="eyebrow">Solicitud recibida</p>
         <h3>Gracias, {data.nombre.trim()}.</h3>
         <p>Hemos recibido tu solicitud. La revisamos personalmente y te contestamos por el medio que has elegido.</p>
         <ol>
-          {privado ? (
-            <>
-              <li>Una breve llamada previa para conocer tu búsqueda.</li>
-              <li>Si creemos que podemos ayudarte, te enviamos la propuesta y las condiciones por escrito.</li>
-              <li>Al confirmar el programa, reservamos tus 45 minutos con la fundadora.</li>
-            </>
-          ) : (
-            <>
-              <li>Tu entrevista privada, de 20 a 30 minutos, con nuestro equipo.</li>
-              <li>Si creemos que podemos ayudarte, te enviamos la propuesta y las condiciones por escrito.</li>
-              <li>Al confirmar el programa, empezamos a buscar.</li>
-            </>
-          )}
+          <li>Una breve llamada de cualificación para conocer tu búsqueda.</li>
+          <li>Si creemos que podemos ayudarte, te enviamos la propuesta y las condiciones por escrito.</li>
+          <li>
+            {privado
+              ? "Al confirmar el programa, reservamos tus 45 minutos con la fundadora."
+              : "Al confirmar el programa, empezamos a buscar."}
+          </li>
         </ol>
-        {booking && (
-          <div className="mm-done-acts">
-            <a className="btn btn-laton" href={booking} target="_blank" rel="noopener noreferrer">
-              {privado ? "Reservar la llamada previa" : "Reservar mi entrevista"}
-            </a>
-          </div>
-        )}
       </div>
     );
   }
