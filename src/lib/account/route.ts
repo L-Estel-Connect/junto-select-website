@@ -1,3 +1,4 @@
+import { MEMBERSHIP_SALES_OPEN } from "@/lib/billing/membershipSales";
 import { getNextOnboardingRoute } from "@/lib/introduction/completion";
 import type { ProfileDocument, RequestedService } from "@/lib/introduction/types";
 
@@ -64,6 +65,7 @@ export function routeAfterChoice(input: {
 /** `?modalidad=` values used by the public site. */
 export function serviceFromParam(value: string | null): RequestedService | null {
   if (value === "pasivo") return "passive";
-  if (value === "activa") return "select";
+  // The active (Membresía) journey is closed while sales are; it becomes the private profile.
+  if (value === "activa") return MEMBERSHIP_SALES_OPEN ? "select" : "passive";
   return null;
 }

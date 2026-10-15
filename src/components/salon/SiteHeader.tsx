@@ -3,10 +3,22 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { NAV, SIGN_IN_HREF, joinHref } from "@/lib/site/content";
+import { CONSULTATION_HREF, NAV, PRIVATE_POOL_HREF, SIGN_IN_HREF, SIGN_IN_LABEL, joinHref } from "@/lib/site/content";
 
-/** `overlay`: transparent header over a full-bleed photo; `solid`: plain pages. */
-export default function SiteHeader({ variant = "overlay" }: { variant?: "overlay" | "solid" }) {
+const INVITATIONS_CTA = { href: joinHref(), label: "Recibir invitaciones" };
+
+/**
+ * `overlay`: transparent header over a full-bleed photo; `solid`: plain pages.
+ * `cta`: the header button; the club's invitations unless a page (Matchmaking)
+ * has a more relevant next step.
+ */
+export default function SiteHeader({
+  variant = "overlay",
+  cta = INVITATIONS_CTA,
+}: {
+  variant?: "overlay" | "solid";
+  cta?: { href: string; label: string };
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -36,10 +48,10 @@ export default function SiteHeader({ variant = "overlay" }: { variant?: "overlay
         </nav>
         <div className="hdr-actions">
           <Link className="acc" href={SIGN_IN_HREF}>
-            Acceder
+            {SIGN_IN_LABEL}
           </Link>
-          <Link className="btn btn-laton" href={joinHref()}>
-            Recibir invitaciones
+          <Link className="btn btn-laton" href={cta.href}>
+            {cta.label}
           </Link>
           <button
             className="burger"
@@ -81,13 +93,16 @@ export default function SiteHeader({ variant = "overlay" }: { variant?: "overlay
             <Link className="btn btn-tinta" href={joinHref()} onClick={() => setOpen(false)}>
               Recibir invitaciones
             </Link>
-            <Link className="btn btn-line" href="/membresia#planes" onClick={() => setOpen(false)}>
-              Hazte miembro
+            <Link className="btn btn-line" href={CONSULTATION_HREF} onClick={() => setOpen(false)}>
+              Solicitar una entrevista
             </Link>
           </div>
           <div className="sec">
             <Link href={SIGN_IN_HREF} onClick={() => setOpen(false)}>
-              Acceder a mi cuenta
+              {SIGN_IN_LABEL}
+            </Link>
+            <Link href={PRIVATE_POOL_HREF} onClick={() => setOpen(false)}>
+              Forma parte de la red privada
             </Link>
           </div>
         </div>

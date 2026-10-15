@@ -482,3 +482,103 @@
   .salon .fform .btn { width: 100%; }
   .salon .field-row { grid-template-columns: minmax(0,1fr); }
 }
+
+/* ---------- matchmaking (Oct 2026) ---------- */
+.salon button.link { padding: 0 0 4px; border: 0; border-bottom: 1px solid currentColor; background: none; cursor: pointer; font-family: var(--sans); }
+.salon .mm-hero { min-height: 680px; }
+.salon .mm-hero h1 { max-width: 18ch; font-size: clamp(44px, 5.4vw, 84px); line-height: 1.02; }
+.salon .mm-hero::after { background: linear-gradient(90deg, rgba(28,15,16,.82) 0%, rgba(28,15,16,.55) 45%, rgba(28,15,16,.1) 80%), linear-gradient(180deg, rgba(20,14,12,.45) 0%, rgba(20,14,12,0) 30%, rgba(28,15,16,.6) 100%); }
+.salon .mm-hero h1 .eyebrow { display: block; margin-bottom: 26px; font-family: var(--sans); letter-spacing: .3em; line-height: 1.4; }
+
+.salon .mm-how .eyebrow, .salon .mm-progs .eyebrow, .salon .mm-request .eyebrow { color: var(--tinto); }
+
+.salon .mm-progs { padding-block: 110px 96px; scroll-margin-top: 24px; }
+.salon .mm-progs h2 { margin: 18px 0 56px; }
+.salon .mm-cards { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 20px; }
+.salon .mm-card { display: grid; grid-template-rows: auto 1fr auto auto; gap: 26px; min-width: 0; padding: 44px 36px; border: 1px solid var(--linea); }
+.salon .mm-card.free { border-color: var(--arena); background: var(--piedra); }
+.salon .mm-reach { font-size: 11.5px; font-weight: 500; letter-spacing: .2em; text-transform: uppercase; color: var(--tinto); }
+.salon .mm-card.dark .mm-reach { color: var(--laton-claro); }
+.salon .mm-card.free .mm-reach { color: var(--tinta-suave); }
+.salon .mm-card.free .promise { font-size: 18px; color: var(--tinta); }
+.salon .mm-card.free .mm-incl, .salon .mm-card.free .mm-incl li { border-color: var(--arena); }
+.salon .mm-book { display: grid; align-content: start; justify-items: start; gap: 24px; }
+.salon .mm-card.dark { border-color: var(--tinto-hondo); background: var(--tinto-hondo); color: var(--marfil); }
+.salon .mm-card header { display: grid; gap: 14px; }
+.salon .mm-card h3 { font-size: clamp(30px, 2.6vw, 38px); line-height: 1.02; }
+.salon .mm-card .price { display: grid; gap: 8px; font-family: var(--serif); font-size: 54px; font-weight: 300; line-height: 1; letter-spacing: -.02em; }
+.salon .mm-card .price span { font-family: var(--sans); font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--tinta-suave); }
+.salon .mm-card .promise { min-height: 4.1em; margin-top: 6px; font-family: var(--serif); font-size: 21px; font-style: italic; font-weight: 300; line-height: 1.35; color: var(--tinto); }
+.salon .mm-card.dark .promise { color: var(--laton-claro); }
+.salon .mm-card.dark .price span, .salon .mm-card.dark .mm-start { color: #cdbfad; }
+.salon .mm-incl { display: grid; align-content: start; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--linea); }
+.salon .mm-incl li { display: grid; grid-template-columns: 22px 1fr; gap: 6px; padding: 13px 0; border-bottom: 1px solid var(--linea); font-size: 15px; line-height: 1.5; }
+.salon .mm-incl li::before { content: "—"; color: var(--laton); }
+.salon .mm-card.dark .mm-incl, .salon .mm-card.dark .mm-incl li { border-color: rgba(229,216,201,.22); }
+.salon .mm-start { font-size: 14px; color: var(--tinta-suave); }
+.salon .mm-card .btn { justify-self: start; }
+.salon .mm-cond { max-width: 70ch; margin-top: 28px; }
+
+.salon .mm-how { padding-block: 100px; background: var(--piedra); }
+.salon .mm-how h2 { max-width: 20ch; margin-top: 18px; }
+.salon .mm-how ol { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); margin: 56px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--arena); }
+.salon .mm-how li { display: grid; align-content: start; gap: 12px; padding: 30px 28px 0 0; }
+.salon .mm-how li + li { padding-left: 28px; border-left: 1px solid var(--arena); }
+.salon .mm-how li b { font-size: 11px; font-weight: 500; letter-spacing: .24em; color: var(--tinto); }
+.salon .mm-how li h3 { font-size: 27px; line-height: 1.1; }
+.salon .mm-how li p { max-width: 36ch; font-size: 15.5px; line-height: 1.6; color: var(--tinta-suave); }
+
+.salon .mm-request { padding-block: 110px 120px; scroll-margin-top: 0; }
+.salon .mm-request h2 { font-size: clamp(42px, 4.8vw, 72px); line-height: 1; }
+.salon .mm-textarea { min-height: 96px; resize: vertical; line-height: 1.5; }
+.salon .mm-age-range { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; gap: 12px; }
+.salon .mm-age-range span { font-size: 14px; color: var(--tinta-suave); }
+.salon .mm-form-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px; }
+.salon .mm-done-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px; }
+.salon .done h3 { font-size: clamp(34px, 3.6vw, 48px); }
+.salon .done a { color: var(--laton-claro); }
+.salon .done a.btn { color: var(--tinta); }
+.salon .done button.link { color: var(--marfil); }
+.salon .mm-request .done .eyebrow { color: var(--laton-claro); }
+.salon .done ol { display: grid; gap: 10px; margin: 0; padding-left: 1.2em; list-style: decimal; font-size: 16px; line-height: 1.6; color: #dccdbd; }
+.salon .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
+
+.salon .mm-faq { padding-block: 110px 120px; }
+.salon .mm-faq .wrap { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.6fr); gap: 40px 96px; align-items: start; }
+.salon .mm-faq .list { border-top: 1px solid var(--linea); }
+.salon .mm-faq details { border-bottom: 1px solid var(--linea); }
+.salon .mm-faq summary { display: flex; justify-content: space-between; gap: 24px; padding: 22px 0; cursor: pointer; list-style: none; font-family: var(--serif); font-size: 23px; font-weight: 300; line-height: 1.3; }
+.salon .mm-faq summary::-webkit-details-marker { display: none; }
+.salon .mm-faq summary::after { content: "+"; flex: none; font-family: var(--sans); font-size: 20px; color: var(--laton); }
+.salon .mm-faq details[open] summary::after { content: "–"; }
+.salon .mm-faq details p { max-width: 62ch; padding: 0 0 24px; font-size: 16px; line-height: 1.65; color: var(--tinta-suave); }
+.salon .mm-faq-cta { grid-column: 2; display: grid; justify-items: start; gap: 16px; margin-top: 16px; }
+.salon .mm-faq-cta small { font-size: 14px; color: var(--tinta-suave); }
+.salon .mm-faq-cta small a { color: var(--tinta); }
+
+@media (max-width: 1080px) {
+  .salon .mm-faq .wrap { grid-template-columns: minmax(0,1fr); gap: 48px; }
+  .salon .mm-how ol { grid-template-columns: minmax(0,1fr); }
+  .salon .mm-how li, .salon .mm-how li + li { grid-template-columns: 3em 1fr; padding: 24px 0; border-left: 0; border-bottom: 1px solid var(--arena); }
+  .salon .mm-how li b { grid-row: span 2; padding-top: 8px; }
+  .salon .mm-cards { grid-template-columns: minmax(0,1fr); max-width: 640px; }
+  .salon .mm-book .btn { width: 100%; }
+  .salon .mm-card .promise { min-height: 0; }
+  .salon .mm-faq-cta { grid-column: 1; }
+}
+@media (max-width: 640px) {
+  .salon .mm-hero { min-height: 600px; }
+  .salon .mm-hero h1 { font-size: 40px; }
+  .salon .mm-hero::after { background: linear-gradient(180deg, rgba(20,14,12,.55) 0%, rgba(28,15,16,.55) 40%, rgba(28,15,16,.94) 100%); }
+  .salon .mm-hero h1 .eyebrow { margin-bottom: 18px; font-size: 11px; }
+  .salon .mm-how, .salon .mm-faq, .salon .mm-progs { padding-block: 72px; }
+  .salon .mm-progs h2 { margin-bottom: 32px; }
+  .salon .mm-card { gap: 22px; padding: 34px 22px; }
+  .salon .mm-card .price { font-size: 48px; }
+  .salon .mm-incl li { font-size: 15px; padding: 11px 0; }
+  .salon .mm-card .btn, .salon .mm-faq-cta .btn { width: 100%; }
+  .salon .mm-request { padding-block: 72px 80px; }
+  .salon .mm-faq summary { font-size: 20px; }
+  .salon .mm-form-acts .btn { width: 100%; }
+}

@@ -10,7 +10,7 @@ import {
   type CommunityPayload,
 } from "@/lib/types";
 import { communityLimits, validateCommunity, type CommunityErrors } from "@/lib/validation";
-import { CITIES } from "@/lib/site/content";
+import { CITIES, MATCHMAKING_HREF } from "@/lib/site/content";
 
 const INTERESTS: { value: CommunityInterest; label: string }[] = [
   { value: "eventos", label: "Encuentros" },
@@ -94,8 +94,8 @@ export default function CommunityForm({ initialCity, source }: { initialCity: Co
               : `Ya formas parte de la comunidad Junto Select. Serás de los primeros en saber cuándo llegamos a ${city?.name}.`}{" "}
           Te escribiremos con nuestras próximas invitaciones. Puedes darte de baja desde cualquier email.
         </p>
-        <Link className="link" href="/membresia">
-          Descubre la Membresía Select
+        <Link className="link" href={MATCHMAKING_HREF}>
+          Descubre el matchmaking privado
         </Link>
       </div>
     );

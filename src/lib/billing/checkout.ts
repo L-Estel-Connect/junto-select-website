@@ -1,4 +1,5 @@
 import "server-only";
+import { MEMBERSHIP_SALES_OPEN } from "@/lib/billing/membershipSales";
 import { adminDb } from "@/lib/firebase/admin";
 import { getStripe } from "@/lib/stripe/client";
 import { getStripePriceId } from "@/lib/stripe/plans";
@@ -29,6 +30,11 @@ export async function createMembershipCheckout(params: {
   cancelPath: string;
 }): Promise<CheckoutResult> {
   const { uid, email, planKey, successPath, cancelPath } = params;
+
+  // Last line of defence: no new Membresía subscription while sales are closed.
+  if (!MEMBERSHIP_SALES_OPEN) {
+    return { ok: false, error: "membership_sales_closed", status: 403 };
+  }
 
   let priceId: string;
   try {

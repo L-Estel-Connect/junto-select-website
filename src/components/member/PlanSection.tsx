@@ -1,5 +1,6 @@
 "use client";
 
+import { MEMBERSHIP_SALES_OPEN } from "@/lib/billing/membershipSales";
 import { useEffect, useState, type ReactNode } from "react";
 import { auth } from "@/lib/firebase/client";
 import { IntroductionError, IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
@@ -743,6 +744,15 @@ export default function PlanSection({ uid }: { uid: string }) {
             manageError={manageError}
           />
         </>
+      ) : !MEMBERSHIP_SALES_OPEN ? (
+        // Membresía is closed to new subscriptions: nothing to buy here.
+        <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+          Tu perfil privado forma parte de nuestra red. Si prefieres que busquemos por ti, conoce nuestro{" "}
+          <a href="/matchmaking" className="underline decoration-hairline underline-offset-4">
+            matchmaking privado
+          </a>
+          .
+        </p>
       ) : (
         <>
           <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">

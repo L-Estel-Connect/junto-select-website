@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { MEMBERSHIP_SALES_OPEN } from "@/lib/billing/membershipSales";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -12,6 +14,9 @@ export const metadata: Metadata = {
   description:
     "La Membresía Select de Junto Select: una comunidad selecta, búsqueda activa de introducciones en Madrid y un 20 % de descuento en un encuentro al mes. Desde 49 € al mes.",
   alternates: { canonical: "/membresia" },
+  // Retired from the public journey (Oct 2026): reachable by direct link for
+  // existing accounts and the member area, but no longer indexed.
+  robots: { index: false, follow: false },
 };
 
 const PRIVILEGES = [
@@ -43,6 +48,8 @@ const PLAN_BUTTON: Record<string, string> = {
 };
 
 export default function MembershipPage() {
+  // Closed to new subscriptions: the page stays in the code for a later reopening.
+  if (!MEMBERSHIP_SALES_OPEN) redirect("/matchmaking");
   return (
     <main>
       <SiteHeader />

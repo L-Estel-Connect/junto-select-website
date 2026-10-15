@@ -12,7 +12,7 @@ const OUT = process.argv[3] || ".local-test/crawl";
 fs.mkdirSync(path.join(OUT, "shots"), { recursive: true });
 
 const PUBLIC = [
-  "/", "/club", "/eventos", "/introducciones", "/membresia", "/membresia/alta",
+  "/", "/club", "/eventos", "/matchmaking", "/introducciones", "/membresia", "/membresia/alta",
   "/unete", "/colaboraciones", "/privacidad", "/terminos", "/aviso-legal",
   "/introduction", "/robots.txt", "/sitemap.xml",
 ];

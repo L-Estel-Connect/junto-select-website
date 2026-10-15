@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import SiteHeader from "@/components/salon/SiteHeader";
-import { FIGURES, joinHref } from "@/lib/site/content";
+import { FIGURES, MATCHMAKING_HREF, joinHref } from "@/lib/site/content";
 import clubPhoto from "../../../../public/images/conversation-champagne.jpg";
 
 export const metadata: Metadata = {
   title: "El Club · Comunidad privada de solteros",
   description:
-    "Así es Junto Select: un club social privado para solteros a partir de 40. Encuentros con plazas limitadas en lugares con encanto, una comunidad que crece e introducciones privadas.",
+    "Así es Junto Select: un club social privado para solteros a partir de 40. Encuentros con plazas limitadas en lugares con encanto, una comunidad que crece y un servicio de matchmaking privado.",
   alternates: { canonical: "/club" },
 };
 
@@ -20,13 +20,13 @@ const LEVELS = [
   },
   {
     n: "II",
-    title: "Introducciones privadas",
-    text: "Creas tu perfil privado, que nunca se publica, y podemos presentarte a un miembro Select compatible. La decisión es siempre de los dos.",
+    title: "La red privada",
+    text: "Creas tu perfil privado, que nunca se publica, y podemos tenerte en cuenta para futuras introducciones. La decisión es siempre de los dos.",
   },
   {
     n: "III",
-    title: "Membresía Select",
-    text: "Para quienes quieren formar parte del club por completo: buscamos activamente por ti, una comunidad selecta y un 20 % de descuento en un encuentro al mes.",
+    title: "Matchmaking privado",
+    text: "Para quienes prefieren delegar la búsqueda: una entrevista personal, candidatos seleccionados uno a uno y la primera cita organizada por nosotros.",
   },
 ];
 
@@ -100,8 +100,8 @@ export default function ClubPage() {
             <Link className="btn btn-laton" href={joinHref()}>
               Recibir invitaciones
             </Link>
-            <Link className="link" href="/membresia">
-              Descubre la Membresía Select
+            <Link className="link" href={MATCHMAKING_HREF}>
+              Descubre el matchmaking privado
             </Link>
           </div>
         </div>

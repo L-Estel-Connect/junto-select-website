@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { MEMBERSHIP_SALES_OPEN } from "@/lib/billing/membershipSales";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireFirebaseUser } from "@/lib/firebase/serverAuth";
@@ -44,6 +45,10 @@ const MARKET_ANSWERS: MarketAvailability[] = [
  * the existing route (the last two live in createMembershipCheckout).
  */
 export async function POST(request: Request) {
+  // Membresía is closed to new subscriptions; checked before anything is written.
+  if (!MEMBERSHIP_SALES_OPEN) {
+    return NextResponse.json({ ok: false, error: "membership_sales_closed" }, { status: 403 });
+  }
   const auth = await requireFirebaseUser(request);
   if (auth instanceof NextResponse) return auth;
   const { uid, email } = auth;

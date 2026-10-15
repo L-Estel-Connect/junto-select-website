@@ -3,7 +3,7 @@ import Link from "next/link";
 import SiteHeader from "@/components/salon/SiteHeader";
 import EventCards from "@/components/salon/EventCards";
 import CityLinks from "@/components/salon/CityLinks";
-import { FIGURES, joinHref } from "@/lib/site/content";
+import { FIGURES, MATCHMAKING_HREF, PRIVATE_POOL_HREF, joinHref } from "@/lib/site/content";
 import { getUpcomingEvents } from "@/lib/site/events";
 import heroPhoto from "../../../public/images/hero.png";
 import clubPhoto from "../../../public/images/who-you-meet.png";
@@ -15,7 +15,7 @@ const organizationJsonLd = {
   name: "Junto Select",
   url: "https://juntoselect.com",
   description:
-    "Club social privado para solteros a partir de 40: encuentros con plazas limitadas, experiencias cuidadosamente elegidas e introducciones privadas. En Madrid y, próximamente, en Valencia, Barcelona y Málaga.",
+    "Club social privado para solteros a partir de 40: encuentros con plazas limitadas, experiencias cuidadosamente elegidas y un servicio de matchmaking privado. En Madrid y, próximamente, en Valencia, Barcelona y Málaga.",
   address: { "@type": "PostalAddress", addressLocality: "Madrid", addressCountry: "ES" },
 };
 
@@ -44,8 +44,8 @@ export default async function Home() {
           </h1>
           <div className="hero-row">
             <p>
-              Encuentros exclusivos, experiencias cuidadosamente elegidas e introducciones privadas para
-              solteros que buscan una conexión auténtica. En Madrid y, próximamente, en Valencia, Barcelona y
+              Encuentros exclusivos, experiencias cuidadosamente elegidas y un servicio de matchmaking privado
+              para solteros que buscan una conexión auténtica. En Madrid y, próximamente, en Valencia, Barcelona y
               Málaga.
             </p>
             <div className="hero-cta">
@@ -53,8 +53,8 @@ export default async function Home() {
                 <Link className="btn btn-laton" href={joinHref()}>
                   Recibir invitaciones
                 </Link>
-                <Link className="link" href="/membresia">
-                  Descubre la Membresía Select
+                <Link className="link" href={MATCHMAKING_HREF}>
+                  Descubre el matchmaking privado
                 </Link>
               </div>
             </div>
@@ -99,10 +99,7 @@ export default async function Home() {
             <div>
               <p className="eyebrow tinto-eyebrow">En Madrid</p>
               <h2 id="ev-h">Próximos encuentros</h2>
-              <p className="lede">
-                Abiertos a todos, con plazas limitadas. Los miembros Select reciben cada mes un código del 20 % para
-                un encuentro elegible.
-              </p>
+              <p className="lede">Abiertos a todos, con plazas limitadas.</p>
             </div>
             <div className="sec-links">
               <Link className="link" href="/eventos">
@@ -122,25 +119,26 @@ export default async function Home() {
           <Image src={selectPhoto} alt="Dos invitados brindan con champagne a la luz de las velas" fill sizes="(max-width: 1080px) 100vw, 50vw" />
         </div>
         <div className="in">
-          <p className="eyebrow">Membresía Select</p>
+          <p className="eyebrow">Matchmaking privado</p>
           <h2 id="sel-h">
-            Más que asistir, <em>pertenecer.</em>
+            Tú sabes lo que buscas. <em>Nosotros sabemos cómo encontrarlo.</em>
           </h2>
           <p className="txt">
-            La Membresía Select te da acceso a una comunidad selecta, a la búsqueda activa de introducciones y a un
-            20 % de descuento en un encuentro al mes.
+            Para quienes prefieren delegar la búsqueda: una entrevista privada, candidatos seleccionados uno a uno y
+            la primera cita organizada por nosotros.
           </p>
           <ul className="sel-list">
-            <li><span>01</span>Una comunidad selecta</li>
-            <li><span>02</span>Búsqueda activa de introducciones</li>
-            <li><span>03</span>20 % de descuento en un encuentro al mes</li>
+            <li><span>01</span>Una entrevista privada</li>
+            <li><span>02</span>Candidatos seleccionados uno a uno</li>
+            <li><span>03</span>La primera cita, organizada</li>
           </ul>
-          <p className="meta">Disponible en Madrid · Desde 49 € al mes</p>
-          <Link className="link" href="/membresia" style={{ justifySelf: "start" }}>
-            Descubre la Membresía Select
+          <p className="meta">Madrid · Programas de seis meses</p>
+          <Link className="link" href={MATCHMAKING_HREF} style={{ justifySelf: "start" }}>
+            Descubre el matchmaking privado
           </Link>
           <p className="sel-alt">
-            ¿Solo quieres venir a los encuentros? <Link href={joinHref()}>Recibe nuestras invitaciones</Link>.
+            ¿Prefieres que te tengamos en cuenta para futuras introducciones?{" "}
+            <Link href={PRIVATE_POOL_HREF}>Forma parte de nuestra red privada</Link>.
           </p>
         </div>
       </section>

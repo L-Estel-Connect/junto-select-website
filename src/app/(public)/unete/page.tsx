@@ -30,7 +30,7 @@ export default async function JoinPage({ searchParams }: PageProps<"/unete">) {
               Te escribimos con cada nuevo encuentro y serás de los primeros en saber cuándo llegamos a tu ciudad.
             </p>
             <p className="note">
-              Hoy, los encuentros y las introducciones privadas funcionan en Madrid. Valencia, Barcelona y Málaga
+              Hoy, los encuentros y el matchmaking privado funcionan en Madrid. Valencia, Barcelona y Málaga
               llegarán pronto.
             </p>
           </div>

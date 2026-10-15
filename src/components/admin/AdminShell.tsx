@@ -9,6 +9,7 @@ import { refreshAdminSessionCookie } from "@/lib/admin/adminFetch";
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Resumen" },
+  { href: "/admin/solicitudes", label: "Solicitudes" },
   { href: "/admin/members", label: "Miembros" },
   { href: "/admin/matching", label: "Matching" },
   { href: "/admin/proposals", label: "Propuestas" },

@@ -1,5 +1,6 @@
 "use client";
 
+import { MEMBERSHIP_SALES_OPEN } from "@/lib/billing/membershipSales";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -372,30 +373,47 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
               hasta que elijas.
             </p>
           )}
-          <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">Membresía Select</p>
-          <h2 className="mt-2 font-serif text-[26px] font-normal leading-snug text-ink sm:text-[30px]">Elige tu plan</h2>
-          <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-            Tu búsqueda activa empieza en cuanto se confirme el pago. Los tres planes incluyen lo mismo; solo
-            cambian la duración y el precio.
-          </p>
-          <PlanCheckoutForm
-            marketEligible={isMarketAvailabilityEligible(profile)}
-            returnTo="profile"
-            beforeCheckout={recordConsent}
-            disabledReason={consent ? null : "Para continuar, marca la casilla de participación."}
-            leadingConfirmation={consentBox}
-            leadingConfirmed={consent}
-          />
+          {MEMBERSHIP_SALES_OPEN ? (
+            <>
+              <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">Membresía Select</p>
+              <h2 className="mt-2 font-serif text-[26px] font-normal leading-snug text-ink sm:text-[30px]">Elige tu plan</h2>
+              <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+                Tu búsqueda activa empieza en cuanto se confirme el pago. Los tres planes incluyen lo mismo; solo
+                cambian la duración y el precio.
+              </p>
+              <PlanCheckoutForm
+                marketEligible={isMarketAvailabilityEligible(profile)}
+                returnTo="profile"
+                beforeCheckout={recordConsent}
+                disabledReason={consent ? null : "Para continuar, marca la casilla de participación."}
+                leadingConfirmation={consentBox}
+                leadingConfirmed={consent}
+              />
+            </>
+          ) : (
+            // Membresía is closed: a profile started on the active journey
+            // finishes as a private profile, with the same consent box.
+            consentBox
+          )}
 
-          <div className="mt-12 border-t border-hairline pt-8">
-            <p className="text-[15px] font-medium text-ink">¿Prefieres empezar sin búsqueda activa?</p>
-            <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-              Tu perfil privado forma parte de la red y podemos proponerte a un miembro Select compatible. Puedes
-              activar la búsqueda más adelante sin perder tu perfil.
-            </p>
-            <p className="mt-3 max-w-[46ch] text-[14px] leading-relaxed text-ink-soft">
-              Si no eliges ninguna opción, tu perfil queda guardado y no se propone a nadie.
-            </p>
+          <div className={MEMBERSHIP_SALES_OPEN ? "mt-12 border-t border-hairline pt-8" : "mt-8"}>
+            {MEMBERSHIP_SALES_OPEN ? (
+              <>
+                <p className="text-[15px] font-medium text-ink">¿Prefieres empezar sin búsqueda activa?</p>
+                <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+                  Tu perfil privado forma parte de la red y podemos proponerte a un miembro Select compatible.
+                  Puedes activar la búsqueda más adelante sin perder tu perfil.
+                </p>
+                <p className="mt-3 max-w-[46ch] text-[14px] leading-relaxed text-ink-soft">
+                  Si no eliges ninguna opción, tu perfil queda guardado y no se propone a nadie.
+                </p>
+              </>
+            ) : (
+              <p className="max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+                Tu perfil privado formará parte de nuestra red. Si creemos que hay alguien para ti, te lo
+                propondremos en privado.
+              </p>
+            )}
             <button
               type="button"
               disabled={saving}
@@ -449,7 +467,7 @@ function CompletionScreen({ active, firstName }: { active: boolean; firstName: s
         "Solo compartimos tu contacto si los dos aceptáis.",
       ]
     : [
-        "Si encajas con un miembro Select, te enviaremos una propuesta.",
+        "Si creemos que hay alguien para ti, te lo propondremos en privado.",
         "Solo compartimos tu contacto si los dos aceptáis.",
         "Puedes actualizar tu perfil cuando quieras.",
       ];
@@ -477,11 +495,6 @@ function CompletionScreen({ active, firstName }: { active: boolean; firstName: s
       <Link href="/member" className={`${primaryButtonClasses} mt-10 w-full sm:w-auto sm:self-start`}>
         Ir a mi espacio
       </Link>
-      {!active && (
-        <Link href="/member/plan" className={`mt-5 text-sm ${linkClasses}`}>
-          Conocer la Membresía Select
-        </Link>
-      )}
     </div>
   );
 }

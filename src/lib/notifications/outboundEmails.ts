@@ -33,7 +33,11 @@ export type OutboundEmailType =
    * echoed back to a third party, which doesn't apply to a business's own
    * unsolicited inquiry about itself.
    */
-  | "collaboration_proposal";
+  | "collaboration_proposal"
+  /** Internal lead alert to the Junto contact address, from /api/matchmaking/inquiry. Carries the applicant's details on purpose, like collaboration_proposal. */
+  | "matchmaking_inquiry"
+  /** Acknowledgement to the applicant's own address. No profile data, only their first name and the programme they chose. */
+  | "matchmaking_inquiry_received";
 
 export type OutboundEmailStatus = "pending" | "sending" | "sent" | "failed";
 
