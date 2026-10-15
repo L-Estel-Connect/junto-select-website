@@ -22,6 +22,8 @@ export interface InquiryRow {
   note: string;
   statusUpdatedBy: string | null;
   notificationQueueError: string | null;
+  /** Set once the request was turned into a client (/admin/clientes). */
+  clientId: string | null;
 }
 
 function isoOrNull(ts: unknown): string | null {
@@ -55,6 +57,7 @@ export async function listInquiries(): Promise<InquiryRow[]> {
       note: str(x.note),
       statusUpdatedBy: typeof x.statusUpdatedBy === "string" ? x.statusUpdatedBy : null,
       notificationQueueError: typeof x.notificationQueueError === "string" ? x.notificationQueueError : null,
+      clientId: typeof x.clientId === "string" ? x.clientId : null,
     };
   });
 }

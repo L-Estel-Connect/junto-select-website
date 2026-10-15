@@ -1,4 +1,5 @@
 import "server-only";
+import { AUTOMATIC_INTRODUCTIONS_ENABLED, AUTOMATIC_INTRODUCTION_EMAILS } from "@/lib/matching/automaticIntroductions";
 import { adminDb } from "@/lib/firebase/admin";
 
 /**
@@ -89,6 +90,12 @@ export async function queueOutboundEmail(
   >,
   id?: string,
 ): Promise<void> {
+  // Defence in depth: with automatic introductions off, nothing should
+  // produce these, and nothing is sent if something ever does.
+  if (!AUTOMATIC_INTRODUCTIONS_ENABLED && (AUTOMATIC_INTRODUCTION_EMAILS as readonly string[]).includes(entry.type)) {
+    console.warn(`queueOutboundEmail: ${entry.type} not queued, automatic introductions are off`);
+    return;
+  }
   const ref = id ? adminDb.collection("outboundEmails").doc(id) : adminDb.collection("outboundEmails").doc();
 
   if (id) {

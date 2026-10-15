@@ -1,4 +1,5 @@
 import "server-only";
+import { AUTOMATIC_INTRODUCTIONS_ENABLED } from "./automaticIntroductions";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import type { ProfileDocument } from "@/lib/introduction/types";
@@ -71,6 +72,8 @@ function toDate(value: unknown): Date | null {
  * of proposals into a single run.
  */
 export async function runDueMatchingScan(now: Date = new Date()): Promise<DueScanResult> {
+  // Switched off: the scheduled job still answers, with nothing done.
+  if (!AUTOMATIC_INTRODUCTIONS_ENABLED) return emptyResult(0);
   const snap = await adminDb
     .collection("profiles")
     .where("meta.searchStatus", "==", "active_search")
@@ -92,6 +95,7 @@ export async function runDueMatchingScan(now: Date = new Date()): Promise<DueSca
  * a member who isn't paying, or whose period isn't due, is a no-op.
  */
 export async function runDueMatchingForUid(uid: string, now: Date = new Date()): Promise<DueScanResult> {
+  if (!AUTOMATIC_INTRODUCTIONS_ENABLED) return emptyResult(0);
   const snap = await adminDb.doc(`profiles/${uid}`).get();
   if (!snap.exists) return emptyResult(0);
   const profile = snap.data() as ProfileDocument;

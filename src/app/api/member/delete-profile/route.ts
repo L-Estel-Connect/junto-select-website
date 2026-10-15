@@ -5,6 +5,8 @@ import { requireFirebaseUser } from "@/lib/firebase/serverAuth";
 import { getStripe } from "@/lib/stripe/client";
 import { queueOutboundEmail } from "@/lib/notifications/outboundEmails";
 import type { BillingDocument, BillingStatus } from "@/lib/billing/types";
+import { removeCandidateFromShortlists } from "@/lib/clients/shortlist";
+import { CANDIDATE_LOCATIONS } from "@/lib/clients/locations";
 
 export const runtime = "nodejs";
 
@@ -138,6 +140,15 @@ export async function POST(request: Request) {
     // is deleted (Storage rules are owner-only), is a lesser harm than
     // aborting a deletion the member explicitly requested.
     console.error(`delete-profile: failed to delete photos for uid ${uid}`, error);
+  }
+
+  try {
+    // Off every client's preselection, and the team's note on where they live.
+    // Not fatal: a deleted profile is already hidden from results and lists.
+    await removeCandidateFromShortlists(uid);
+    await adminDb.collection(CANDIDATE_LOCATIONS).doc(uid).delete();
+  } catch (error) {
+    console.error(`delete-profile: failed to remove uid ${uid} from client shortlists`, error);
   }
 
   try {

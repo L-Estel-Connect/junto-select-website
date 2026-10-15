@@ -5,7 +5,8 @@ import type { ProfileDocument } from "@/lib/introduction/types";
 import { withProfileDefaults } from "@/lib/introduction/types";
 import { resolvePersonId } from "./identity";
 import { isEligibleForActiveSearch } from "./activeSearch";
-import { isProfileInEligiblePool } from "./eligibility";
+import { isProfileInEligiblePool, type PoolOptions } from "./eligibility";
+import { AUTOMATIC_INTRODUCTIONS_ENABLED, AutomaticIntroductionsDisabledError } from "./automaticIntroductions";
 import { evaluateHardFilters } from "./hardFilters";
 import { scorePair, SCORING_VERSION } from "./scoring";
 import type { ScoreResult } from "./scoring";
@@ -57,7 +58,7 @@ export interface EligibleProfile {
  * dashboard's manual-suggestion search can offer the same candidate pool
  * the algorithm itself draws from, rather than a separate ad hoc query.
  */
-export async function loadEligiblePool(): Promise<EligibleProfile[]> {
+export async function loadEligiblePool(options: PoolOptions = {}): Promise<EligibleProfile[]> {
   const snap = await adminDb
     .collection("profiles")
     .where("meta.profileStatus", "==", "active_for_matching")
@@ -81,7 +82,7 @@ export async function loadEligiblePool(): Promise<EligibleProfile[]> {
     // covers duplicate exclusion and the Madrid-only pool gate — see
     // eligibility.ts (shared with manualSuggestion.ts, so both draw from
     // the exact same definition of "in the pool").
-    if (!isProfileInEligiblePool(profile)) continue;
+    if (!isProfileInEligiblePool(profile, options)) continue;
     const personId = resolvePersonId(uid, profile);
     if (!byPersonId.has(personId)) {
       byPersonId.set(personId, { uid, personId, profile });
@@ -339,6 +340,7 @@ export async function runMatchingCycle(
   mode: CycleMode,
   overrides: Partial<CycleConfig> = {},
 ): Promise<MatchingCycleDocument> {
+  if (!AUTOMATIC_INTRODUCTIONS_ENABLED) throw new AutomaticIntroductionsDisabledError();
   const cycleRef = adminDb.doc(`matchingCycles/${cycleId}`);
   const existingSnap = await cycleRef.get();
 

@@ -29,7 +29,7 @@ const LANGUAGE_LABELS: Record<string, string> = Object.fromEntries(
 
 // Dealbreaker-only values with no corresponding onboarding step.
 const DISTANCE_LABELS: Record<string, string> = {
-  misma_ciudad: "Misma ciudad",
+  misma_ciudad: "Misma ciudad (hasta 20 km)",
   hasta_50km: "Hasta 50 km (no aplicado — sin datos de distancia)",
   sin_limite: "Sin límite",
 };
@@ -122,6 +122,8 @@ export function hardFilterFailureLabel(
  * another admin suggesting the same pair first).
  */
 export const MANUAL_SUGGESTION_ERROR_LABELS: Record<string, string> = {
+  automatic_introductions_disabled:
+    "Las introducciones automáticas están desactivadas. Gestiona las propuestas desde Clientes.",
   recipient_not_found: "No se encuentra el perfil de la persona destinataria.",
   candidate_not_found: "No se encuentra el perfil de la persona sugerida.",
   same_person: "No se puede sugerir a la misma persona.",

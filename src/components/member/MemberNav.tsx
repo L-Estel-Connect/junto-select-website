@@ -10,6 +10,7 @@ import { useMemberUid } from "./MemberContext";
 import { useSharedProfile } from "@/lib/introduction/profileCache";
 import { useBilling } from "@/lib/billing/useBilling";
 import type { MemberLifecycleSummary } from "@/lib/matching/memberLifecycleTypes";
+import { AUTOMATIC_INTRODUCTIONS_ENABLED } from "@/lib/matching/automaticIntroductions";
 
 // "Ver mi perfil" and "Editar mi perfil" used to be two separate nav rows
 // pointing at the same /member/profile route (the second just deep-linking
@@ -60,10 +61,17 @@ export default function MemberNav() {
   const navItems = NAV_ITEMS.filter(
     (i) =>
       (i.href !== "/member/plan" || hasPlan) &&
-      !(profile && !profile.meta.onboardingFinalized && (i.href === "/member/proposals" || i.href === "/member/connections")),
+      !(
+        (!AUTOMATIC_INTRODUCTIONS_ENABLED || (profile && !profile.meta.onboardingFinalized)) &&
+        (i.href === "/member/proposals" || i.href === "/member/connections")
+      ),
   );
+  // Nothing to count while automatic introductions are off.
   const summaryQuery = useMemberQuery(
-    () => memberFetchJson<{ summary: MemberLifecycleSummary }>("/api/member/lifecycle-summary"),
+    () =>
+      AUTOMATIC_INTRODUCTIONS_ENABLED
+        ? memberFetchJson<{ summary: MemberLifecycleSummary }>("/api/member/lifecycle-summary")
+        : Promise.resolve({ summary: null as MemberLifecycleSummary | null }),
     [uid],
   );
   const summary = summaryQuery.data?.summary;

@@ -7,16 +7,22 @@ import { useAuth } from "@/lib/firebase/useAuth";
 import { signOutUser } from "@/lib/firebase/auth";
 import { refreshAdminSessionCookie } from "@/lib/admin/adminFetch";
 
+// The daily matchmaking work first; the old automatic-introductions
+// screens stay reachable, read-only in practice, under "Archivo".
 const NAV_ITEMS = [
-  { href: "/admin", label: "Resumen" },
+  { href: "/admin/clientes", label: "Clientes" },
   { href: "/admin/solicitudes", label: "Solicitudes" },
-  { href: "/admin/members", label: "Miembros" },
+  { href: "/admin/members", label: "Candidatos" },
+  { href: "/admin/eventos", label: "Eventos" },
+];
+
+const ARCHIVE_ITEMS = [
+  { href: "/admin", label: "Resumen" },
   { href: "/admin/matching", label: "Matching" },
   { href: "/admin/proposals", label: "Propuestas" },
   { href: "/admin/introductions", label: "Introducciones" },
   { href: "/admin/review", label: "Revisión" },
   { href: "/admin/legacy", label: "Legacy" },
-  { href: "/admin/eventos", label: "Eventos" },
 ];
 
 const REFRESH_INTERVAL_MS = 45 * 60 * 1000;
@@ -89,21 +95,16 @@ export default function AdminShell({
         <p className="mt-1 text-[15px] font-medium text-ink">Panel de administración</p>
 
         <nav className="mt-10 flex flex-col gap-1">
-          {NAV_ITEMS.map((item) => {
-            const active =
-              item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`rounded-lg px-3 py-2.5 text-[14px] font-medium transition-colors ${
-                  active ? "bg-rose-tint text-ink" : "text-ink-soft hover:bg-rose-tint/60 hover:text-ink"
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
+          {NAV_ITEMS.map((item) => (
+            <NavLink key={item.href} item={item} pathname={pathname} />
+          ))}
+        </nav>
+
+        <p className="mt-8 px-3 text-[11px] font-medium uppercase tracking-[0.18em] text-ink-soft/80">Archivo</p>
+        <nav className="mt-2 flex flex-col gap-0.5">
+          {ARCHIVE_ITEMS.map((item) => (
+            <NavLink key={item.href} item={item} pathname={pathname} small />
+          ))}
         </nav>
 
         <div className="mt-auto pt-8">
@@ -122,5 +123,27 @@ export default function AdminShell({
 
       <main className="min-w-0 flex-1 overflow-x-auto px-10 py-10">{children}</main>
     </div>
+  );
+}
+
+function NavLink({
+  item,
+  pathname,
+  small = false,
+}: {
+  item: { href: string; label: string };
+  pathname: string;
+  small?: boolean;
+}) {
+  const active = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
+  return (
+    <Link
+      href={item.href}
+      className={`rounded-lg px-3 font-medium transition-colors ${small ? "py-1.5 text-[13px]" : "py-2.5 text-[14px]"} ${
+        active ? "bg-rose-tint text-ink" : "text-ink-soft hover:bg-rose-tint/60 hover:text-ink"
+      }`}
+    >
+      {item.label}
+    </Link>
   );
 }

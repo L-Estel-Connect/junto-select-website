@@ -19,7 +19,17 @@ import { diagnoseProfileStatus, isMarketAvailabilityEligible } from "@/lib/intro
  * (resident / near / frequent visitor — all equivalent) is irrelevant to
  * whether or how well they match.
  */
-export function isProfileInEligiblePool(profile: ProfileDocument): boolean {
+export interface PoolOptions {
+  /**
+   * The automatic monthly cycle is Madrid-only (V1 scope). The team's
+   * matchmaking search is national (Lara, 15 Oct 2026) and passes false;
+   * location then becomes a search filter, not a pool gate.
+   */
+  requireMadrid?: boolean;
+}
+
+export function isProfileInEligiblePool(profile: ProfileDocument, options: PoolOptions = {}): boolean {
+  const requireMadrid = options.requireMadrid ?? true;
   // NON-NEGOTIABLE, checked first and unconditionally: a legacy-contact
   // profile that hasn't finished activation can NEVER enter the pool,
   // regardless of what `profileStatus` or anything else says — see
@@ -37,6 +47,7 @@ export function isProfileInEligiblePool(profile: ProfileDocument): boolean {
   }
   // V1 product scope: Madrid only — unknown availability is excluded, same
   // as any other unknown self-report data (never assumed compatible).
+  if (!requireMadrid) return true;
   if (profile.visible.market !== "madrid") return false;
   if (!isMarketAvailabilityEligible(profile)) return false;
   return true;

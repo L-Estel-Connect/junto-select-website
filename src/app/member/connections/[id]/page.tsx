@@ -1,5 +1,6 @@
 "use client";
 
+import AutomaticIntroductionsGate from "@/components/member/AutomaticIntroductionsGate";
 import { use } from "react";
 import Link from "next/link";
 import Section from "@/components/Section";
@@ -23,7 +24,7 @@ const linkClasses = "text-ink-soft underline decoration-hairline underline-offse
  * the signed-in member is a genuine party to this exact introduction
  * before returning anything (see getIntroductionDetailForMember).
  */
-export default function ConnectionDetailPage({ params }: { params: Promise<{ id: string }> }) {
+function ConnectionDetailPageContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const uid = useMemberUid();
   const { ready, error: profileError, refresh } = useMemberProfile(uid);
@@ -65,5 +66,13 @@ export default function ConnectionDetailPage({ params }: { params: Promise<{ id:
         </div>
       </div>
     </Section>
+  );
+}
+
+export default function ConnectionDetailPage(props: { params: Promise<{ id: string }> }) {
+  return (
+    <AutomaticIntroductionsGate>
+      <ConnectionDetailPageContent {...props} />
+    </AutomaticIntroductionsGate>
   );
 }

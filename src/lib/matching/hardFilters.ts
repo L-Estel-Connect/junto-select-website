@@ -1,6 +1,8 @@
 import { getAge } from "@/lib/introduction/age";
 import type { ProfileDocument } from "@/lib/introduction/types";
 import type { HardFilterFailureReason } from "./types";
+import { distanceKm, SAME_CITY_RADIUS_KM } from "@/lib/geo/places";
+import { placeOfProfile } from "@/lib/geo/profileLocation";
 
 /**
  * Reciprocal hard filters — a pair is only ever eligible if BOTH people's
@@ -64,17 +66,21 @@ function acceptsAge(profile: ProfileDocument, otherAge: number | null): boolean 
 }
 
 function acceptsDistance(profile: ProfileDocument, other: ProfileDocument): boolean {
-  // No geocoding infra exists yet (no lat/lng on a profile) — "misma
-  // ciudad" is enforced as an exact normalized-city match; "hasta_50km"
-  // and "sin_limite" both pass regardless of city until real distance
-  // data exists. Documented limitation, not a silent approximation.
-  // "hasta_50km" is no longer offered as a UI option for exactly this
-  // reason (see PreferencesSection.tsx) — kept in the type for future use.
+  // "Misma ciudad" means within SAME_CITY_RADIUS_KM (20 km, Lara 15 Oct
+  // 2026) of each other, measured between the municipalities both people
+  // typed (src/lib/geo). When either city can't be placed (empty, unknown
+  // or an unresolved ambiguous name), it falls back to the old exact
+  // text comparison, so an unplaceable city never passes more easily
+  // than before. "hasta_50km" and "sin_limite" pass regardless; 50 km is
+  // still not offered in the UI (see PreferencesSection.tsx).
   if (profile.dealbreakers.maxDistance !== "misma_ciudad") return true;
   // Two empty/unknown city strings would normalize-equal each other
   // (both ""), which would wrongly pass a "misma ciudad" requirement —
   // guard against that explicitly rather than relying on string equality.
   if (!profile.visible.city.trim() || !other.visible.city.trim()) return false;
+  const here = placeOfProfile(profile);
+  const there = placeOfProfile(other);
+  if (here && there) return distanceKm(here, there) <= SAME_CITY_RADIUS_KM;
   return normalizedCity(profile.visible.city) === normalizedCity(other.visible.city);
 }
 

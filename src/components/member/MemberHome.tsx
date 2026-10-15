@@ -13,6 +13,7 @@ import { memberFetchJson } from "@/lib/member/memberFetch";
 import { useMemberQuery } from "@/lib/member/useMemberQuery";
 import type { MemberLifecycleSummary } from "@/lib/matching/memberLifecycleTypes";
 import type { ActiveReconnectEventView } from "@/lib/eventReconnect/types";
+import { AUTOMATIC_INTRODUCTIONS_ENABLED } from "@/lib/matching/automaticIntroductions";
 
 const linkClasses =
   "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
@@ -39,8 +40,14 @@ export default function MemberHome({ uid }: { uid: string }) {
   const router = useRouter();
   const { profile, error: profileError, refresh: refreshProfile } = useSharedProfile(uid);
   const { billing, loading: billingLoading } = useBilling(uid);
+  // Proposals, invitations and connections belong to the automatic
+  // introductions; while they're off the home shows the profile and
+  // Reconnect only (see automaticIntroductions.ts).
   const summaryQuery = useMemberQuery(
-    () => memberFetchJson<{ summary: MemberLifecycleSummary }>("/api/member/lifecycle-summary"),
+    () =>
+      AUTOMATIC_INTRODUCTIONS_ENABLED
+        ? memberFetchJson<{ summary: MemberLifecycleSummary }>("/api/member/lifecycle-summary")
+        : Promise.resolve({ summary: null as MemberLifecycleSummary | null }),
     [uid],
   );
   const reconnectQuery = useMemberQuery(
@@ -154,7 +161,7 @@ export default function MemberHome({ uid }: { uid: string }) {
         </Link>
       </div>
 
-      {!hasPending && (
+      {AUTOMATIC_INTRODUCTIONS_ENABLED && !hasPending && (
         <div className="mt-14 border-t border-hairline pt-8">
           <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">
             Tus propuestas

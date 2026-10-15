@@ -22,6 +22,13 @@ import { primaryButtonClasses } from "@/lib/styles";
 import { IntroductionError, IntroductionLoading } from "./RequireIntroductionAuth";
 import { OnboardingStepper, inOnboarding } from "./OnboardingFrame";
 import { preferencesMissingFields } from "@/lib/introduction/completion";
+import {
+  ACTIVITY_OPTIONS,
+  DISTANCE_OPTIONS,
+  FREQUENCY_OPTIONS,
+  GENDER_OPTIONS,
+  INTENTION_OPTIONS,
+} from "@/lib/introduction/preferenceOptions";
 
 // What the "Continuar" hint names when something is still missing.
 const MISSING_LABELS: Record<string, string> = {
@@ -35,40 +42,6 @@ const MISSING_LABELS: Record<string, string> = {
   smokingAccepted: "tabaco",
   partnerYoungChildrenMatters: "hijos menores de 15 años",
 };
-
-const GENDER_OPTIONS = [
-  { value: "mujer", label: "Mujeres" },
-  { value: "hombre", label: "Hombres" },
-];
-
-// "hasta_50km" is deliberately not offered here — there's no distance
-// data (no geocoding) to actually enforce it, and it would behave exactly
-// like "sin_limite" while looking like a real, distinct constraint to the
-// person choosing it. The value still exists in DistancePreference for
-// when real distance data exists later.
-const DISTANCE_OPTIONS = [
-  { value: "misma_ciudad", label: "En mi misma ciudad" },
-  { value: "sin_limite", label: "Sin límite" },
-];
-
-const INTENTION_OPTIONS = [
-  { value: "relacion_seria", label: "Una relación seria" },
-  { value: "matrimonio_familia", label: "Matrimonio o formar una familia" },
-  { value: "aun_no_lo_tengo_claro", label: "Aún no lo tiene claro" },
-];
-
-const FREQUENCY_OPTIONS = [
-  { value: "no", label: "No" },
-  { value: "socialmente", label: "Socialmente" },
-  { value: "habitualmente", label: "Habitualmente" },
-];
-
-const ACTIVITY_OPTIONS = [
-  { value: "muy_activo", label: "Muy activo/a" },
-  { value: "activo", label: "Activo/a" },
-  { value: "ocasional", label: "Ocasional" },
-  { value: "poco_activo", label: "Poco activo/a" },
-];
 
 const linkClasses =
   "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
