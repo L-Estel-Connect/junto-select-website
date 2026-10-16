@@ -44,6 +44,8 @@ export interface PoolProfile {
   /** Spanish, for the admin: what's left before the profile can be proposed. */
   missing: string[];
   suspectedDuplicate: boolean;
+  /** The person asked not to be presented for now ("Dejar de ser presentado/a"). */
+  paused: boolean;
   /** The client this person also is, when their emails match. */
   clientId: string | null;
 }
@@ -107,6 +109,7 @@ export async function loadPoolProfiles(clients?: ClientView[]): Promise<PoolProf
       complete: missing.length === 0,
       missing,
       suspectedDuplicate: profile.meta.duplicateStatus === "suspected",
+      paused: profile.meta.presentationsPaused === true,
       clientId: email ? clientByEmail.get(email) ?? null : null,
     };
     const seen = byPerson.get(entry.personId);

@@ -12,29 +12,15 @@ import { isEntitledStatus } from "@/lib/billing/types";
 import { memberFetchJson } from "@/lib/member/memberFetch";
 import { useMemberQuery } from "@/lib/member/useMemberQuery";
 import type { MemberLifecycleSummary } from "@/lib/matching/memberLifecycleTypes";
-import type { ActiveReconnectEventView } from "@/lib/eventReconnect/types";
 import { AUTOMATIC_INTRODUCTIONS_ENABLED } from "@/lib/matching/automaticIntroductions";
+import { auth } from "@/lib/firebase/client";
+import PrivateProfileView from "./PrivateProfileView";
 
-const linkClasses =
-  "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
-
-function StatusRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between border-b border-hairline py-4">
-      <span className="text-[15px] text-ink">{label}</span>
-      <span className="text-[13px] text-ink-soft">{value}</span>
-    </div>
-  );
-}
 
 /**
- * The one place a member sees, at a glance: profile complete, search
- * active/passive, and — most important, shown FIRST and never subordinate
- * to membership/billing state — whether something needs their attention
- * right now (a proposal waiting, someone waiting on them, or a new mutual
- * introduction). See getLifecycleSummaryForMember for the three cheap
- * counts this reads; the full lists live on /member/proposals and
- * /member/connections.
+ * /member: sends an unfinished profile on to its next step, and otherwise
+ * shows the private profile itself (PrivateProfileView), which is the
+ * member area's home page.
  */
 export default function MemberHome({ uid }: { uid: string }) {
   const router = useRouter();
@@ -48,10 +34,6 @@ export default function MemberHome({ uid }: { uid: string }) {
       AUTOMATIC_INTRODUCTIONS_ENABLED
         ? memberFetchJson<{ summary: MemberLifecycleSummary }>("/api/member/lifecycle-summary")
         : Promise.resolve({ summary: null as MemberLifecycleSummary | null }),
-    [uid],
-  );
-  const reconnectQuery = useMemberQuery(
-    () => memberFetchJson<{ event: ActiveReconnectEventView | null }>("/api/member/reconnect/active"),
     [uid],
   );
 
@@ -83,97 +65,26 @@ export default function MemberHome({ uid }: { uid: string }) {
   }
 
   const summary = summaryQuery.data?.summary ?? null;
-  // Paid Select membership = "Búsqueda activa"; otherwise the finalized
-  // profile is a passive one (it can still be proposed to Select members).
-  const modeLabel = billingLoading ? "…" : billing && isEntitledStatus(billing.status) ? "Búsqueda activa" : "Perfil privado";
-
   const pendingCount = summary
     ? summary.proposalsWaitingForDecision + summary.invitationsWaitingForDecision
     : 0;
-  const hasPending = pendingCount > 0;
-  const hasIntroductions = (summary?.mutualIntroductionsCount ?? 0) > 0;
 
+  // The private profile is the home page. Proposals only exist while the
+  // automatic introductions are switched on (off by default).
   return (
-    <div className="mx-auto flex w-full max-w-[560px] flex-col py-14">
-      <p className="font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">
-        Hola, {profile.visible.firstName || "de nuevo"}
-      </p>
-      <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-        Tu perfil está listo. Ya formas parte de Junto Select. Cuando
-        encontremos a alguien que encaje contigo, te avisaremos.
-      </p>
-
-      {hasPending && (
-        <div className="mt-8 rounded-md border border-[var(--laton,#cdbfad)] bg-white/60 p-6">
-          <p className="text-[15px] font-medium text-ink">
-            {summary!.invitationsWaitingForDecision > 0 && summary!.proposalsWaitingForDecision > 0
-              ? "Tienes una propuesta y alguien esperando tu respuesta."
-              : summary!.invitationsWaitingForDecision > 0
-                ? "Alguien está esperando tu respuesta."
-                : "Tienes una propuesta esperando tu respuesta."}
-          </p>
-          <Link href="/member/proposals" className={`${primaryButtonClasses} mt-4 inline-flex`}>
-            Ver ahora
-          </Link>
-        </div>
-      )}
-
-      {!hasPending && hasIntroductions && (
-        <div className="mt-8 rounded-md border border-hairline bg-white/60 p-6">
-          <p className="text-[15px] font-medium text-ink">Tienes una conexión mutua.</p>
-          <Link href="/member/connections" className={`mt-3 inline-block text-sm ${linkClasses}`}>
-            Ver mi conexión
-          </Link>
-        </div>
-      )}
-
-      {/* Additive-only: this card exists purely to link an already-finalized
-          member (e.g. Lara) to /reconnect/[eventId] — everything Reconnect
-          actually does lives entirely on that route, never duplicated here.
-          reconnectQuery resolves to `event: null` for the vast majority of
-          members almost all the time (no event, no window open, nothing
-          pending), so nothing renders — exactly the "nothing exposed
-          before/during the event" state the product spec requires. */}
-      {reconnectQuery.data?.event && (
-        <div className="mt-8 rounded-md border border-hairline bg-white/60 p-6">
-          <p className="text-[15px] font-medium text-ink">Reconnect · {reconnectQuery.data.event.eventLabel}</p>
-          <p className="mt-1 text-[13px] text-ink-soft">¿Conociste a alguien que te gustaría volver a ver?</p>
-          <Link
-            href={`/reconnect/${reconnectQuery.data.event.eventId}`}
-            className={`mt-3 inline-block text-sm ${linkClasses}`}
-          >
-            Reconectar
-          </Link>
-        </div>
-      )}
-
-      <div className="mt-10 border-t border-hairline">
-        <StatusRow label="Perfil" value="Completo" />
-        <StatusRow label="Modalidad" value={modeLabel} />
-      </div>
-
-      <div className="mt-8 flex flex-wrap items-center gap-6">
-        <Link href="/member/profile" className={primaryButtonClasses}>
-          Ver mi perfil
-        </Link>
-        <Link href="/member/profile#editar-perfil" className={`text-sm ${linkClasses}`}>
-          Editar mi perfil
-        </Link>
-      </div>
-
-      {AUTOMATIC_INTRODUCTIONS_ENABLED && !hasPending && (
-        <div className="mt-14 border-t border-hairline pt-8">
-          <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">
-            Tus propuestas
-          </p>
-          <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-            Cuando tengamos una propuesta para ti, o alguien se interese en conocerte, aparecerá aquí.
-          </p>
-          <Link href="/member/proposals" className={`mt-3 inline-block text-sm ${linkClasses}`}>
-            Ver mis propuestas
-          </Link>
-        </div>
-      )}
-    </div>
+    <PrivateProfileView
+      uid={uid}
+      email={auth.currentUser?.email ?? null}
+      notice={
+        AUTOMATIC_INTRODUCTIONS_ENABLED && pendingCount > 0 ? (
+          <div className="mt-8 rounded-md border border-[var(--laton,#cdbfad)] bg-white/60 p-6">
+            <p className="text-[15px] font-medium text-ink">Tienes una propuesta esperando tu respuesta.</p>
+            <Link href="/member/proposals" className={`${primaryButtonClasses} mt-4 inline-flex`}>
+              Ver ahora
+            </Link>
+          </div>
+        ) : null
+      }
+    />
   );
 }

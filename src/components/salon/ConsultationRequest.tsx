@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   CHANNEL_OPTIONS,
@@ -13,6 +13,9 @@ import {
   type InquiryPayload,
   type InquiryProgramme,
 } from "@/lib/matchmaking/inquiry";
+import { watchAuthState } from "@/lib/firebase/auth";
+import { readProfile } from "@/lib/introduction/profile";
+import { getAge } from "@/lib/introduction/age";
 
 /**
  * "Solicitar una entrevista privada": the qualification step before a
@@ -20,7 +23,13 @@ import {
  * for the team (/admin/solicitudes) and emails Junto. Creates no account,
  * profile or payment. The programme is preselected from
  * `?programa=select|privado`.
+ *
+ * Coming from a private profile (`?desde=perfil`), the form is prefilled
+ * with that signed-in person's own name, email, phone, channel, age and
+ * city, so they only check them. Nothing is sent until they submit.
  */
+
+const CHANNEL_FROM_PROFILE: Record<string, InquiryPayload["canal"]> = { whatsapp: "whatsapp", telefono: "llamada", email: "email" };
 
 function programmeFromParam(raw: string | null): InquiryProgramme | "" {
   return raw === "select" || raw === "privado" ? raw : "";
@@ -49,6 +58,37 @@ export default function ConsultationRequest() {
   });
   const [errors, setErrors] = useState<InquiryErrors>({});
   const [status, setStatus] = useState<Status>("idle");
+  const [prefilled, setPrefilled] = useState(false);
+
+  const fromProfile = params.get("desde") === "perfil";
+  useEffect(() => {
+    if (!fromProfile) return;
+    let done = false;
+    const stop = watchAuthState((user) => {
+      if (!user || done) return;
+      done = true;
+      void readProfile(user.uid)
+        .then((p) => {
+          if (!p) return;
+          const bd = p.private.birthDate;
+          const age = bd ? getAge(bd.toDate().toISOString().slice(0, 10)) : null;
+          const canal = p.contactPreferences.preferredMethod ? CHANNEL_FROM_PROFILE[p.contactPreferences.preferredMethod] : undefined;
+          // Only empty fields are filled, so nothing the person already typed is replaced.
+          setData((d) => ({
+            ...d,
+            nombre: d.nombre || p.visible.firstName || "",
+            email: d.email || user.email || "",
+            telefono: d.telefono || p.contactPreferences.phone || "",
+            canal: d.canal || canal || "",
+            edad: d.edad || (age ? String(age) : ""),
+            ciudad: d.ciudad && d.ciudad !== "Madrid" ? d.ciudad : p.visible.city || d.ciudad,
+          }));
+          setPrefilled(true);
+        })
+        .catch(() => {});
+    });
+    return () => stop();
+  }, [fromProfile]);
 
   // A programme card's button changes `?programa=` without remounting.
   const fromUrl = programmeFromParam(params.get("programa"));
@@ -180,6 +220,11 @@ export default function ConsultationRequest() {
 
   return (
     <form className="fform" onSubmit={submit} noValidate aria-label="Solicitar una entrevista privada">
+      {prefilled && (
+        <p className="note-sm" role="status">
+          Hemos completado algunos datos con tu perfil. Revísalos antes de enviar.
+        </p>
+      )}
       <fieldset className="field">
         <legend>Programa que te interesa</legend>
         {chips("programa", PROGRAMME_OPTIONS)}

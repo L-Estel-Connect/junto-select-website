@@ -75,9 +75,9 @@ export const PRIVATE_PROFILE = {
     "Forma parte de nuestra red privada de personas solteras. Crea tu perfil para que podamos tenerte en cuenta en futuras búsquedas de compatibilidad.",
   includes: [
     "Sin suscripciones. Con total discreción.",
-    "Tu perfil no se publica: nadie puede buscarlo ni verlo",
+    "Tu perfil no se publica ni se puede buscar: solo lo compartimos, en privado, con clientes compatibles",
     "No navegas perfiles ni recibes propuestas automáticas",
-    "Te escribimos solo si creemos que hay alguien para ti",
+    "Te escribimos solo si un cliente compatible quiere conocerte",
   ],
   start: "Crear un perfil no garantiza que te contactemos ni una presentación.",
   cta: "Crear mi perfil privado",
@@ -90,11 +90,11 @@ export const STEPS = [
   },
   {
     title: "Búsqueda personalizada",
-    text: "Buscamos, seleccionamos y confirmamos el interés de cada candidato antes de presentártelo.",
+    text: "Buscamos y seleccionamos, en privado, a las personas que encajan con lo que buscas.",
   },
   {
     title: "Presentación y primera cita",
-    text: "Te presentamos a cada persona y, si el interés es mutuo, organizamos la cita.",
+    text: "Te presentamos sus perfiles en privado. Si alguien te interesa, le preguntamos y, si el interés es mutuo, organizamos la cita.",
   },
 ];
 

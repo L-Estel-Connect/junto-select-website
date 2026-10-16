@@ -116,7 +116,7 @@ async function loadSearchPool(client: ClientView): Promise<PoolEntry[]> {
   const clientsWithProfile = new Set<string>();
   for (const p of profiles) {
     if (p.clientId) clientsWithProfile.add(p.clientId);
-    if (!p.complete || p.suspectedDuplicate) continue;
+    if (!p.complete || p.suspectedDuplicate || p.paused) continue;
     if (p.clientId === client.id || (own && p.email === own)) continue;
     const c = confirmed.get(p.uid);
     // A confirmation only answers the exact text it was given for.

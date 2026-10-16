@@ -100,7 +100,7 @@ export default function MemberWelcome({ uid }: { uid: string }) {
         <p className="font-serif text-[22px] leading-snug text-ink">Introducciones privadas, cuando quieras</p>
         <p className="mt-3 text-[15px] leading-relaxed text-ink-soft">
           Si quieres que busquemos activamente por ti, completa tu perfil privado. La búsqueda empieza en cuanto
-          esté completo. Tu perfil nunca se publica: solo lo ven las personas a las que te proponemos.
+          esté completo. Tu perfil nunca se publica: solo lo ven nuestro equipo y, en privado, los clientes a los que te presentemos.
         </p>
         <Link href={nextRoute} className={`${primaryButtonClasses} mt-6`}>
           {started ? "Continuar mi perfil" : "Completar mi perfil"}

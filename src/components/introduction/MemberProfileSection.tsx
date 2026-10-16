@@ -25,6 +25,8 @@ import type { ProfileDocument } from "@/lib/introduction/types";
 import { OnboardingStepper } from "./OnboardingFrame";
 import PrivatePhotoThumbnail from "./PrivatePhotoThumbnail";
 import ProfileCard from "./ProfileCard";
+import PrivateProfileView from "@/components/member/PrivateProfileView";
+import { auth } from "@/lib/firebase/client";
 import { IntroductionError, IntroductionLoading } from "./RequireIntroductionAuth";
 
 const linkClasses =
@@ -247,40 +249,7 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
   );
 
   if (finalized) {
-    return (
-      <div className="mx-auto flex w-full max-w-[560px] flex-col py-14">
-        <Link href="/member" className={`text-sm ${linkClasses}`}>
-          ← Volver al inicio
-        </Link>
-
-        <h1 className="mt-6 font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">Tu perfil</h1>
-        <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-          Así te verán las personas con las que Junto Select te presente.
-        </p>
-
-        <div className="mt-8">
-          <ProfileCard profile={profile} />
-        </div>
-
-        {errorNote}
-
-        <div id="editar-perfil" className="mt-14 scroll-mt-10 border-t border-hairline pt-8">
-          <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">Editar mi perfil</p>
-          <div className="mt-4">
-            {sections.map((section) => (
-              <Link key={section.label} href={section.href ?? "#"} className="block hover:opacity-70">
-                <div className="flex items-center justify-between border-b border-hairline py-4">
-                  <span className="text-[15px] text-ink">{section.label}</span>
-                  <span className={`text-[13px] ${section.complete ? "text-ink" : "text-ink-soft"}`}>
-                    {section.complete ? "Completado" : "Pendiente"}
-                  </span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+    return <PrivateProfileView uid={uid} email={auth.currentUser?.email ?? null} />;
   }
 
   return (

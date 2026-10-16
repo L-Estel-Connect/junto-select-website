@@ -351,9 +351,8 @@ async function completeProfile(browser, kind) {
       await shot(page, "pasivo-07-finalized");
       await page.getByRole("link", { name: "Ir a mi espacio" }).click();
       await page.waitForURL(/\/member$/, { timeout: 20000 });
-      await page.getByText("Modalidad").waitFor({ timeout: 20000 });
-      await page.getByText("Perfil privado", { exact: true }).waitFor({ timeout: 20000 });
-      check("pasivo: member home shows 'Modalidad · Perfil privado'", true);
+      await page.getByText("Tu perfil privado").waitFor({ timeout: 20000 });
+      check("pasivo: member home is the private profile page", await page.getByText("Tu perfil forma parte de nuestra red privada.").isVisible());
       await shot(page, "pasivo-08-member-home");
       check("pasivo: meta.onboardingFinalized true", p?.meta?.onboardingFinalized === true);
       check("pasivo: meta.requestedService passive", p?.meta?.requestedService === "passive", p?.meta?.requestedService);

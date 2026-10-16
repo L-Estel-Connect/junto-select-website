@@ -361,6 +361,12 @@ export interface ProfileDocument {
     // being resolved) — the uid of the account this one was merged into.
     duplicateOf: string | null;
     /**
+     * "Dejar de ser presentado/a": the person asked us not to consider
+     * their profile in any search for now. Their own choice, set from
+     * their profile page; the profile and its answers are kept.
+     */
+    presentationsPaused?: boolean;
+    /**
      * Legacy-contact activation (Path B — see src/lib/legacyImport/):
      * `true` only for a profile CREATED by claiming an imported legacy
      * contact (never for a normal Path A signup, which never sets this at
@@ -570,6 +576,7 @@ export function withProfileDefaults(
       searchStatus: "passive",
       duplicateStatus: "clear",
       duplicateOf: null,
+      presentationsPaused: false,
       pendingLegacyActivation: false,
       legacyImportId: null,
       matchingAnchorAt: null,

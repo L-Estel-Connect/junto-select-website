@@ -108,6 +108,7 @@ export default function CandidatesPage() {
                         <PhotoThumb path={r.photoPath} alt={r.firstName} />
                         <span className="font-medium text-ink">{r.firstName}</span>
                         {r.suspectedDuplicate && <Badge tone="warning">Posible duplicado</Badge>}
+                        {r.paused && <Badge tone="muted">{r.type === "cliente" ? "Programa no activo" : "En pausa"}</Badge>}
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-ink-soft">{r.age ?? "—"}</td>

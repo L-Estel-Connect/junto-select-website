@@ -16,6 +16,7 @@ import {
   emptyPreferences,
   emptyPresentation,
   normalizeYoungChildrenMatters,
+  withProfileDefaults,
   type ProfileDocument,
 } from "./types";
 import { logDebugEvent } from "./onboardingDebug";
@@ -51,6 +52,12 @@ function rawShapeSummary(data: Partial<ProfileDocument> | undefined): string {
 
 function profileRef(uid: string) {
   return doc(db, "profiles", uid);
+}
+
+/** Reads a profile without creating one (null when there is none). */
+export async function readProfile(uid: string): Promise<ProfileDocument | null> {
+  const snap = await getDoc(profileRef(uid));
+  return snap.exists() ? withProfileDefaults(uid, snap.data() as Partial<ProfileDocument>) : null;
 }
 
 /**

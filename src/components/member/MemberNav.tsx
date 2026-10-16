@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Wordmark from "@/components/Wordmark";
+import { signOutUser } from "@/lib/firebase/auth";
 import { memberFetchJson } from "@/lib/member/memberFetch";
 import { useMemberQuery } from "@/lib/member/useMemberQuery";
 import { useMemberUid } from "./MemberContext";
@@ -18,9 +19,10 @@ import { AUTOMATIC_INTRODUCTIONS_ENABLED } from "@/lib/matching/automaticIntrodu
 // the primary nav never shows two rows that open the same screen. The
 // #editar-perfil anchor itself is unchanged and still used by direct
 // in-page links elsewhere (MemberHome, ContactSection, SettingsSection).
+// The private profile is the home page, so "Mi perfil" is /member and also
+// covers the /member/profile/** edit pages.
 const NAV_ITEMS = [
-  { href: "/member", label: "Inicio" },
-  { href: "/member/profile", label: "Mi perfil" },
+  { href: "/member", label: "Mi perfil" },
   { href: "/member/proposals", label: "Propuestas" },
   { href: "/member/connections", label: "Conexiones" },
   { href: "/member/plan", label: "Mi plan" },
@@ -34,7 +36,7 @@ function AttentionDot() {
 
 function isActivePath(pathname: string, href: string): boolean {
   const base = href.split("#")[0];
-  return base === "/member" ? pathname === "/member" : pathname.startsWith(base);
+  return base === "/member" ? pathname === "/member" || pathname.startsWith("/member/profile") : pathname.startsWith(base);
 }
 
 function HamburgerIcon() {
@@ -116,6 +118,13 @@ export default function MemberNav() {
               {attentionFor(item.href) && <AttentionDot />}
             </Link>
           ))}
+          <button
+            type="button"
+            onClick={() => void signOutUser()}
+            className="whitespace-nowrap text-[11px] uppercase tracking-[0.1em] text-ink-soft transition-colors hover:text-ink"
+          >
+            Cerrar sesión
+          </button>
         </nav>
 
         <button
@@ -164,6 +173,13 @@ export default function MemberNav() {
                   {attentionFor(item.href) && <AttentionDot />}
                 </Link>
               ))}
+              <button
+                type="button"
+                onClick={() => void signOutUser()}
+                className="border-b border-hairline py-4 text-left text-[16px] text-ink-soft"
+              >
+                Cerrar sesión
+              </button>
             </nav>
           </div>
         </div>

@@ -381,6 +381,13 @@ const FULL_PROFILE = {
   check("Candidatos leaves out confirmed duplicates", !rows.some((r) => r.key === "mm-dup"));
   check("Candidatos lists clients without a profile, typed Cliente", rows.some((r) => r.type === "cliente" && r.firstName === "Inés") && rows.some((r) => r.type === "cliente" && r.firstName === "Carlos"));
   check("Candidatos rows carry no membership fields", !/membership|subscription|stripe/i.test(JSON.stringify(rows)));
+  // "Dejar de ser presentada": her own switch keeps her out of every search.
+  await db.doc("profiles/mm-lasrozas").update({ "meta.presentationsPaused": true });
+  const sPause = (await api(admin, "POST", `/api/admin/clients/${id}/search`)).json;
+  const cPause = (await api(admin, "GET", "/api/admin/candidates")).json.items.find((r) => r.key === "mm-lasrozas");
+  check("a paused profile is left out of the search", !sPause.results.some((r) => r.uid === "mm-lasrozas"));
+  check("…and shows as En pausa in Candidatos", cPause?.paused === true && cPause.complete === true);
+  await db.doc("profiles/mm-lasrozas").update({ "meta.presentationsPaused": false });
 
   // --- Nothing automatic ------------------------------------------------------------------------------
   const secret = process.env.MATCHING_ADMIN_SECRET;

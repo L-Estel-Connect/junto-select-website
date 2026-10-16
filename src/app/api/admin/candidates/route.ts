@@ -18,6 +18,8 @@ export interface CandidateRow {
   complete: boolean;
   missing: string[];
   suspectedDuplicate: boolean;
+  /** Asked not to be presented for now; left out of every search. */
+  paused: boolean;
 }
 
 /**
@@ -45,6 +47,7 @@ export async function GET(request: Request) {
     complete: p.complete,
     missing: p.missing,
     suspectedDuplicate: p.suspectedDuplicate,
+    paused: p.paused,
   }));
   for (const c of clients) {
     if (withProfile.has(c.id) || c.status === "cancelado") continue;
@@ -61,6 +64,7 @@ export async function GET(request: Request) {
       complete: missing.length === 0,
       missing: missing.length ? ["ficha"] : [],
       suspectedDuplicate: false,
+      paused: c.status !== "activo",
     });
   }
   rows.sort((a, b) => a.firstName.localeCompare(b.firstName, "es"));
