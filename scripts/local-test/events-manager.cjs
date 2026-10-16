@@ -90,6 +90,18 @@ async function pay(token, uid) {
   const start = await api(token, "POST", "/api/membership/start", {
     planKey: "monthly", ageConfirmed: true, termsAccepted: true, immediateServiceRequested: true, marketAvailability: "lives_in_market",
   });
+  if (start.data?.error === "membership_sales_closed") {
+    // New Membresía sales are closed: stand in for a member who subscribed before, as Stripe's webhook would have left them.
+    const { Timestamp } = require("firebase-admin/firestore");
+    const now = Date.now();
+    await db.doc(`billing/${uid}`).set({
+      stripeCustomerId: "cus_em", stripeSubscriptionId: "sub_em", status: "active", planKey: "monthly",
+      currentPeriodEnd: Timestamp.fromMillis(now + 30 * 86400000), cancelAtPeriodEnd: false, canceledAt: null,
+      subscriptionStartedAt: Timestamp.fromMillis(now - 86400000), lastPaymentFailedAt: null, termsAcceptance: null,
+      createdAt: Timestamp.fromMillis(now), updatedAt: Timestamp.fromMillis(now),
+    });
+    return "sub_em";
+  }
   if (!start.data?.url) throw new Error(`checkout failed: ${JSON.stringify(start.data)}`);
   const res = await fetch(start.data.url, { method: "POST", redirect: "manual" });
   if (res.status !== 303) throw new Error(`mock pay failed: ${res.status}`);
@@ -123,10 +135,10 @@ async function main() {
   check("import: booking link is the pasted link", f.ticketTailorCheckoutUrl === "https://www.tickettailor.com/events/juntoselect/2439069");
   check("import: image and ticket types", f.imageUrl?.startsWith("https://uploads.tickettailorassets.com/") && JSON.stringify(f.ticketTailorTicketTypeIds) === '["tt_mock1","tt_mock2"]');
   check("import: suggests Entradas disponibles", f.publicStatus === "tickets_available");
-  check("import: venue shown as a note, not copied", !("venuePublic" in f) && imp.data.import.notes.some((n) => n.includes("MOCK venue")));
-  check("import: city, type and public venue left to the admin", ["ciudad", "tipo de evento", "descripción para la web", "descripción pública del lugar"].every((m) => imp.data.import.missing.includes(m)));
+  check("import: venue pre-filled, with a reminder to check it", /MOCK venue/.test(f.venuePublic ?? "") && imp.data.import.notes.some((n) => n.includes("lugar")));
+  check("import: city left to the admin", imp.data.import.missing.includes("ciudad"));
   check("import: price not imported", !("priceFromEuros" in f));
-  check("import: Ticket Tailor description kept apart from the site copy", !("description" in f) && /corazón de Madrid/.test(imp.data.import.ticketTailorDescription ?? ""));
+  check("import: description pre-filled from Ticket Tailor", /corazón de Madrid/.test(f.description ?? "") && /corazón de Madrid/.test(imp.data.import.ticketTailorDescription ?? ""));
   check("import: nothing saved", JSON.stringify((await eventDoc("2439069")) ?? null) === before2439069);
   const ttCalls = mockLog().slice(logBefore).filter((e) => e.service === "tickettailor");
   check("import: only reads from Ticket Tailor", ttCalls.length > 0 && ttCalls.every((e) => e.kind === "event_get" || e.kind === "series_events_get"), ttCalls.map((e) => e.kind).join(","));
@@ -222,9 +234,8 @@ async function main() {
   check("benefit: manual event is not offered", !claimable.includes(manualId));
   check("benefit: older records keep working", claimable.includes("em-legacy"));
   html = await page("/eventos");
-  check("public: 20 % tag only where the benefit is on",
-    /20/.test(html.slice(html.indexOf(`${TEST_TITLE} con entradas`), html.indexOf("</article>", html.indexOf(`${TEST_TITLE} con entradas`)))) &&
-    !/20\s?%/.test(html.slice(html.indexOf(`${TEST_TITLE} sin descuento`), html.indexOf("</article>", html.indexOf(`${TEST_TITLE} sin descuento`)))));
+  // Membresía is no longer sold, so the public event cards carry no member-discount tag at all.
+  check("public: no member 20 % tag on event cards", !/20\s?%/.test(html.slice(html.indexOf(`${TEST_TITLE} con entradas`), html.indexOf("</article>", html.indexOf(`${TEST_TITLE} con entradas`)))));
 
   // ---- Archive ----
   const a = await api(admin, "POST", "/api/admin/events/9100003/archive", { archived: true });

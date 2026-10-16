@@ -375,6 +375,7 @@ function ResultRow({
             <button type="button" className={linkButton} onClick={() => onOpen(r.uid)}>
               Ver perfil completo
             </button>
+            {r.type === "cliente" && <Badge tone="neutral">Cliente</Badge>}
             {r.location === "confirmed" && <Badge tone="muted">Ubicación confirmada por el equipo</Badge>}
             {r.otherClients.length > 0 && (
               <Badge tone="warning">También en la preselección de {r.otherClients.map((o) => o.name).join(", ")}</Badge>

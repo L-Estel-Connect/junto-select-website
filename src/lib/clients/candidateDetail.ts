@@ -11,6 +11,8 @@ import { clientAsProfile } from "./matchProfile";
 import { CANDIDATE_LOCATIONS } from "./locations";
 import type { ClientView } from "./types";
 import type { PlaceSummary } from "./search";
+import { clientAge, clientIdFromCandidateUid, type CandidateType } from "./candidatePool";
+import { getClient } from "./store";
 
 /**
  * Everything the side panel shows about one candidate for one client: the
@@ -23,6 +25,7 @@ import type { PlaceSummary } from "./search";
  */
 export interface CandidateDetail {
   uid: string;
+  type: CandidateType;
   firstName: string;
   age: number | null;
   city: string;
@@ -63,6 +66,8 @@ function isoOf(v: unknown): string | null {
 
 export async function getCandidateDetail(client: ClientView, uid: string): Promise<CandidateDetail | null> {
   if (!uid || uid.includes("/")) return null;
+  const otherClientId = clientIdFromCandidateUid(uid);
+  if (otherClientId) return clientCandidateDetail(client, uid, otherClientId);
   const [snap, userSnap, locSnap] = await Promise.all([
     adminDb.doc(`profiles/${uid}`).get(),
     adminDb.doc(`users/${uid}`).get(),
@@ -84,8 +89,12 @@ export async function getCandidateDetail(client: ClientView, uid: string): Promi
   const d = profile.dealbreakers;
   const p = profile.preferences;
 
+  const sameEmailClient = userSnap.exists
+    ? await adminDb.collection("clients").where("email", "==", String(userSnap.get("email") ?? "").toLowerCase()).limit(1).get()
+    : null;
   return {
     uid,
+    type: sameEmailClient && !sameEmailClient.empty ? "cliente" : "perfil_privado",
     firstName: v.firstName,
     age: bd ? getAge(bd.toDate().toISOString().slice(0, 10)) : null,
     city: v.city,
@@ -127,5 +136,73 @@ export async function getCandidateDetail(client: ClientView, uid: string): Promi
     membership: profile.meta.searchStatus === "active_search",
     createdAt: isoOf(profile.meta.createdAt),
     updatedAt: isoOf(profile.meta.updatedAt),
+  };
+}
+
+/** Another client, proposed as a candidate: everything comes from their ficha (no photos or presentation there). */
+async function clientCandidateDetail(client: ClientView, uid: string, otherId: string): Promise<CandidateDetail | null> {
+  if (otherId === client.id) return null;
+  const other = await getClient(otherId);
+  if (!other) return null;
+  const me = clientAsProfile(client);
+  const them = clientAsProfile(other);
+  const failures = evaluateHardFiltersDetailed(me, them);
+  const score = failures.length === 0 ? scorePair(me, them) : null;
+  const place = getPlace(other.placeIne);
+  const clientPlace = getPlace(client.placeIne);
+  const v = them.visible;
+  const d = them.dealbreakers;
+  const p = them.preferences;
+  return {
+    uid,
+    type: "cliente",
+    firstName: other.firstName,
+    age: clientAge(other),
+    city: other.city,
+    place: place ? { ine: place.ine, name: place.name, province: place.province, community: place.community } : null,
+    distanceKm: place && clientPlace ? Math.round(distanceKm(place, clientPlace)) : null,
+    photos: [],
+    visible: {
+      gender: v.gender,
+      profession: v.profession,
+      educationLevel: v.educationLevel,
+      heightCm: v.heightCm,
+      languages: v.languages,
+      hasChildren: v.hasChildren,
+      hasYoungChildren: v.hasYoungChildren,
+      wantsFutureChildren: v.wantsFutureChildren,
+      relationshipIntention: v.relationshipIntention,
+      smoking: v.smoking,
+      drinking: v.drinking,
+      activityLevel: v.activityLevel,
+      marketAvailability: null,
+    },
+    presentation: null,
+    lookingFor: {
+      gendersSought: d.gendersSought,
+      ageMin: d.ageMin,
+      ageMax: d.ageMax,
+      maxDistance: d.maxDistance,
+      relationshipIntentionsAccepted: d.relationshipIntentionsAccepted,
+      smokingAccepted: d.smokingAccepted,
+      partnerYoungChildrenMatters: d.partnerYoungChildrenMatters,
+      heightMinCm: p.heightMinCm,
+      heightMaxCm: p.heightMaxCm,
+      drinkingAccepted: p.drinkingAccepted,
+      activityLevelsPreferred: p.activityLevelsPreferred,
+    },
+    contact: {
+      preferredMethod: null,
+      additionalMethods: [],
+      phone: other.phone || null,
+      instagram: null,
+      linkedin: null,
+      email: other.email || null,
+    },
+    failures,
+    why: score ? computeMatchWhy(score) : null,
+    membership: false,
+    createdAt: other.createdAt,
+    updatedAt: other.updatedAt,
   };
 }

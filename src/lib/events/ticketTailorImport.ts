@@ -16,6 +16,8 @@ export interface TicketTailorImport {
     startTime?: string;
     endTime?: string;
     imageUrl?: string;
+    description?: string;
+    venuePublic?: string;
     ticketTailorCheckoutUrl?: string;
     ticketTailorTicketTypeIds?: string[];
     publicStatus?: "tickets_available";
@@ -23,13 +25,12 @@ export interface TicketTailorImport {
   /** Human-readable names of what was filled / what needs typing. */
   imported: string[];
   missing: string[];
-  /** Facts shown to the admin but deliberately not copied (e.g. the venue, which may be private). */
+  /** Things the admin should check before publishing. */
   notes: string[];
   /**
-   * Ticket Tailor's own event description, for reference only. It is never
-   * copied into the website description automatically: the site keeps its
-   * editorial copy (40+ club positioning), and the admin copies text over
-   * only by choice. An event's own age criteria (e.g. "35+") live there.
+   * Ticket Tailor's full event description. It pre-fills the website
+   * description only when that field is still empty (the form never
+   * replaces text the admin typed), and stays visible for reference.
    */
   ticketTailorDescription: string | null;
 }
@@ -103,7 +104,10 @@ export function mapTicketTailorEvent(ticketTailorEventId: string, raw: Record<st
   }
   const description = text(raw.description);
   const ticketTailorDescription = description ? htmlToText(description).slice(0, 4000) : null;
-  if (ticketTailorDescription) notes.push("La descripción de Ticket Tailor no se copia en la web: se muestra abajo como referencia.");
+  if (ticketTailorDescription) {
+    fields.description = ticketTailorDescription.slice(0, 1200);
+    imported.push("descripción");
+  }
   const images = obj(raw.images);
   const image = text(images?.header) ?? text(images?.thumbnail);
   if (image && image.startsWith("https://")) {
@@ -120,8 +124,8 @@ export function mapTicketTailorEvent(ticketTailorEventId: string, raw: Record<st
   const ticketTypes = Array.isArray(raw.ticket_types) ? raw.ticket_types.map(obj).filter((t): t is Record<string, unknown> => !!t) : [];
   const ids = ticketTypes.map((t) => text(t.id)).filter((id): id is string => !!id && id.startsWith("tt_"));
   if (ids.length > 0) {
+    // Kept on the record for the old member codes; not shown to the admin any more.
     fields.ticketTailorTicketTypeIds = ids;
-    imported.push(`tipos de entrada (${ticketTypes.map((t) => text(t.name) ?? text(t.id)).join(", ")})`);
   }
 
   // Only "on sale" is suggested: "not available" can mean sold out or not on sale yet, so that call stays the admin's.
@@ -132,12 +136,16 @@ export function mapTicketTailorEvent(ticketTailorEventId: string, raw: Record<st
 
   const venue = obj(raw.venue);
   const venueName = text(venue?.name);
-  if (venueName) notes.push(`Lugar en Ticket Tailor: «${venueName}». No se copia: escribe tú la descripción pública del lugar.`);
+  if (venueName) {
+    fields.venuePublic = venueName.slice(0, 160);
+    imported.push("lugar");
+    notes.push("Revisa el lugar: en la web se muestra tal cual, así que quita la dirección exacta si no quieres publicarla.");
+  }
   notes.push("El precio no se importa: escríbelo solo si quieres mostrarlo.");
 
-  const all = ["título", "fecha", "hora de inicio", "hora de fin", "imagen", "enlace de compra", "tipos de entrada", "disponibilidad de entradas"];
+  const all = ["título", "fecha", "hora de inicio", "hora de fin", "lugar", "descripción", "imagen", "enlace de compra"];
   const missing = all.filter((f) => !imported.some((i) => i.startsWith(f)));
-  missing.push("ciudad", "tipo de evento", "descripción para la web", "descripción pública del lugar");
+  missing.push("ciudad");
   return { ticketTailorEventId, fields, imported, missing, notes, ticketTailorDescription };
 }
 

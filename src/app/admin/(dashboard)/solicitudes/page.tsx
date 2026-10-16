@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { adminFetchJson } from "@/lib/admin/adminFetch";
 import { useAdminQuery } from "@/lib/admin/useAdminQuery";
 import { AdminError, AdminLoading } from "@/components/admin/States";
@@ -15,25 +17,27 @@ import {
   type InquiryStatus,
 } from "@/lib/matchmaking/inquiry";
 
-const TONE: Record<InquiryStatus, "neutral" | "positive" | "warning" | "negative" | "muted"> = {
-  nueva: "warning",
-  contactada: "neutral",
-  entrevista: "neutral",
-  propuesta: "neutral",
-  cliente: "positive",
-  espera: "muted",
-  descartada: "muted",
-};
+const CLOSED: InquiryStatus[] = ["espera", "descartada"];
+/** Statuses set by hand. "Cliente" is not one of them: it comes only from creating the client. */
+const MANUAL_STATUSES = INQUIRY_STATUSES.filter((s) => s.value !== "cliente");
 
-const OPEN: InquiryStatus[] = ["nueva", "contactada", "entrevista", "propuesta"];
+type View = "abiertas" | "clientes" | "cerradas" | "todas";
+
+/** Open = still being handled. A request marked "Cliente" before the fix, without a client record, stays open until converted. */
+function viewOf(i: InquiryRow): Exclude<View, "todas"> {
+  if (i.clientId) return "clientes";
+  if (CLOSED.includes(i.status)) return "cerradas";
+  return "abiertas";
+}
 
 /**
- * Matchmaking applications from /matchmaking: a plain list with a status
- * and an internal note per request. Deliberately not a CRM; the client
- * pipeline proposed for Phase 2 would replace it.
+ * Matchmaking applications from /matchmaking. Each one is handled here
+ * until it becomes a client with "Convertir en cliente", which creates the
+ * client's record (or links the one that already exists) and opens it.
+ * The request itself stays, for history.
  */
 export default function AdminInquiriesPage() {
-  const [filter, setFilter] = useState<"abiertas" | "todas" | InquiryStatus>("abiertas");
+  const [filter, setFilter] = useState<View>("abiertas");
   const [openId, setOpenId] = useState<string | null>(null);
   const { data, error, reload } = useAdminQuery(
     () => adminFetchJson<{ items: InquiryRow[] }>("/api/admin/dashboard/inquiries"),
@@ -43,24 +47,23 @@ export default function AdminInquiriesPage() {
   if (error) return <AdminError message={error} />;
   if (!data) return <AdminLoading />;
 
-  const items = data.items.filter((i) =>
-    filter === "todas" ? true : filter === "abiertas" ? OPEN.includes(i.status) : i.status === filter,
-  );
-  const count = (s: InquiryStatus) => data.items.filter((i) => i.status === s).length;
+  const items = data.items.filter((i) => filter === "todas" || viewOf(i) === filter);
+  const count = (v: Exclude<View, "todas">) => data.items.filter((i) => viewOf(i) === v).length;
 
   return (
     <div>
-      <h1 className="font-serif text-[24px] text-ink">Solicitudes de matchmaking</h1>
+      <h1 className="font-serif text-[30px] text-ink">Solicitudes</h1>
       <p className="mt-2 max-w-[70ch] text-[13px] text-ink-soft">
-        Peticiones de entrevista privada enviadas desde la página Matchmaking. Cada solicitud avisa por email a
-        Junto Select. No crean cuenta, perfil ni pago.
+        Peticiones de consulta privada enviadas desde la página Matchmaking. Cuando alguien contrata un programa,
+        pulsa «Convertir en cliente»: se crea su ficha con los datos de la solicitud, y la solicitud se conserva.
       </p>
 
       <div className="mt-6 flex flex-wrap gap-2">
         {[
-          { value: "abiertas" as const, label: `Abiertas (${OPEN.reduce((n, s) => n + count(s), 0)})` },
+          { value: "abiertas" as const, label: `Abiertas (${count("abiertas")})` },
+          { value: "clientes" as const, label: `Ya son clientes (${count("clientes")})` },
+          { value: "cerradas" as const, label: `En espera o descartadas (${count("cerradas")})` },
           { value: "todas" as const, label: `Todas (${data.items.length})` },
-          ...INQUIRY_STATUSES.map((s) => ({ value: s.value, label: `${s.label} (${count(s.value)})` })),
         ].map((f) => (
           <button
             key={f.value}
@@ -85,6 +88,7 @@ export default function AdminInquiriesPage() {
               <th className="px-4 py-3">Edad · Ciudad</th>
               <th className="px-4 py-3">Contacto</th>
               <th className="px-4 py-3">Estado</th>
+              <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
@@ -99,7 +103,7 @@ export default function AdminInquiriesPage() {
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-ink-soft">
+                <td colSpan={7} className="px-4 py-8 text-center text-ink-soft">
                   Sin solicitudes en esta vista.
                 </td>
               </tr>
@@ -122,9 +126,25 @@ function InquiryRowView({
   onToggle: () => void;
   onSaved: () => void;
 }) {
+  const router = useRouter();
   const [note, setNote] = useState(item.note);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  async function convert() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await adminFetchJson<{ client: { id: string } }>("/api/admin/clients", {
+        method: "POST",
+        body: JSON.stringify({ fromInquiryId: item.id }),
+      });
+      router.push(`/admin/clientes/${res.client.id}`);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "No se ha podido crear el cliente.");
+      setSaving(false);
+    }
+  }
 
   async function save(patch: { status?: InquiryStatus; note?: string }) {
     setSaving(true);
@@ -162,27 +182,45 @@ function InquiryRowView({
           </div>
         </td>
         <td className="px-4 py-3">
-          <div className="flex flex-col items-start gap-2">
-            <Badge tone={TONE[item.status] ?? "muted"}>{labelOf(INQUIRY_STATUSES, item.status)}</Badge>
+          {item.clientId ? (
+            <Badge tone="positive">Cliente</Badge>
+          ) : (
             <select
               aria-label={`Estado de ${item.nombre}`}
-              value={item.status}
+              value={item.status === "cliente" ? "propuesta" : item.status}
               disabled={saving}
               onChange={(e) => void save({ status: e.target.value as InquiryStatus })}
-              className="rounded border border-hairline bg-white px-2 py-1 text-[12px]"
+              className="rounded-full border border-hairline bg-white px-3 py-1.5 text-[12px]"
             >
-              {INQUIRY_STATUSES.map((s) => (
+              {MANUAL_STATUSES.map((s) => (
                 <option key={s.value} value={s.value}>
                   {s.label}
                 </option>
               ))}
             </select>
-          </div>
+          )}
+        </td>
+        <td className="px-4 py-3 text-right">
+          {item.clientId ? (
+            <Link href={`/admin/clientes/${item.clientId}`} className="whitespace-nowrap text-[13px] font-medium text-ink underline decoration-hairline underline-offset-4">
+              Ver ficha del cliente →
+            </Link>
+          ) : (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void convert()}
+              className="whitespace-nowrap rounded-full bg-ink px-4 py-1.5 text-[12px] font-medium text-white hover:bg-ink/85 disabled:opacity-40"
+            >
+              Convertir en cliente
+            </button>
+          )}
+          {saveError && <p className="mt-1 text-[12px] text-[#8a3b3b]">{saveError}</p>}
         </td>
       </tr>
       {open && (
         <tr className="border-b border-hairline bg-[#faf7f2]">
-          <td colSpan={6} className="px-4 py-4">
+          <td colSpan={7} className="px-4 py-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1 text-[13px] text-ink">
                 <p>
@@ -218,7 +256,6 @@ function InquiryRowView({
                 >
                   {saving ? "Guardando…" : "Guardar nota"}
                 </button>
-                {saveError && <p className="text-[12px] text-[#8a3b3b]">{saveError}</p>}
               </div>
             </div>
           </td>

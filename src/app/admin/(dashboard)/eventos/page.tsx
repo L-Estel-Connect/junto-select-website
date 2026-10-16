@@ -10,11 +10,14 @@ import { DEFAULT_EVENT_IMAGES } from "@/lib/events/editing";
 import { EVENT_PUBLIC_STATUS_LABELS, type EventPublicStatus } from "@/lib/eventBenefits/types";
 
 /**
- * Events Manager: one place to create, import from Ticket Tailor, edit,
- * preview, publish and archive events. Each event is one record that drives
- * the public website (Inicio, Encuentros), the member 20 % code and
- * Reconnect. Written for a non-technical admin: plain Spanish, one step at
- * a time, and the server re-checks every rule.
+ * Eventos: a simple publishing dashboard. The admin pastes the title and the
+ * Ticket Tailor link, the rest is filled from Ticket Tailor where it can be,
+ * and anything can be typed or corrected by hand. Each event is one record
+ * that drives the website (Inicio, Encuentros) and Reconnect.
+ *
+ * The old Select membership 20 % controls are no longer shown. The fields
+ * stay on the record and are sent back unchanged on save, so existing
+ * events and codes are untouched.
  */
 
 type Form = {
@@ -56,7 +59,7 @@ const EMPTY: Form = {
 };
 
 const STATUS_HELP: Record<EventPublicStatus, string> = {
-  draft: "Solo lo ves tú. No se puede publicar.",
+  draft: "Borrador: elige otro estado para poder publicarlo.",
   coming_soon: "Se muestra con fecha y detalles, sin botón de compra.",
   tickets_available: "Se muestra con el botón «Reservar» que lleva a Ticket Tailor.",
   sold_out: "Se muestra como «Completo», sin botón de compra.",
@@ -120,14 +123,14 @@ export default function EventsManagerPage() {
   const current = events.find((e) => e.ticketTailorEventId === editingId) ?? null;
   const canLink = !linked;
 
-  function startNew(withTicketTailor: boolean) {
+  function startNew() {
     setOpen(true);
     setEditingId(null);
     setLinked(false);
-    setForm({ ...EMPTY, publicStatus: withTicketTailor ? "draft" : "coming_soon" });
+    setForm({ ...EMPTY, publicStatus: "coming_soon" });
     setImportInfo(null);
     setError(null);
-    setNotice(withTicketTailor ? "Pega el enlace del evento en Ticket Tailor y pulsa «Importar datos»." : "Rellena los datos. Podrás añadir el enlace de Ticket Tailor más adelante.");
+    setNotice(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -153,12 +156,14 @@ export default function EventsManagerPage() {
         body: JSON.stringify({ ref: form.ticketTailorRef }),
       });
       const f = imp.fields;
-      // Facts (date, times, links, ticket types) come from Ticket Tailor. Editorial copy already
-      // typed here is never replaced: the title only fills an empty field, the image only replaces
-      // a default one, and the description is never copied (it is shown below for reference).
+      // Facts (date, times, links) come from Ticket Tailor. Text already typed here is never
+      // replaced: title, place and description only fill empty fields, and the image only
+      // replaces a default one.
       setForm((prev) => ({
         ...prev,
         label: prev.label.trim() ? prev.label : (f.label ?? prev.label),
+        venuePublic: prev.venuePublic.trim() ? prev.venuePublic : (f.venuePublic ?? prev.venuePublic),
+        description: prev.description.trim() ? prev.description : (f.description ?? prev.description),
         eventDate: f.eventDate ?? prev.eventDate,
         startTime: f.startTime ?? prev.startTime,
         endTime: f.endTime ?? prev.endTime,
@@ -221,18 +226,12 @@ export default function EventsManagerPage() {
     }
   }
 
-  async function rowAction(e: AdminEventRow, action: "publish" | "unpublish" | "archive" | "restore" | "sync") {
+  async function rowAction(e: AdminEventRow, action: "publish" | "unpublish" | "archive" | "restore") {
     const id = e.ticketTailorEventId;
     setBusy(`${action}:${id}`);
     setRowMessages((m) => ({ ...m, [id]: "" }));
     try {
-      if (action === "sync") {
-        const { result } = await adminFetchJson<{ result: { checked: number; granted: number; errors: number } }>(
-          "/api/admin/event-benefits/sync-event",
-          { method: "POST", body: JSON.stringify({ ticketTailorEventId: id }) },
-        );
-        setRowMessages((m) => ({ ...m, [id]: `${result.granted} código(s) activado(s) de ${result.checked} pendiente(s)${result.errors ? `, ${result.errors} error(es)` : ""}.` }));
-      } else if (action === "publish" || action === "unpublish") {
+      if (action === "publish" || action === "unpublish") {
         await adminFetchJson(`/api/admin/events/${encodeURIComponent(id)}/publish`, {
           method: "POST",
           body: JSON.stringify({ published: action === "publish" }),
@@ -263,17 +262,13 @@ export default function EventsManagerPage() {
     <div className="max-w-4xl pb-16">
       <h1 className="font-serif text-[26px] text-ink">Eventos</h1>
       <p className="mt-2 max-w-[62ch] text-[13px] leading-relaxed text-ink-soft">
-        Crea y publica los encuentros de Junto Select. Cada evento publicado aparece automáticamente en Inicio
-        y en Encuentros, por orden de fecha. Publicar en la web y ofrecer el 20 % a los miembros son decisiones
-        independientes.
+        Escribe el título y pega el enlace de Ticket Tailor: el resto se rellena solo y puedes corregirlo. Los eventos
+        publicados aparecen en Próximos encuentros, por orden de fecha, y dejan de mostrarse cuando ya han pasado.
       </p>
 
       <div className="mt-6 flex flex-wrap gap-2">
-        <button type="button" className={strongButton} onClick={() => startNew(true)}>
-          Nuevo evento desde Ticket Tailor
-        </button>
-        <button type="button" className={softButton} onClick={() => startNew(false)}>
-          Nuevo evento sin entradas todavía
+        <button type="button" className={strongButton} onClick={startNew}>
+          Nuevo evento
         </button>
       </div>
 
@@ -287,8 +282,12 @@ export default function EventsManagerPage() {
           </div>
           {notice && <p className="mt-2 text-[12px] text-ink-soft">{notice}</p>}
 
-          {/* 1. Ticket Tailor */}
-          <h3 className="mt-5 text-[12px] font-medium uppercase tracking-[0.14em] text-ink-soft">1 · Ticket Tailor</h3>
+          {/* 1. Title + Ticket Tailor */}
+          <h3 className="mt-5 text-[12px] font-medium uppercase tracking-[0.14em] text-ink-soft">1 · Título y enlace</h3>
+          <div className="mt-2">
+            <label className={fieldLabel} htmlFor="ev-title">Título</label>
+            <input id="ev-title" className={input} value={form.label} onChange={(e) => set("label", e.target.value)} placeholder="Junto Select Signature" />
+          </div>
           {linked ? (
             <p className="mt-2 text-[13px] text-ink">
               Vinculado al evento de Ticket Tailor nº {editingId}.{" "}
@@ -301,7 +300,7 @@ export default function EventsManagerPage() {
           ) : (
             <div className="mt-2">
               <label className={fieldLabel} htmlFor="tt-ref">
-                Enlace del evento en Ticket Tailor {editingId ? "(cuando lo tengas)" : "(opcional)"}
+                Enlace de Ticket Tailor {editingId ? "(cuando lo tengas)" : ""}
               </label>
               <div className="mt-1 flex flex-wrap gap-2">
                 <input
@@ -312,36 +311,38 @@ export default function EventsManagerPage() {
                   onChange={(e) => set("ticketTailorRef", e.target.value)}
                 />
                 <button type="button" className={softButton} onClick={handleImport} disabled={!form.ticketTailorRef.trim() || busy === "import"}>
-                  {busy === "import" ? "Importando…" : "Importar datos"}
+                  {busy === "import" ? "Leyendo…" : "Rellenar desde Ticket Tailor"}
                 </button>
               </div>
               <p className="mt-1 text-[12px] text-ink-soft">
-                Solo se leen datos; no se cambia nada en Ticket Tailor. Si la importación no funciona, rellena los datos a mano.
+                Solo se leen datos; no se cambia nada en Ticket Tailor. Sin enlace todavía, puedes rellenar los datos a mano.
               </p>
             </div>
           )}
           {importInfo && (
             <div className="mt-3 rounded-md bg-paper p-3 text-[12px] leading-relaxed text-ink">
               <p>
-                <strong>Importado de Ticket Tailor:</strong> {importInfo.imported.length ? importInfo.imported.join(", ") : "nada"}.
+                <strong>Rellenado desde Ticket Tailor:</strong> {importInfo.imported.length ? importInfo.imported.join(", ") : "nada"}.
               </p>
-              <p className="mt-1">
-                <strong>Completa tú:</strong> {importInfo.missing.join(", ")}.
-              </p>
+              {importInfo.missing.length > 0 && (
+                <p className="mt-1">
+                  <strong>Revisa o completa:</strong> {importInfo.missing.join(", ")}.
+                </p>
+              )}
               {importInfo.notes.map((n) => (
                 <p key={n} className="mt-1 text-ink-soft">
                   {n}
                 </p>
               ))}
-              <p className="mt-1 text-ink-soft">Revisa todos los textos importados antes de publicar.</p>
-              {importInfo.ticketTailorDescription && (
+              <p className="mt-1 text-ink-soft">Los campos que ya tenían texto no se han cambiado. Revisa la vista previa antes de publicar.</p>
+              {importInfo.ticketTailorDescription && form.description !== importInfo.ticketTailorDescription.slice(0, 1200) && (
                 <details className="mt-2">
-                  <summary className="cursor-pointer text-ink">Descripción en Ticket Tailor (solo referencia)</summary>
+                  <summary className="cursor-pointer text-ink">Descripción en Ticket Tailor</summary>
                   <p className="mt-1 whitespace-pre-line text-ink-soft">{importInfo.ticketTailorDescription}</p>
                   <button
                     type="button"
                     className={`${softButton} mt-2`}
-                    onClick={() => set("description", importInfo.ticketTailorDescription ?? "")}
+                    onClick={() => set("description", (importInfo.ticketTailorDescription ?? "").slice(0, 1200))}
                   >
                     Usar este texto en la web
                   </button>
@@ -353,20 +354,6 @@ export default function EventsManagerPage() {
           {/* 2. Details */}
           <h3 className="mt-6 text-[12px] font-medium uppercase tracking-[0.14em] text-ink-soft">2 · Datos del evento</h3>
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label className={fieldLabel} htmlFor="ev-title">Título</label>
-              <input id="ev-title" className={input} value={form.label} onChange={(e) => set("label", e.target.value)} placeholder="Junto Select Signature" />
-            </div>
-            <div>
-              <label className={fieldLabel} htmlFor="ev-type">Tipo de evento</label>
-              <input id="ev-type" className={input} list="event-types" value={form.eventType} onChange={(e) => set("eventType", e.target.value)} placeholder="Signature" />
-              <datalist id="event-types">
-                <option value="Signature" />
-                <option value="Cena" />
-                <option value="Cata" />
-                <option value="Afterwork" />
-              </datalist>
-            </div>
             <div>
               <label className={fieldLabel} htmlFor="ev-city">Ciudad</label>
               <input id="ev-city" className={input} value={form.city} onChange={(e) => set("city", e.target.value)} />
@@ -394,15 +381,11 @@ export default function EventsManagerPage() {
                 onChange={(e) => set("venuePublic", e.target.value)}
                 placeholder="Déjalo vacío si aún no quieres mostrarlo"
               />
-              <p className="mt-1 text-[12px] text-ink-soft">No pongas la dirección exacta: en la web solo se muestra este texto y la ciudad.</p>
+              <p className="mt-1 text-[12px] text-ink-soft">Se muestra tal cual en la web, junto a la ciudad. Quita la dirección exacta si no quieres publicarla.</p>
             </div>
             <div className="sm:col-span-2">
               <label className={fieldLabel} htmlFor="ev-desc">Descripción</label>
               <textarea id="ev-desc" rows={4} className={input} value={form.description} onChange={(e) => set("description", e.target.value)} />
-            </div>
-            <div>
-              <label className={fieldLabel} htmlFor="ev-price">Precio desde (€, opcional)</label>
-              <input id="ev-price" inputMode="decimal" className={input} value={form.priceFromEuros} onChange={(e) => set("priceFromEuros", e.target.value)} placeholder="Vacío = no se muestra" />
             </div>
           </div>
 
@@ -439,22 +422,24 @@ export default function EventsManagerPage() {
           </label>
           {busy === "upload" && <p className="text-[12px] text-ink-soft">Subiendo…</p>}
 
-          {/* 4. Status */}
-          <h3 className="mt-6 text-[12px] font-medium uppercase tracking-[0.14em] text-ink-soft">4 · Estado</h3>
+          {/* 4. Tickets */}
+          <h3 className="mt-6 text-[12px] font-medium uppercase tracking-[0.14em] text-ink-soft">4 · Entradas</h3>
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
             <div>
-              <label className={fieldLabel} htmlFor="ev-status">Estado</label>
+              <label className={fieldLabel} htmlFor="ev-status">Qué se muestra en la web</label>
               <select id="ev-status" className={input} value={form.publicStatus} onChange={(e) => set("publicStatus", e.target.value as EventPublicStatus)}>
-                {(Object.keys(EVENT_PUBLIC_STATUS_LABELS) as EventPublicStatus[]).map((s) => (
-                  <option key={s} value={s}>
-                    {EVENT_PUBLIC_STATUS_LABELS[s]}
-                  </option>
-                ))}
+                {(Object.keys(EVENT_PUBLIC_STATUS_LABELS) as EventPublicStatus[])
+                  .filter((s) => s !== "draft" || form.publicStatus === "draft")
+                  .map((s) => (
+                    <option key={s} value={s}>
+                      {EVENT_PUBLIC_STATUS_LABELS[s]}
+                    </option>
+                  ))}
               </select>
               <p className="mt-1 text-[12px] text-ink-soft">{STATUS_HELP[form.publicStatus]}</p>
             </div>
             <div>
-              <label className={fieldLabel} htmlFor="ev-checkout">Enlace de compra (Ticket Tailor)</label>
+              <label className={fieldLabel} htmlFor="ev-checkout">Enlace de compra</label>
               <input
                 id="ev-checkout"
                 className={input}
@@ -462,31 +447,33 @@ export default function EventsManagerPage() {
                 onChange={(e) => set("ticketTailorCheckoutUrl", e.target.value)}
                 placeholder="https://www.tickettailor.com/events/…"
               />
-              <p className="mt-1 text-[12px] text-ink-soft">Obligatorio para «Entradas disponibles».</p>
+              <p className="mt-1 text-[12px] text-ink-soft">Se rellena con el enlace de Ticket Tailor.</p>
             </div>
           </div>
 
-          {/* 5. Member benefit */}
-          <h3 className="mt-6 text-[12px] font-medium uppercase tracking-[0.14em] text-ink-soft">5 · Beneficio miembros Select</h3>
-          <label className="mt-2 flex items-center gap-2 text-[13px] text-ink">
-            <input type="checkbox" className="h-4 w-4" checked={form.memberBenefitEnabled} onChange={(e) => set("memberBenefitEnabled", e.target.checked)} />
-            Ofrecer el 20 % a los miembros Select en este evento
-          </label>
-          {form.memberBenefitEnabled && (
-            <div className="mt-2">
-              <label className={fieldLabel} htmlFor="ev-tt-types">Tipos de entrada con descuento (empiezan por tt_)</label>
-              <input id="ev-tt-types" className={input} value={form.ticketTypeIds} onChange={(e) => set("ticketTypeIds", e.target.value)} placeholder="tt_6869922, tt_6869920" />
-              <p className="mt-1 text-[12px] text-ink-soft">
-                {linked || form.ticketTailorRef.trim()
-                  ? "Se rellenan al importar si Ticket Tailor los facilita. Cada miembro pide un código por ciclo mensual para el evento que elija."
-                  : "Necesita un evento de Ticket Tailor: añade su enlace en el paso 1."}
-              </p>
+          <details className="mt-5">
+            <summary className="cursor-pointer text-[12px] font-medium text-ink-soft">Más opciones</summary>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className={fieldLabel} htmlFor="ev-type">Tipo de evento</label>
+                <input id="ev-type" className={input} list="event-types" value={form.eventType} onChange={(e) => set("eventType", e.target.value)} placeholder="Signature" />
+                <datalist id="event-types">
+                  <option value="Signature" />
+                  <option value="Cena" />
+                  <option value="Cata" />
+                  <option value="Afterwork" />
+                </datalist>
+              </div>
+              <div>
+                <label className={fieldLabel} htmlFor="ev-price">Precio desde (€)</label>
+                <input id="ev-price" inputMode="decimal" className={input} value={form.priceFromEuros} onChange={(e) => set("priceFromEuros", e.target.value)} placeholder="Vacío = no se muestra" />
+              </div>
             </div>
-          )}
-          <label className="mt-3 flex items-center gap-2 text-[13px] text-ink">
-            <input type="checkbox" className="h-4 w-4" checked={form.reconnectEnabled} onChange={(e) => set("reconnectEnabled", e.target.checked)} />
-            Reconnect activado (después del evento)
-          </label>
+            <label className="mt-3 flex items-center gap-2 text-[13px] text-ink">
+              <input type="checkbox" className="h-4 w-4" checked={form.reconnectEnabled} onChange={(e) => set("reconnectEnabled", e.target.checked)} />
+              Reconnect activado (después del evento)
+            </label>
+          </details>
 
           {error && (
             <p role="alert" className="mt-4 text-[13px] text-[#8a3b3b]">
@@ -495,7 +482,7 @@ export default function EventsManagerPage() {
           )}
           <div className="mt-5 flex flex-wrap items-center gap-2">
             <button type="button" className={strongButton} onClick={handleSave} disabled={busy === "save"}>
-              {busy === "save" ? "Guardando…" : "Guardar"}
+              {busy === "save" ? "Guardando…" : editingId ? "Guardar cambios" : "Crear evento"}
             </button>
             {current && (
               <button
@@ -529,7 +516,7 @@ export default function EventsManagerPage() {
 
       <section className="mt-10">
         <div className="flex items-center justify-between">
-          <h2 className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">Todos los eventos</h2>
+          <h2 className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">Lista de eventos</h2>
           <label className="flex items-center gap-2 text-[12px] text-ink-soft">
             <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
             Mostrar archivados
@@ -543,7 +530,6 @@ export default function EventsManagerPage() {
             {visible.map((e) => {
               const id = e.ticketTailorEventId;
               const isLinked = e.ticketTailorLinked !== false;
-              const benefitOn = e.memberBenefitEnabled !== false && e.ticketTailorTicketTypeIds.length > 0 && isLinked;
               return (
                 <article key={id} className="rounded-xl border border-hairline bg-white p-4" data-event-id={id}>
                   <div className="flex flex-wrap items-start justify-between gap-4">
@@ -557,8 +543,6 @@ export default function EventsManagerPage() {
                         {" · "}
                         {isPast(e) ? "Ya celebrado · " : ""}
                         {e.archivedAt ? "Archivado" : e.published ? "Publicado en la web" : "No publicado"}
-                        {" · "}20 % miembros: {benefitOn ? "sí" : "no"}
-                        {benefitOn ? ` (${e.benefitCount} código(s))` : ""}
                         {" · "}
                         {isLinked ? `Ticket Tailor nº ${id}` : "Sin Ticket Tailor"}
                       </p>
@@ -567,6 +551,9 @@ export default function EventsManagerPage() {
                       <button type="button" className={softButton} onClick={() => startEdit(e)}>
                         Editar
                       </button>
+                      <a className={softButton} href={`/eventos/vista-previa?id=${encodeURIComponent(id)}`} target="_blank" rel="noopener noreferrer">
+                        Vista previa
+                      </a>
                       {!e.archivedAt && (
                         <button type="button" className={softButton} disabled={busy !== null} onClick={() => rowAction(e, e.published ? "unpublish" : "publish")}>
                           {e.published ? "Retirar de la web" : "Publicar"}
@@ -575,11 +562,6 @@ export default function EventsManagerPage() {
                       <button type="button" className={softButton} disabled={busy !== null} onClick={() => rowAction(e, e.archivedAt ? "restore" : "archive")}>
                         {e.archivedAt ? "Restaurar" : "Archivar"}
                       </button>
-                      {benefitOn && (
-                        <button type="button" className={softButton} disabled={busy !== null} onClick={() => rowAction(e, "sync")} title="Reintenta los códigos pedidos que aún no están activos en Ticket Tailor">
-                          Reintentar códigos
-                        </button>
-                      )}
                     </div>
                   </div>
                   {rowMessages[id] && <p className="mt-2 text-[12px] text-ink-soft">{rowMessages[id]}</p>}

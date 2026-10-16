@@ -5,6 +5,8 @@ import { getAge } from "@/lib/introduction/age";
 import { withProfileDefaults, type ProfileDocument } from "@/lib/introduction/types";
 import { resolvePersonId } from "@/lib/matching/identity";
 import type { ShortlistEntryView, ShortlistStatus } from "./types";
+import { clientAge, clientIdFromCandidateUid } from "./candidatePool";
+import { getClient } from "./store";
 
 /**
  * A client's manual shortlist: `clientShortlist/{clientId}_{personId}`,
@@ -34,15 +36,41 @@ async function profileFor(uid: string): Promise<ProfileDocument | null> {
   return snap.exists ? withProfileDefaults(uid, snap.data() as Partial<ProfileDocument>) : null;
 }
 
+/** Name, age, city and photo, live: from the profile, or from the client's ficha for a client proposed as a candidate. */
+async function candidateSummary(uid: string): Promise<ShortlistEntryView["candidate"]> {
+  const clientId = clientIdFromCandidateUid(uid);
+  if (clientId) {
+    const c = await getClient(clientId);
+    return c ? { firstName: c.firstName, age: clientAge(c), city: c.city, photoPath: null } : null;
+  }
+  const profile = await profileFor(uid);
+  if (!profile) return null;
+  const bd = profile.private.birthDate;
+  return {
+    firstName: profile.visible.firstName,
+    age: bd ? getAge(bd.toDate().toISOString().slice(0, 10)) : null,
+    city: profile.visible.city,
+    photoPath: profile.photos[0] ?? null,
+  };
+}
+
 export async function addToShortlist(
   clientId: string,
   candidateUid: string,
   score: number | null,
   adminEmail: string,
 ): Promise<{ ok: true; id: string; already: boolean } | { ok: false; error: "candidate_not_found" }> {
-  const profile = await profileFor(candidateUid);
-  if (!profile) return { ok: false, error: "candidate_not_found" };
-  const personId = resolvePersonId(candidateUid, profile);
+  let personId: string;
+  if (clientIdFromCandidateUid(candidateUid)) {
+    if (clientIdFromCandidateUid(candidateUid) === clientId || !(await candidateSummary(candidateUid))) {
+      return { ok: false, error: "candidate_not_found" };
+    }
+    personId = candidateUid;
+  } else {
+    const profile = await profileFor(candidateUid);
+    if (!profile) return { ok: false, error: "candidate_not_found" };
+    personId = resolvePersonId(candidateUid, profile);
+  }
   const id = shortlistId(clientId, personId);
   const ref = adminDb.collection(SHORTLIST).doc(id);
   try {
@@ -128,22 +156,11 @@ export async function getShortlist(clientId: string): Promise<ShortlistEntryView
   const entries = await loadShortlistEntries(clientId);
   const views = await Promise.all(
     entries.map(async (e): Promise<ShortlistEntryView | null> => {
-      const profile = e.candidateUid ? await profileFor(e.candidateUid) : null;
+      const candidate = e.candidateUid ? await candidateSummary(e.candidateUid) : null;
       // Deleted profile: gone from the list, unless it was an actual
       // introduction, which stays as an anonymous line for the count.
-      if (!profile && !e.deletedCandidate) return null;
-      const bd = profile?.private.birthDate;
-      return {
-        ...e,
-        candidate: profile
-          ? {
-              firstName: profile.visible.firstName,
-              age: bd ? getAge(bd.toDate().toISOString().slice(0, 10)) : null,
-              city: profile.visible.city,
-              photoPath: profile.photos[0] ?? null,
-            }
-          : null,
-      };
+      if (!candidate && !e.deletedCandidate) return null;
+      return { ...e, candidate };
     }),
   );
   const order: ShortlistStatus[] = ["presentado", "interesado", "contactado", "preseleccionado", "rechazado"];

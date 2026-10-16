@@ -67,8 +67,11 @@ async function main() {
   const before = { proposals: await count("proposals"), emails: await count("outboundEmails") };
   await adminLogin(page);
   await page.getByRole("heading", { name: "Clientes" }).waitFor();
-  check("menu shows Clientes, Solicitudes, Candidatos, Eventos and Archivo",
-    (await page.getByRole("link", { name: "Clientes" }).count()) > 0 && (await page.getByRole("link", { name: "Candidatos" }).count()) > 0 && (await page.getByText("Archivo").count()) > 0);
+  const menu = page.getByRole("navigation").first();
+  check("menu shows only Clientes, Solicitudes, Candidatos and Eventos",
+    (await menu.getByRole("link", { name: "Clientes" }).count()) > 0 && (await menu.getByRole("link", { name: "Solicitudes" }).count()) > 0 &&
+    (await menu.getByRole("link", { name: "Candidatos" }).count()) > 0 && (await menu.getByRole("link", { name: "Eventos" }).count()) > 0 &&
+    (await page.getByText("Archivo").count()) === 0 && (await menu.getByRole("link", { name: /Matching|Propuestas|Introducciones|Revisión|Legacy/ }).count()) === 0);
   await shot(page, "1-lista");
 
   await page.getByRole("button", { name: "Nuevo cliente" }).click();
@@ -163,6 +166,34 @@ async function main() {
   await page.getByText("Carlos Ejemplo").waitFor();
   check("client listed with 1 of 3 presented", await page.getByText(/1 de 3/).first().isVisible());
   await shot(page, "8-lista-final");
+
+  // ---- Solicitudes: converting creates the client ----
+  await page.goto(`${APP}/admin/solicitudes`, { waitUntil: "networkidle" });
+  const inqRow = page.locator("tr", { hasText: "Andrés" }).first();
+  await inqRow.waitFor();
+  await shot(page, "9-solicitudes");
+  await inqRow.getByRole("button", { name: "Convertir en cliente" }).click();
+  await page.waitForURL(/\/admin\/clientes\/[^/]+$/, { timeout: 15000 });
+  await page.getByRole("heading", { name: /Andrés/ }).waitFor();
+  check("Convertir en cliente opens the new client's ficha", true);
+  await page.goto(`${APP}/admin/solicitudes`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /Ya son clientes/ }).click();
+  check("the request stays, under «Ya son clientes», with a link to the ficha",
+    await page.locator("tr", { hasText: "Andrés" }).getByRole("link", { name: /Ver ficha del cliente/ }).isVisible());
+  await page.goto(`${APP}/admin/clientes`, { waitUntil: "networkidle" });
+  check("…and the client is in Clientes", await page.getByText("Andrés Prueba").first().isVisible());
+
+  // ---- Candidatos ----
+  await page.goto(`${APP}/admin/members`, { waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: "Candidatos" }).waitFor();
+  await page.getByText("Lucía").first().waitFor({ timeout: 15000 });
+  check("Candidatos: no membership filters or counters", (await page.getByText(/Membres|Select activo|suscrip/i).count()) === 0);
+  await page.getByRole("button", { name: "Mujeres", exact: true }).click();
+  const womenOnly = !(await page.locator("tbody").getByText("Hombre", { exact: true }).count());
+  await page.getByLabel("Perfiles incompletos").check();
+  const incompleteOnly = (await page.locator("tbody").getByText("Completo", { exact: true }).count()) === 0 && (await page.locator("tbody tr").count()) > 0;
+  check("Candidatos: Mujeres + Perfiles incompletos combine", womenOnly && incompleteOnly);
+  await shot(page, "10-candidatos");
 
   const proposals = (await count("proposals")) - before.proposals;
   const emails = (await count("outboundEmails")) - before.emails;

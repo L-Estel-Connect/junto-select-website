@@ -161,6 +161,18 @@ async function seed() {
     edad: 54, ciudad: "Pozuelo", programa: "privado", objetivo: "relacion_estable", busca: "Alguien con quien viajar",
     edadDesde: 44, edadHasta: 56, status: "nueva", createdAt: ts("2026-10-14T10:00:00Z"),
   });
+  // Converted by changing its status to "Cliente" (the bug Lara hit on staging).
+  await db.doc("matchmakingInquiries/mm-inq-2").set({
+    nombre: "Inés", apellidos: "Prueba", email: "ines.prueba@example.test", telefono: "633333333", canal: "email",
+    edad: 47, ciudad: "Madrid", programa: "select", objetivo: "relacion_estable", busca: "Conversación y calma",
+    edadDesde: 45, edadHasta: 58, status: "contactada", createdAt: ts("2026-10-15T10:00:00Z"),
+  });
+  // Same email as a client created in the test: converting it must link, not duplicate.
+  await db.doc("matchmakingInquiries/mm-inq-3").set({
+    nombre: "Carlos", apellidos: "Prueba", email: "Carlos.Prueba@example.test", telefono: "622222222", canal: "whatsapp",
+    edad: 52, ciudad: "Madrid", programa: "select", objetivo: "relacion_estable", busca: "Segunda solicitud",
+    status: "nueva", createdAt: ts("2026-10-15T11:00:00Z"),
+  });
 }
 
 const FULL_PROFILE = {
@@ -206,6 +218,8 @@ const FULL_PROFILE = {
     ["DELETE", "/api/admin/clients/x/shortlist/y"],
     ["GET", "/api/admin/places?q=madrid"],
     ["PUT", "/api/admin/candidate-locations/mm-villanueva", { ine: "28079" }],
+    ["GET", "/api/admin/candidates"],
+    ["PATCH", "/api/admin/dashboard/inquiries/mm-inq-2", { status: "cliente" }],
   ];
   let anonOk = true;
   let strangerOk = true;
@@ -215,8 +229,8 @@ const FULL_PROFILE = {
     if (a.status !== 401) anonOk = false;
     if (![401, 403].includes(s.status)) strangerOk = false;
   }
-  check("admin APIs refuse anonymous calls (11 routes)", anonOk);
-  check("admin APIs refuse a signed-in non-admin (11 routes)", strangerOk);
+  check(`admin APIs refuse anonymous calls (${guarded.length} routes)`, anonOk);
+  check(`admin APIs refuse a signed-in non-admin (${guarded.length} routes)`, strangerOk);
   const page = await fetch(`${APP}/admin/clientes`, { redirect: "manual" });
   check("Clientes page redirects when signed out", [302, 303, 307, 308].includes(page.status), String(page.status));
 
@@ -310,7 +324,63 @@ const FULL_PROFILE = {
   check("request converted to a client (twice → same client)", conv1.status === 200 && cc.id === conv2.json.client?.id);
   check("request answers carried over", cc.firstName === "Andrés" && cc.programme === "privado" && cc.placeIne === "28115" && cc.profile.dealbreakers.ageMin === 44 && cc.profile.visible.relationshipIntention === "relacion_seria" && cc.notes.includes("viajar"));
   check("request marked as converted", (await db.doc("matchmakingInquiries/mm-inq-1").get()).get("clientId") === cc.id);
-  check("a client can't be matched with their own candidate account", true);
+
+  // Changing the status to "Cliente" creates the client record.
+  const st = await api(admin, "PATCH", "/api/admin/dashboard/inquiries/mm-inq-2", { status: "cliente" });
+  const inq2 = (await db.doc("matchmakingInquiries/mm-inq-2").get()).data();
+  const ines = st.json?.clientId ? (await api(admin, "GET", `/api/admin/clients/${st.json.clientId}`)).json.client : null;
+  check("status → Cliente creates a real client", st.status === 200 && !!st.json.clientId && ines?.firstName === "Inés" && ines.email === "ines.prueba@example.test", JSON.stringify(st.json));
+  check("…linked on the request, which stays for history", inq2.clientId === st.json.clientId && inq2.status === "cliente" && inq2.busca === "Conversación y calma");
+  const listed = (await api(admin, "GET", "/api/admin/clients")).json.items.some((i) => i.client.id === st.json.clientId);
+  check("…and shows in Clientes straight away", listed);
+  const again = await api(admin, "PATCH", "/api/admin/dashboard/inquiries/mm-inq-2", { status: "cliente" });
+  check("…setting it again doesn't create a second client", again.json?.clientId === st.json.clientId);
+  const back = await api(admin, "PATCH", "/api/admin/dashboard/inquiries/mm-inq-2", { status: "espera" });
+  check("a converted request can't silently go back to another status", back.status === 409 && /already_client/.test(back.json?.error ?? ""), `${back.status} ${back.json?.error}`);
+  const note = await api(admin, "PATCH", "/api/admin/dashboard/inquiries/mm-inq-2", { note: "Llamada hecha" });
+  check("notes on a converted request still save", note.status === 200);
+  const dupe = await api(admin, "PATCH", "/api/admin/dashboard/inquiries/mm-inq-3", { status: "cliente" });
+  const clientsWithEmail = (await db.collection("clients").where("email", "==", "carlos.prueba@example.test").get()).size;
+  check("a request from an existing client's email links to that client", dupe.json?.clientId === id && clientsWithEmail === 1, `${dupe.json?.clientId} vs ${id}, ${clientsWithEmail} record(s)`);
+
+  // --- Clients are candidates for other clients ---------------------------------------------------------
+  const elenaId = (await api(admin, "POST", "/api/admin/clients", {})).json.client.id;
+  await api(admin, "PATCH", `/api/admin/clients/${elenaId}`, {
+    firstName: "Elena", lastName: "Prueba", email: "elena.prueba@example.test", phone: "644444444", channel: "whatsapp",
+    ageYears: 50, city: "Madrid", programme: "select", programmeStart: "2026-10-15", status: "activo",
+    profile: {
+      visible: { ...FULL_PROFILE.visible, gender: "mujer", profession: "Arquitecta", heightCm: 168 },
+      incomeRange: "80k_150k",
+      dealbreakers: { ...FULL_PROFILE.dealbreakers, gendersSought: ["hombre"], ageMin: 45, ageMax: 60 },
+      preferences: { ...FULL_PROFILE.preferences, heightMinCm: 170, heightMaxCm: 195 },
+    },
+  });
+  const sc = (await api(admin, "POST", `/api/admin/clients/${id}/search`)).json;
+  const elenaRow = sc.results.find((r) => r.uid === `cliente_${elenaId}`);
+  check("another active client appears in the search, marked Cliente", elenaRow?.compatible && elenaRow.type === "cliente", JSON.stringify(elenaRow ?? null).slice(0, 160));
+  check("a client never appears in their own search", !sc.results.some((r) => r.uid === `cliente_${id}`));
+  check("profiles are marked Perfil privado", sc.results.find((r) => r.uid === "mm-madrid")?.type === "perfil_privado");
+  const se = (await api(admin, "POST", `/api/admin/clients/${elenaId}/search`)).json;
+  check("…and it works both ways", se.results.find((r) => r.uid === `cliente_${id}`)?.compatible === true);
+  const cd = await api(admin, "GET", `/api/admin/clients/${id}/candidates/cliente_${elenaId}`);
+  check("client candidate detail: from the ficha, no income", cd.status === 200 && cd.json.candidate.firstName === "Elena" && cd.json.candidate.type === "cliente" && !JSON.stringify(cd.json).includes("80k_150k"));
+  const sh = await api(admin, "POST", `/api/admin/clients/${id}/shortlist`, { candidateUid: `cliente_${elenaId}` });
+  const shSelf = await api(admin, "POST", `/api/admin/clients/${id}/shortlist`, { candidateUid: `cliente_${id}` });
+  const slc = (await api(admin, "GET", `/api/admin/clients/${id}/shortlist`)).json.shortlist;
+  check("a client can be preselected for another client, not for themself", sh.status === 200 && shSelf.status !== 200 && slc.some((e) => e.candidateUid === `cliente_${elenaId}` && e.candidate?.firstName === "Elena"));
+  await api(admin, "DELETE", `/api/admin/clients/${id}/shortlist/${encodeURIComponent(sh.json.id)}`);
+  await api(admin, "PATCH", `/api/admin/clients/${elenaId}`, { status: "en_pausa" });
+  const sp = (await api(admin, "POST", `/api/admin/clients/${id}/search`)).json;
+  check("a paused client is not proposed", !sp.results.some((r) => r.uid === `cliente_${elenaId}`));
+
+  // --- Candidatos list ------------------------------------------------------------------------------------
+  const cand = await api(admin, "GET", "/api/admin/candidates");
+  const rows = cand.json?.items ?? [];
+  const row = (k) => rows.find((r) => r.key === k);
+  check("Candidatos lists private profiles with completeness", row("mm-madrid")?.type === "perfil_privado" && row("mm-madrid").complete === true && row("mm-nophotos")?.complete === false && row("mm-nophotos").missing.includes("fotos"));
+  check("Candidatos leaves out confirmed duplicates", !rows.some((r) => r.key === "mm-dup"));
+  check("Candidatos lists clients without a profile, typed Cliente", rows.some((r) => r.type === "cliente" && r.firstName === "Inés") && rows.some((r) => r.type === "cliente" && r.firstName === "Carlos"));
+  check("Candidatos rows carry no membership fields", !/membership|subscription|stripe/i.test(JSON.stringify(rows)));
 
   // --- Nothing automatic ------------------------------------------------------------------------------
   const secret = process.env.MATCHING_ADMIN_SECRET;

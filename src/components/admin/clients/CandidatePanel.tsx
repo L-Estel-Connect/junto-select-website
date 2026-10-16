@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { adminFetchJson } from "@/lib/admin/adminFetch";
 import { useAdminQuery } from "@/lib/admin/useAdminQuery";
 import type { CandidateDetail } from "@/lib/clients/candidateDetail";
@@ -97,8 +98,15 @@ export default function CandidatePanel({
                   {c.distanceKm !== null && ` · a ${c.distanceKm} km`}
                 </p>
                 <p className="mt-1 text-[12px] text-ink-soft">
-                  Perfil completo y activo · actualizado {formatDate(c.updatedAt)}
-                  {c.membership && " · tuvo Membresía"}
+                  {c.type === "cliente" ? "Cliente de un programa" : "Perfil privado"} · actualizado {formatDate(c.updatedAt)}
+                  {c.uid.startsWith("cliente_") && (
+                    <>
+                      {" · "}
+                      <Link href={`/admin/clientes/${c.uid.slice(8)}`} className="underline decoration-hairline underline-offset-4">
+                        Abrir su ficha
+                      </Link>
+                    </>
+                  )}
                 </p>
                 <div className="mt-3">
                   <Reciprocity
@@ -125,7 +133,7 @@ export default function CandidatePanel({
                   ))}
                 </div>
               ) : (
-                <p className="text-[13px] text-ink-soft">Sin fotos.</p>
+                <p className="text-[13px] text-ink-soft">{c.type === "cliente" ? "Las fotos de los clientes no se guardan aquí." : "Sin fotos."}</p>
               )}
 
               {c.failures.length > 0 && (

@@ -1,9 +1,6 @@
 import "server-only";
 import { adminDb } from "@/lib/firebase/admin";
-import { getAge } from "@/lib/introduction/age";
-import { computeProfileStatus } from "@/lib/introduction/completion";
 import type { ProfileDocument } from "@/lib/introduction/types";
-import { loadEligiblePool, type EligibleProfile } from "@/lib/matching/engine";
 import { evaluateHardFiltersDetailed, type HardFilterFailure } from "@/lib/matching/hardFilters";
 import { scorePair } from "@/lib/matching/scoring";
 import { computeMatchWhy, type MatchWhy } from "@/lib/admin/why";
@@ -14,6 +11,15 @@ import { loadConfirmedPlaces } from "./locations";
 import { loadShortlistEntries } from "./shortlist";
 import { CLIENTS, toClientView } from "./store";
 import { clientFullName, missingForSearch, type ClientView, type ShortlistStatus } from "./types";
+import {
+  clientAge,
+  clientCandidateUid,
+  clientIsAvailableCandidate,
+  loadClients,
+  loadPoolProfiles,
+  profileAge,
+  type CandidateType,
+} from "./candidatePool";
 
 /**
  * "Buscar perfiles compatibles": every candidate in the private network,
@@ -37,7 +43,9 @@ export interface PlaceSummary {
 }
 
 export interface CandidateResult {
+  /** A profile's uid, or `cliente_<id>` for a client proposed as a candidate. */
   uid: string;
+  type: CandidateType;
   personId: string;
   firstName: string;
   age: number | null;
@@ -80,33 +88,64 @@ function summary(p: Place): PlaceSummary {
   return { ine: p.ine, name: p.name, province: p.province, community: p.community };
 }
 
-function ageOf(profile: ProfileDocument): number | null {
-  const bd = profile.private.birthDate;
-  return bd ? getAge(bd.toDate().toISOString().slice(0, 10)) : null;
-}
-
 function isoOf(v: unknown): string | null {
   const t = v as { toDate?: () => Date } | null | undefined;
   return t?.toDate ? t.toDate().toISOString() : null;
 }
 
-/** Accounts registered with the client's own email: never shown as their own match. */
-async function uidsWithEmail(email: string): Promise<Set<string>> {
-  if (!email) return new Set();
-  const snap = await adminDb.collection("users").where("email", "==", email).get();
-  return new Set(snap.docs.map((d) => d.id));
+interface PoolEntry {
+  uid: string;
+  personId: string;
+  type: CandidateType;
+  profile: ProfileDocument;
+  age: number | null;
+  photos: string[];
+  updatedAt: string | null;
 }
 
-export async function loadSearchPool(): Promise<EligibleProfile[]> {
-  const [pool, confirmed] = await Promise.all([loadEligiblePool({ requireMadrid: false }), loadConfirmedPlaces()]);
-  return pool
-    .filter((p) => computeProfileStatus(p.profile) === "active_for_matching")
-    .map((p) => {
-      const c = confirmed.get(p.uid);
-      // A confirmation only answers the exact text it was given for.
-      if (c && c.cityText === p.profile.visible.city) attachConfirmedPlace(p.profile, c.place);
-      return p;
+/**
+ * Complete private profiles (no payment needed) plus other clients who
+ * are available as candidates, minus the client themself. A suspected
+ * duplicate waits for the team's review before it can be proposed.
+ */
+async function loadSearchPool(client: ClientView): Promise<PoolEntry[]> {
+  const clients = await loadClients();
+  const [profiles, confirmed] = await Promise.all([loadPoolProfiles(clients), loadConfirmedPlaces()]);
+  const own = client.email.toLowerCase();
+  const entries: PoolEntry[] = [];
+  const clientsWithProfile = new Set<string>();
+  for (const p of profiles) {
+    if (p.clientId) clientsWithProfile.add(p.clientId);
+    if (!p.complete || p.suspectedDuplicate) continue;
+    if (p.clientId === client.id || (own && p.email === own)) continue;
+    const c = confirmed.get(p.uid);
+    // A confirmation only answers the exact text it was given for.
+    if (c && c.cityText === p.profile.visible.city) attachConfirmedPlace(p.profile, c.place);
+    entries.push({
+      uid: p.uid,
+      personId: p.personId,
+      type: p.clientId ? "cliente" : "perfil_privado",
+      profile: p.profile,
+      age: profileAge(p.profile),
+      photos: p.profile.photos,
+      updatedAt: isoOf(p.profile.meta.updatedAt),
     });
+  }
+  for (const other of clients) {
+    if (other.id === client.id || clientsWithProfile.has(other.id) || !clientIsAvailableCandidate(other)) continue;
+    if (own && other.email.toLowerCase() === own) continue;
+    const uid = clientCandidateUid(other.id);
+    entries.push({
+      uid,
+      personId: uid,
+      type: "cliente",
+      profile: clientAsProfile(other),
+      age: clientAge(other),
+      photos: [],
+      updatedAt: other.updatedAt,
+    });
+  }
+  return entries;
 }
 
 export async function searchForClient(client: ClientView): Promise<SearchResult> {
@@ -130,9 +169,8 @@ export async function searchForClient(client: ClientView): Promise<SearchResult>
   if (missing.length > 0) return { ...base, poolSize: 0, compatibleCount: 0, results: [] };
 
   const me = clientAsProfile(client);
-  const [pool, selfUids, shortlist, clientsSnap] = await Promise.all([
-    loadSearchPool(),
-    uidsWithEmail(client.email),
+  const [pool, shortlist, clientsSnap] = await Promise.all([
+    loadSearchPool(client),
     loadShortlistEntries(),
     adminDb.collection(CLIENTS).get(),
   ]);
@@ -141,8 +179,8 @@ export async function searchForClient(client: ClientView): Promise<SearchResult>
     clientsSnap.docs.filter((d) => ["activo", "en_pausa"].includes(toClientView(d).status)).map((d) => d.id),
   );
 
-  const candidates = pool.filter((p) => !selfUids.has(p.uid));
-  const results: CandidateResult[] = candidates.map(({ uid, personId, profile }) => {
+  const candidates = pool;
+  const results: CandidateResult[] = candidates.map(({ uid, personId, type, profile, age, photos, updatedAt }) => {
     const failures = evaluateHardFiltersDetailed(me, profile);
     const compatible = failures.length === 0;
     const score = compatible ? scorePair(me, profile) : null;
@@ -151,16 +189,17 @@ export async function searchForClient(client: ClientView): Promise<SearchResult>
     const mine = shortlist.find((s) => s.clientId === client.id && s.personId === personId);
     return {
       uid,
+      type,
       personId,
       firstName: profile.visible.firstName,
-      age: ageOf(profile),
+      age,
       city: profile.visible.city,
       place: place ? summary(place) : null,
       location: loc.status === "resolved" ? (loc.via === "manual" ? "confirmed" : "resolved") : loc.status,
       locationOptions: "options" in loc ? loc.options.map(summary) : [],
       distanceKm: place && clientPlaceRaw ? Math.round(distanceKm(place, clientPlaceRaw)) : null,
-      photoPath: profile.photos[0] ?? null,
-      photoCount: profile.photos.length,
+      photoPath: photos[0] ?? null,
+      photoCount: photos.length,
       compatible,
       clientAcceptsCandidate: !failures.some((f) => f.direction === "a_rejects_b"),
       candidateAcceptsClient: !failures.some((f) => f.direction === "b_rejects_a"),
@@ -172,7 +211,7 @@ export async function searchForClient(client: ClientView): Promise<SearchResult>
       otherClients: shortlist
         .filter((s) => s.personId === personId && s.clientId !== client.id && activeClient.has(s.clientId) && s.status !== "rechazado")
         .map((s) => ({ clientId: s.clientId, name: clientNames.get(s.clientId) ?? "Otro cliente", status: s.status })),
-      updatedAt: isoOf(profile.meta.updatedAt),
+      updatedAt,
     };
   });
 

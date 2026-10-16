@@ -2,9 +2,9 @@
 // Browser walk-through of the Events Manager, as the admin would use it,
 // against the local build (emulators + mock Ticket Tailor). It creates the
 // two initial events in the LOCAL emulator only:
-//   1. 29 Oct 2026: paste the Ticket Tailor link -> Importar -> review ->
-//      Entradas disponibles -> 20 % on -> Guardar -> Publicar.
-//   2. 26 Nov 2026: create manually -> Próximamente -> Guardar -> Publicar
+//   1. 29 Oct 2026: title + Ticket Tailor link -> Rellenar desde Ticket
+//      Tailor -> review -> Crear evento -> Publicar.
+//   2. 26 Nov 2026: create manually -> Próximamente -> Crear evento -> Publicar
 //      (no venue, no price, no ticket link).
 // Then checks /eventos and the homepage and saves screenshots to
 // .local-test/screens/events-*.png.
@@ -76,35 +76,38 @@ async function main() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: "es-ES" });
   const page = await ctx.newPage();
   await adminLogin(page);
-  check("admin: allowlisted account reaches the dashboard", page.url() === `${APP}/admin`);
+  check("admin: allowlisted account reaches the dashboard", [`${APP}/admin`, `${APP}/admin/clientes`].includes(page.url()), page.url());
 
   await page.getByRole("link", { name: "Eventos" }).first().click();
   await page.waitForURL(`${APP}/admin/eventos`);
   check("admin: Eventos in the menu opens the Events Manager", await page.getByRole("heading", { name: "Eventos", exact: true }).isVisible());
 
   // ---- 1. 29 October, from Ticket Tailor ----
-  await page.getByRole("button", { name: "Nuevo evento desde Ticket Tailor" }).click();
+  check("no membership 20 % controls in the events dashboard", (await page.getByText("20 %").count()) === 0);
+  await page.getByRole("button", { name: "Nuevo evento", exact: true }).click();
+  await page.locator("#ev-title").fill(TITLE);
   await page.locator("#tt-ref").fill("https://www.tickettailor.com/events/juntoselect/2439069");
-  await page.getByRole("button", { name: "Importar datos" }).click();
-  await page.getByText("Importado de Ticket Tailor:").waitFor();
+  await page.getByRole("button", { name: "Rellenar desde Ticket Tailor" }).click();
+  await page.getByText("Rellenado desde Ticket Tailor:").waitFor();
+  check("import: keeps the title typed first", (await page.locator("#ev-title").inputValue()) === TITLE);
   check("import: fills the date and time", (await page.locator("#ev-date").inputValue()) === "2026-10-29" && (await page.locator("#ev-start").inputValue()) === "20:00");
   check("import: fills the booking link", (await page.locator("#ev-checkout").inputValue()) === "https://www.tickettailor.com/events/juntoselect/2439069");
   check("import: suggests Entradas disponibles", (await page.locator("#ev-status").inputValue()) === "tickets_available");
-  check("import: site description not overwritten by Ticket Tailor's", (await page.locator("#ev-desc").inputValue()) === "");
-  check("import: Ticket Tailor description shown for reference", await page.getByText("Descripción en Ticket Tailor (solo referencia)").isVisible());
+  check("import: fills the description", /corazón de Madrid/.test(await page.locator("#ev-desc").inputValue()));
+  check("import: fills the place", /MOCK venue/.test(await page.locator("#ev-venue").inputValue()));
+  check("editor: no 20 % or ticket-type controls", (await page.getByText("20 %").count()) === 0 && (await page.locator("#ev-tt-types").count()) === 0);
   await page.screenshot({ path: `${OUT}/events-1-import.png`, fullPage: true });
 
   // Review / edit, as Lara asked: a Signature event in Madrid.
-  await page.locator("#ev-title").fill(TITLE);
+  if (!(await page.locator("#ev-type").isVisible())) await page.getByText("Más opciones").click();
   await page.locator("#ev-type").fill("Signature");
   await page.locator("#ev-city").fill("Madrid");
+  await page.locator("#ev-venue").fill("");
   await page.locator("#ev-desc").fill("");
   check("import: offers the Ticket Tailor image", await page.getByText("Imagen propia del evento").isVisible());
   // This sandbox can't load images from Ticket Tailor's servers, so the walk-through picks the default image.
   await page.getByText("Salón privado (por defecto)").click();
-  await page.getByLabel("Ofrecer el 20 % a los miembros Select en este evento").check();
-  check("benefit: ticket types come from the import", (await page.locator("#ev-tt-types").inputValue()) === "tt_mock1, tt_mock2");
-  await page.getByRole("button", { name: "Guardar" }).click();
+  await page.getByRole("button", { name: "Crear evento" }).click();
   await page.getByText("Guardado.").waitFor();
   const preview = page.frameLocator('iframe[title="Vista previa del evento"]');
   await preview.getByText(TITLE).first().waitFor({ timeout: 20000 });
@@ -115,12 +118,13 @@ async function main() {
   check("publish: done from the editor", true);
 
   // ---- 2. 26 November, without tickets yet ----
-  await page.getByRole("button", { name: "Nuevo evento sin entradas todavía" }).click();
+  await page.getByRole("button", { name: "Nuevo evento", exact: true }).click();
   check("manual: starts as Próximamente", (await page.locator("#ev-status").inputValue()) === "coming_soon");
   await page.locator("#ev-title").fill(TITLE);
+  if (!(await page.locator("#ev-type").isVisible())) await page.getByText("Más opciones").click();
   await page.locator("#ev-type").fill("Signature");
   await page.locator("#ev-date").fill("2026-11-26");
-  await page.getByRole("button", { name: "Guardar" }).click();
+  await page.getByRole("button", { name: "Crear evento" }).click();
   await page.getByText("Guardado.").waitFor();
   await preview.getByText("Próximamente").first().waitFor({ timeout: 20000 });
   check("preview: coming soon has no purchase link", (await preview.getByRole("link", { name: /Reservar/ }).count()) === 0);
@@ -132,7 +136,7 @@ async function main() {
   const docs = (await db.collection("eligibleTicketTailorEvents").get()).docs.map((d) => d.data()).filter((d) => d.label === TITLE);
   const oct = docs.find((d) => d.eventDate === "2026-10-29");
   const nov = docs.find((d) => d.eventDate === "2026-11-26");
-  check("record: 29 Oct stored under the Ticket Tailor number", oct?.ticketTailorEventId === "2439069" && oct.published === true && oct.memberBenefitEnabled === true);
+  check("record: 29 Oct stored under the Ticket Tailor number", oct?.ticketTailorEventId === "2439069" && oct.published === true && oct.memberBenefitEnabled === false);
   check("record: 26 Nov has no venue, price or ticket link", nov && nov.published === true && !nov.venuePublic && nov.priceFromEuros == null && !nov.ticketTailorCheckoutUrl && nov.ticketTailorLinked === false);
 
   // ---- Public pages ----

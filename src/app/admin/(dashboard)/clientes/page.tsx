@@ -65,7 +65,7 @@ export default function ClientesPage() {
       (view === "todos" || i.client.status === "activo" || i.client.status === "en_pausa") &&
       (!q || clientFullName(i.client).toLowerCase().includes(q) || i.client.city.toLowerCase().includes(q)),
   );
-  const openInquiries = (inquiries.data?.items ?? []).filter((i) => !i.clientId && OPEN_INQUIRY.includes(i.status));
+  const openInquiries = (inquiries.data?.items ?? []).filter((i) => !i.clientId && (OPEN_INQUIRY.includes(i.status) || i.status === "cliente"));
 
   return (
     <div className="max-w-[1100px]">

@@ -7,22 +7,14 @@ import { useAuth } from "@/lib/firebase/useAuth";
 import { signOutUser } from "@/lib/firebase/auth";
 import { refreshAdminSessionCookie } from "@/lib/admin/adminFetch";
 
-// The daily matchmaking work first; the old automatic-introductions
-// screens stay reachable, read-only in practice, under "Archivo".
+// Only the daily matchmaking work. The old automatic-introductions screens
+// (resumen, matching, propuestas, introducciones, revisión, legacy) are no
+// longer linked; their pages, data and APIs are kept for history.
 const NAV_ITEMS = [
   { href: "/admin/clientes", label: "Clientes" },
   { href: "/admin/solicitudes", label: "Solicitudes" },
   { href: "/admin/members", label: "Candidatos" },
   { href: "/admin/eventos", label: "Eventos" },
-];
-
-const ARCHIVE_ITEMS = [
-  { href: "/admin", label: "Resumen" },
-  { href: "/admin/matching", label: "Matching" },
-  { href: "/admin/proposals", label: "Propuestas" },
-  { href: "/admin/introductions", label: "Introducciones" },
-  { href: "/admin/review", label: "Revisión" },
-  { href: "/admin/legacy", label: "Legacy" },
 ];
 
 const REFRESH_INTERVAL_MS = 45 * 60 * 1000;
@@ -100,13 +92,6 @@ export default function AdminShell({
           ))}
         </nav>
 
-        <p className="mt-8 px-3 text-[11px] font-medium uppercase tracking-[0.18em] text-ink-soft/80">Archivo</p>
-        <nav className="mt-2 flex flex-col gap-0.5">
-          {ARCHIVE_ITEMS.map((item) => (
-            <NavLink key={item.href} item={item} pathname={pathname} small />
-          ))}
-        </nav>
-
         <div className="mt-auto pt-8">
           <p className="truncate text-[12px] text-ink-soft" title={adminEmail}>
             {adminEmail}
@@ -126,20 +111,12 @@ export default function AdminShell({
   );
 }
 
-function NavLink({
-  item,
-  pathname,
-  small = false,
-}: {
-  item: { href: string; label: string };
-  pathname: string;
-  small?: boolean;
-}) {
-  const active = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
+function NavLink({ item, pathname }: { item: { href: string; label: string }; pathname: string }) {
+  const active = pathname.startsWith(item.href);
   return (
     <Link
       href={item.href}
-      className={`rounded-lg px-3 font-medium transition-colors ${small ? "py-1.5 text-[13px]" : "py-2.5 text-[14px]"} ${
+      className={`rounded-lg px-3 py-2.5 text-[14px] font-medium transition-colors ${
         active ? "bg-rose-tint text-ink" : "text-ink-soft hover:bg-rose-tint/60 hover:text-ink"
       }`}
     >
