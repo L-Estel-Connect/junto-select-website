@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: "/admin/solicitudes", label: "Solicitudes" },
   { href: "/admin/members", label: "Candidatos" },
   { href: "/admin/eventos", label: "Eventos" },
+  { href: "/admin/instagram", label: "Instagram" },
 ];
 
 const REFRESH_INTERVAL_MS = 45 * 60 * 1000;

@@ -224,3 +224,22 @@ env:
     secret: TICKET_TAILOR_API_KEY
     availability:
       - RUNTIME
+
+  # --- Instagram comment-to-DM automation (/admin/instagram) ---
+  # See src/lib/instagram/config.ts. Only this account can be connected.
+  # The Instagram app ID is public (Meta app 2277428956382842 > Instagram >
+  # API setup with Instagram login). The Instagram app secret is server-only,
+  # RUNTIME only, Secret Manager; it also signs the comment webhooks:
+  #   firebase apphosting:secrets:set INSTAGRAM_APP_SECRET --project select-dev-508407
+  - variable: INSTAGRAM_ACCOUNT_USERNAME
+    value: "juntoselect"
+    availability:
+      - RUNTIME
+  - variable: INSTAGRAM_APP_ID
+    value: "29106111172408257"
+    availability:
+      - RUNTIME
+  - variable: INSTAGRAM_APP_SECRET
+    secret: INSTAGRAM_APP_SECRET
+    availability:
+      - RUNTIME

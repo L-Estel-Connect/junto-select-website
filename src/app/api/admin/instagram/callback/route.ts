@@ -2,28 +2,27 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { requireAdminFromCookie } from "@/lib/admin/session";
 import { getAppBaseUrl } from "@/lib/config/appBaseUrl";
-import { ALLOWED_INSTAGRAM_USERNAME, instagramTestEnabled } from "@/lib/instagramTest/config";
-import { GraphError, exchangeCode, getMe, subscribeToComments } from "@/lib/instagramTest/graph";
-import { FieldValue, Timestamp, encryptToken, stateRef } from "@/lib/instagramTest/store";
+import { getAllowedUsername } from "@/lib/instagram/config";
+import { GraphError, exchangeCode, getMe, subscribeToComments } from "@/lib/instagram/graph";
+import { FieldValue, Timestamp, encryptToken, stateRef } from "@/lib/instagram/store";
 
 export const runtime = "nodejs";
 
-const STATE_COOKIE = "__junto_ig_test_state";
+const STATE_COOKIE = "__junto_ig_state";
 
 function back(result: string) {
-  const res = NextResponse.redirect(`${getAppBaseUrl()}/admin/instagram-test?result=${encodeURIComponent(result)}`);
-  res.cookies.set(STATE_COOKIE, "", { path: "/api/admin/instagram-test", maxAge: 0 });
+  const res = NextResponse.redirect(`${getAppBaseUrl()}/admin/instagram?result=${encodeURIComponent(result)}`);
+  res.cookies.set(STATE_COOKIE, "", { path: "/api/admin/instagram", maxAge: 0 });
   return res;
 }
 
 /**
- * Instagram Login return. Refuses any account other than the one approved
- * for the test: its token is never stored. On success, subscribes the
- * account to comment notifications for this app (the only setting changed,
- * and it lives on our app's side, not in the Instagram account's settings).
+ * Instagram Login return. Refuses any account other than the configured
+ * one: its token is never stored. On success, subscribes the account to
+ * comment notifications for this app (a setting on our app's side, not in
+ * the Instagram account's settings). Connecting never activates sending.
  */
 export async function GET(request: Request) {
-  if (!instagramTestEnabled()) return new NextResponse(null, { status: 404 });
   const admin = await requireAdminFromCookie().catch(() => null);
   if (!admin) return back("not_signed_in");
 
@@ -38,7 +37,7 @@ export async function GET(request: Request) {
   try {
     const token = await exchangeCode(code);
     const me = await getMe(token.accessToken);
-    if (me.username?.toLowerCase() !== ALLOWED_INSTAGRAM_USERNAME) return back(`wrong_account_${me.username ?? "unknown"}`);
+    if (me.username?.toLowerCase() !== getAllowedUsername()) return back(`wrong_account_${me.username ?? "unknown"}`);
 
     let subscribed = false;
     let subscribeError: string | null = null;
@@ -49,6 +48,8 @@ export async function GET(request: Request) {
       subscribeError = error instanceof GraphError ? `${error.message} (code ${error.code ?? error.status})` : String(error);
     }
 
+    const snap = await stateRef.get();
+    const status = snap.data()?.status;
     await stateRef.set(
       {
         igUserId: String(me.user_id ?? me.id),
@@ -62,7 +63,8 @@ export async function GET(request: Request) {
         connectedBy: admin.email,
         subscribed,
         subscribeError,
-        sendEnabled: false,
+        // A (re)connection never turns sending on.
+        status: status === "active" ? "paused" : (status ?? "paused"),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
@@ -70,7 +72,7 @@ export async function GET(request: Request) {
     return back(subscribed ? "connected" : "connected_not_subscribed");
   } catch (error) {
     const g = error instanceof GraphError ? error : null;
-    console.error("instagram-test callback: failed", g ? `${g.code} ${g.message}` : (error as Error)?.message);
+    console.error("instagram callback: failed", g ? `${g.code} ${g.message}` : (error as Error)?.message);
     return back(`failed_${g?.code ?? g?.status ?? "unknown"}`);
   }
 }

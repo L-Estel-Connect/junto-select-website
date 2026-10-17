@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireAdminOrRespond } from "@/lib/admin/apiGuard";
 import { describeError } from "@/lib/admin/describeError";
-import { instagramTestEnabled } from "@/lib/instagramTest/config";
-import { listRecentMedia } from "@/lib/instagramTest/graph";
-import { readToken } from "@/lib/instagramTest/store";
+import { listRecentMedia } from "@/lib/instagram/graph";
+import { readToken } from "@/lib/instagram/store";
 
 export const runtime = "nodejs";
 
-/** Read-only: the connected account's recent posts, so one Reel can be identified for the test. */
+/** Read-only: the connected account's recent posts, so one Reel can be identified for the automation. */
 export async function GET(request: Request) {
-  if (!instagramTestEnabled()) return new NextResponse(null, { status: 404 });
   const admin = await requireAdminOrRespond(request);
   if (admin instanceof NextResponse) return admin;
   try {

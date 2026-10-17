@@ -2,7 +2,7 @@ import "server-only";
 import { GRAPH_BASE, OAUTH_SCOPES, getInstagramAppId, getInstagramAppSecret, getOAuthRedirectUri } from "./config";
 
 /**
- * Minimal Instagram API (Instagram Login) client for the access test. Access
+ * Minimal Instagram API (Instagram Login) client for the comment-to-DM automation. Access
  * tokens travel in the Authorization header or a POST body, never in a URL
  * we log, and errors carry only Meta's code/type/message, never a token.
  */
@@ -107,7 +107,7 @@ export async function listRecentMedia(token: string): Promise<MediaItem[]> {
   return res.data ?? [];
 }
 
-/** The only message the test can send: one private reply to one comment. */
+/** The only message the automation can send: one private reply to one comment. */
 export async function sendPrivateReply(token: string, igUserId: string, commentId: string, text: string): Promise<{ recipient_id?: string; message_id?: string }> {
   return parse(
     await fetch(`${GRAPH_BASE}/${encodeURIComponent(igUserId)}/messages`, {
