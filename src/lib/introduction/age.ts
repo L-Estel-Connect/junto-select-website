@@ -1,8 +1,14 @@
-export const MINIMUM_AGE = 35;
+/**
+ * Minimum age to join the private candidate network (free registration).
+ * Event age rules (e.g. a 40+ evening) and client preferences are separate
+ * and never derived from this. Firestore rules mirror it: see
+ * birthDateIsEligible in firestore.rules.
+ */
+export const MINIMUM_AGE = 18;
 
 /**
  * Exact age in whole years as of `at` (defaults to now), from an
- * ISO `YYYY-MM-DD` birth date. Day-precise: turning 35 today counts as 35.
+ * ISO `YYYY-MM-DD` birth date. Day-precise: turning 18 today counts as 18.
  */
 export function getAge(birthDateISO: string, at: Date = new Date()): number {
   const birth = new Date(`${birthDateISO}T00:00:00`);

@@ -242,7 +242,7 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
     setError(null);
 
     // Age eligibility is checked before anything is saved — a person
-    // under 35 should never get a persisted birth date on their profile,
+    // under 18 should never get a persisted birth date on their profile,
     // and never see a generic save error instead of a clear explanation.
     if (currentStep.id === "birthDate") {
       const birthDateISO = value as string;

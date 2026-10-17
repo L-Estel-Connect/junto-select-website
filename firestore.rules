@@ -3,16 +3,18 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Junto Select Introduction is reserved for people 35 and over.
+    // The private candidate network is open to adults (18 and over); keep
+    // in sync with MINIMUM_AGE in src/lib/introduction/age.ts. Event age
+    // rules are separate and not enforced here.
     // `bd` may be null (not answered yet) or a Timestamp (birth date).
-    // Someone born on or before "today minus 35 years" is eligible.
+    // Someone born on or before "today minus 18 years" is eligible.
     // This is real server-side enforcement: even a request built by hand
     // in devtools against the Firestore SDK, bypassing our UI entirely,
     // is rejected here.
     function birthDateIsEligible(bd) {
       return bd == null ||
         bd <= timestamp.date(
-          request.time.year() - 35,
+          request.time.year() - 18,
           request.time.month(),
           request.time.day()
         );

@@ -16,6 +16,7 @@ node scripts/local-test/seed.mjs compare                                  # jour
 NODE_PATH=$(npm root -g) node scripts/local-test/journeys.cjs existing   # existing profiles paying
 NODE_PATH=$(npm root -g) node scripts/local-test/layout-audit.cjs        # 13 pages x 5 screen sizes: layout, photos, overflow (read-only; pass a URL to audit staging)
 NODE_PATH=$(npm root -g) node scripts/local-test/onboarding-ui.cjs        # new users, passive and active onboarding through the real screens
+NODE_PATH=$(npm root -g) node scripts/local-test/candidate-age-ui.cjs    # private network: ages 18/25/30/40/60 register, under 18 refused, manual presentation when AI fails
 NODE_PATH=$(npm root -g) node scripts/local-test/site-audit.cjs          # public site, Acceder, modalidad journeys, footer scroll, colaboraciones
 node scripts/local-test/seed.mjs                                          # reset: the runs above make a seeded profile a member
 node scripts/local-test/benefits-matching.cjs                             # 20 % monthly codes (1/3/6-month plans) and matching eligibility

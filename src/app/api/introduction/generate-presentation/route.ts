@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { generatePresentationText } from "@/lib/ai/generatePresentation";
+import { describeGenerationError, generatePresentationText } from "@/lib/ai/generatePresentation";
 import { computeProfileStatus } from "@/lib/introduction/completion";
 import type { ProfileDocument } from "@/lib/introduction/types";
 
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       prompts,
     });
   } catch (error) {
-    console.error("Presentation generation failed:", error);
+    console.error("Presentation generation failed:", JSON.stringify(describeGenerationError(error)));
     return NextResponse.json({ ok: false, error: "generation_failed" }, { status: 502 });
   }
 

@@ -181,7 +181,7 @@ export default function PreferencesSection({ uid }: { uid: string }) {
 
           <FieldRow question="Rango de edad">
             <NumberRangeField
-              min={25}
+              min={18}
               max={90}
               minValue={dealbreakers.ageMin}
               maxValue={dealbreakers.ageMax}

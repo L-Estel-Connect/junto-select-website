@@ -51,7 +51,7 @@ export default function PrivacidadPage() {
             </li>
             <li>
               <strong>Datos de identidad y perfil:</strong> nombre, fecha de nacimiento (para verificar
-              la edad mínima de 35 años), género, ciudad, profesión, formación, altura, idiomas, e
+              la edad mínima de 18 años), género, ciudad, profesión, formación, altura, idiomas, e
               información sobre hijos y sobre el deseo de tenerlos en el futuro.
             </li>
             <li>
@@ -307,8 +307,8 @@ export default function PrivacidadPage() {
         <section className="space-y-3">
           <H2>11. Edad mínima</H2>
           <p>
-            Junto Select Introduction está reservado contractualmente a personas de 35 años o más. No
-            recogemos intencionadamente datos de personas menores de esa edad.
+            Junto Select está reservado a personas mayores de edad (18 años o más). No recogemos
+            intencionadamente datos de personas menores de esa edad.
           </p>
         </section>
 

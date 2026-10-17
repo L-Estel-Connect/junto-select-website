@@ -38,6 +38,14 @@ const PROMPT_QUESTIONS: { id: keyof PresentationPrompts; question: string }[] = 
 
 const MAX_PROMPT_LENGTH = 300;
 
+/** A starting text built only from the person's own three answers. */
+function draftFromAnswers(prompts: PresentationPrompts): string {
+  return PROMPT_QUESTIONS.map((p) => prompts[p.id].trim())
+    .filter(Boolean)
+    .map((t) => (/[.!?…]$/.test(t) ? t : `${t}.`))
+    .join("\n\n");
+}
+
 export default function PresentationSection({ uid }: { uid: string }) {
   const router = useRouter();
   const { profile, error: profileError, refresh: refreshProfile, mutate } = useSharedProfile(uid);
@@ -48,6 +56,10 @@ export default function PresentationSection({ uid }: { uid: string }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  // Set when generation fails: the person writes the text themself from
+  // here on, so the AI is never a blocker for finishing the profile.
+  const [manual, setManual] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Adjusted during render (not in an effect) — initializes local state
   // from the loaded profile exactly once. `prompts` is then autosaved
@@ -86,6 +98,7 @@ export default function PresentationSection({ uid }: { uid: string }) {
 
   const allPromptsFilled = PROMPT_QUESTIONS.every((p) => prompts[p.id].trim());
   const hasDraft = Boolean(profile.presentation.generatedText || profile.presentation.approvedText);
+  const showReview = hasDraft || manual;
 
   function handlePromptChange(id: keyof PresentationPrompts, value: string) {
     setPrompts((prev) => (prev ? { ...prev, [id]: value } : prev));
@@ -97,9 +110,14 @@ export default function PresentationSection({ uid }: { uid: string }) {
   }
 
   async function handleGenerate() {
+    if (!prompts) return;
     setError(null);
+    setNotice(null);
     setGenerating(true);
     try {
+      // The server reads the answers from the profile, so the latest ones
+      // must be saved first (the blur save may still be in flight).
+      await savePresentationPrompts(uid, prompts);
       const idToken = await auth.currentUser?.getIdToken();
       if (!idToken) throw new Error("no_auth");
       const response = await fetch("/api/introduction/generate-presentation", {
@@ -111,13 +129,21 @@ export default function PresentationSection({ uid }: { uid: string }) {
         throw new Error("generation_failed");
       }
       setReviewText(data.text);
+      setManual(false);
       mutate((prev) => ({
         ...prev,
         presentation: { ...prev.presentation, generatedText: data.text!, status: "draft" },
       }));
     } catch {
-      setError(
-        "No hemos podido generar tu presentación ahora mismo. Inténtalo de nuevo en unos minutos.",
+      // Fall back to writing it by hand. Whatever is already in the text
+      // box is kept; an empty box starts from the person's own answers.
+      if (!reviewText.trim()) {
+        setReviewText(draftFromAnswers(prompts));
+      }
+      setManual(true);
+      setEditing(true);
+      setNotice(
+        "Ahora mismo no hemos podido redactar tu presentación automáticamente. Puedes escribirla tú: hemos partido de tus respuestas, edítala a tu gusto y apruébala para continuar.",
       );
     } finally {
       setGenerating(false);
@@ -127,6 +153,7 @@ export default function PresentationSection({ uid }: { uid: string }) {
   async function handleApprove() {
     if (!profile || !reviewText.trim()) return;
     setError(null);
+    setNotice(null);
     setSaving(true);
     try {
       await approvePresentation(uid, reviewText.trim(), profile);
@@ -198,7 +225,7 @@ export default function PresentationSection({ uid }: { uid: string }) {
         </p>
       </details>
 
-      {hasDraft || isApproved ? (
+      {showReview || isApproved ? (
         <details className="mt-8 border-y border-hairline py-4">
           <summary className="cursor-pointer text-[15px] text-ink">Tus respuestas</summary>
           <div className="mt-5">{promptFields}</div>
@@ -207,7 +234,7 @@ export default function PresentationSection({ uid }: { uid: string }) {
         <div className="mt-8">{promptFields}</div>
       )}
 
-      {!hasDraft && !isApproved && (
+      {!showReview && !isApproved && (
         <>
           <button
             type="button"
@@ -223,7 +250,7 @@ export default function PresentationSection({ uid }: { uid: string }) {
         </>
       )}
 
-      {(hasDraft || isApproved) && (
+      {(showReview || isApproved) && (
         <div className="mt-10">
           <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">
             {isApproved ? "Tu presentación aprobada" : "Revisa tu presentación"}
@@ -248,7 +275,7 @@ export default function PresentationSection({ uid }: { uid: string }) {
               </button>
             )}
             <button type="button" disabled={generating || !allPromptsFilled} onClick={handleGenerate} className={linkClasses}>
-              {generating ? "Generando…" : "Generar otra versión"}
+              {generating ? "Generando…" : hasDraft ? "Generar otra versión" : "Intentar generarla de nuevo"}
             </button>
           </div>
 
@@ -279,6 +306,12 @@ export default function PresentationSection({ uid }: { uid: string }) {
             </button>
           )}
         </div>
+      )}
+
+      {notice && (
+        <p role="status" className="mt-4 text-sm leading-relaxed text-ink-soft">
+          {notice}
+        </p>
       )}
 
       {error && (

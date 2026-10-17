@@ -24,7 +24,7 @@ export interface PresentationFacts {
   prompts: PresentationPrompts;
 }
 
-const SYSTEM_PROMPT = `Escribes textos de presentación personal breves y elegantes, en español, para miembros de Junto Select, un servicio privado de presentaciones seleccionadas para relaciones serias (no citas casuales), dirigido a personas de 35 años en adelante.
+const SYSTEM_PROMPT = `Escribes textos de presentación personal breves y elegantes, en español, para miembros de Junto Select, un servicio privado de presentaciones seleccionadas para relaciones serias (no citas casuales).
 
 Reglas, por orden de importancia:
 1. Usa ÚNICAMENTE los datos que se te den a continuación. No inventes, no supongas y no añadas NINGÚN hecho que no esté presente explícitamente: ni rasgos de personalidad, ni aficiones, ni logros, ni información familiar, ni preferencias que no se hayan dado.
@@ -75,7 +75,10 @@ export async function generatePresentationText(
   facts: PresentationFacts,
 ): Promise<string> {
   if (isStagingDeploy()) return stagingPresentationDraft(facts);
-  const client = new Anthropic();
+  // Bounded so a slow or failing provider answers within a normal request
+  // window instead of hanging the person's onboarding (the page offers a
+  // manual fallback as soon as this throws).
+  const client = new Anthropic({ timeout: 45_000, maxRetries: 1 });
   const response = await client.messages.create({
     model: "claude-sonnet-5",
     max_tokens: 600,
@@ -88,4 +91,24 @@ export async function generatePresentationText(
     throw new Error("No text returned from the model");
   }
   return textBlock.text.trim();
+}
+
+/**
+ * A log-safe summary of a failed generation: the provider's status, error
+ * type and request id, never the request (which carries the person's own
+ * answers) or headers (which carry the API key).
+ */
+export function describeGenerationError(error: unknown): Record<string, unknown> {
+  if (error instanceof Anthropic.APIError) {
+    const body = error.error as { error?: { type?: unknown; message?: unknown } } | undefined;
+    return {
+      kind: error.constructor.name,
+      status: error.status ?? null,
+      type: typeof body?.error?.type === "string" ? body.error.type : null,
+      message: typeof body?.error?.message === "string" ? body.error.message.slice(0, 300) : null,
+      requestId: error.requestID ?? null,
+    };
+  }
+  if (error instanceof Error) return { kind: error.name, message: error.message.slice(0, 300) };
+  return { kind: typeof error };
 }

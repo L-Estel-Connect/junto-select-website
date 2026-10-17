@@ -85,7 +85,7 @@ export default function TerminosPage() {
         <section className="space-y-3">
           <H2>3. Requisitos de acceso</H2>
           <ul className="list-disc space-y-2 pl-5">
-            <li>Edad mínima: 35 años cumplidos.</li>
+            <li>Edad mínima: 18 años cumplidos.</li>
             <li>
               El usuario debe proporcionar información veraz, exacta y actualizada sobre sí mismo. Un
               perfil con información falsa o engañosa puede ser suspendido o eliminado.
