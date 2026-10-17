@@ -38,7 +38,7 @@ env:
   # domain (juntoselect.com) goes live — no source file should need
   # editing for that move.
   - variable: APP_BASE_URL
-    value: "https://www.juntoselect.com"
+    value: "https://juntoselect.com"
     availability:
       - BUILD
       - RUNTIME
