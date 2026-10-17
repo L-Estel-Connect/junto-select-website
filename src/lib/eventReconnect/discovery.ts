@@ -1,7 +1,7 @@
 import "server-only";
 import { adminDb } from "@/lib/firebase/admin";
 import { withProfileDefaults, type ProfileDocument } from "@/lib/introduction/types";
-import { getEligibleEvent, reconnectWindowState } from "./eventConfig";
+import { computeReconnectDiscoveryClosesAt, computeReconnectOpensAt, getEligibleEvent, reconnectWindowState } from "./eventConfig";
 import { eventParticipantId, eventReconnectRequestId, normalizeEmail } from "./identifiers";
 import { findAllEventParticipantsByEmail, findEventParticipantByEmail } from "./participants";
 import { hasLivePendingIncomingRequest, listPendingReconnectRequestsForMember } from "./requests";
@@ -28,6 +28,9 @@ export async function getReconnectStateForCaller(eventId: string, verifiedEmail:
   return {
     windowState: reconnectWindowState(event),
     eventLabel: event.label,
+    reconnectEnabled: event.reconnectEnabled === true,
+    opensAt: event.eventDate ? computeReconnectOpensAt(event.eventDate).toISOString() : null,
+    closesAt: event.eventDate ? computeReconnectDiscoveryClosesAt(event.eventDate).toISOString() : null,
     requestsRemaining: participant ? Math.max(0, MAX_RECONNECT_REQUESTS_PER_EVENT - participant.requestsSent) : null,
     isParticipant: !!participant,
     isActivated: !!participant?.visibleForReconnect,

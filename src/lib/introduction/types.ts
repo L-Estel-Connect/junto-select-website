@@ -303,6 +303,13 @@ export type ProfileStatus = "draft" | "active_for_matching";
  */
 export type SearchStatus = "passive" | "active_search";
 
+/** See ProfileDocument.meta.requestedService. */
+export type RequestedService = "passive" | "select";
+
+export function isRequestedService(value: unknown): value is RequestedService {
+  return value === "passive" || value === "select";
+}
+
 /**
  * See README "Duplicate accounts / profile integrity" for the full
  * architecture. `clear`: normal eligibility. `suspected`: excluded BOTH as
@@ -353,6 +360,12 @@ export interface ProfileDocument {
     // Set only when duplicateStatus is confirmed_duplicate (or was, before
     // being resolved) — the uid of the account this one was merged into.
     duplicateOf: string | null;
+    /**
+     * "Dejar de ser presentado/a": the person asked us not to consider
+     * their profile in any search for now. Their own choice, set from
+     * their profile page; the profile and its answers are kept.
+     */
+    presentationsPaused?: boolean;
     /**
      * Legacy-contact activation (Path B — see src/lib/legacyImport/):
      * `true` only for a profile CREATED by claiming an imported legacy
@@ -414,6 +427,23 @@ export interface ProfileDocument {
      * of it.
      */
     nextMatchingDueAt: unknown | null;
+    /**
+     * Set by the due-matching scan when a paying member's period came due
+     * while they were not yet eligible for active search (e.g. paid before
+     * finishing their profile); cleared when they become eligible. Server
+     * written only. Absent on profiles that were never paused.
+     */
+    matchingPausedAt?: unknown | null;
+    /**
+     * The service the person chose on the Introducciones page ("Elige tu
+     * modalidad"): `passive` (free profile in the private network) or
+     * `select` (active search with Membresía Select). Absent on profiles
+     * created before that choice existed. Only a preference: it never
+     * grants or removes membership (billing does), and while a profile that
+     * has it is not finalized it stays out of the matching pool, so nobody
+     * joins the network before confirming their choice (eligibility.ts).
+     */
+    requestedService?: RequestedService | null;
     createdAt: unknown;
     updatedAt: unknown;
   };
@@ -546,6 +576,7 @@ export function withProfileDefaults(
       searchStatus: "passive",
       duplicateStatus: "clear",
       duplicateOf: null,
+      presentationsPaused: false,
       pendingLegacyActivation: false,
       legacyImportId: null,
       matchingAnchorAt: null,

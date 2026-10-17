@@ -271,12 +271,14 @@ export async function listPendingReconnectRequestsForMember(personId: string): P
       otherUid ? adminDb.doc(`profiles/${otherUid}`).get() : Promise.resolve(null),
       adminDb.doc(`eventParticipants/${otherParticipantId}`).get(),
     ]);
-    const otherFirstName = (otherProfileSnap?.data()?.visible?.firstName as string | undefined) || "—";
-
     // Same privacy rule as discovery.ts's buildCandidateView — the requester's
     // photo is only ever shown here if THEY chose to show it in Reconnect,
     // never the raw ProfileDocument photo otherwise.
     const otherParticipant = otherParticipantSnap.exists ? (otherParticipantSnap.data() as EventParticipantDocument) : null;
+    // Someone who hasn't activated has no profile name yet: fall back to the
+    // Ticket Tailor first name, exactly what their gallery card already shows.
+    const otherFirstName =
+      (otherProfileSnap?.data()?.visible?.firstName as string | undefined) || otherParticipant?.firstName?.trim() || "—";
     const otherPhotoPath =
       otherParticipant?.visibleForReconnect && otherParticipant.showPhotoInReconnect !== false
         ? ((otherProfileSnap?.data()?.photos as string[] | undefined)?.[0] ?? null)

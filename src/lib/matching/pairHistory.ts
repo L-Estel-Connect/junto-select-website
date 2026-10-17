@@ -1,4 +1,5 @@
 import "server-only";
+import { AUTOMATIC_INTRODUCTIONS_ENABLED, AutomaticIntroductionsDisabledError } from "./automaticIntroductions";
 import { FieldValue, Timestamp, type Transaction } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { addMonths, PASS_COOLDOWN_MONTHS, pairKey } from "./config";
@@ -218,6 +219,7 @@ export async function recordMemberDecision(
   decision: "interested" | "passed",
   passType: PassType | null,
 ): Promise<{ alreadyRecorded: boolean; blockedIncompatible?: boolean }> {
+  if (!AUTOMATIC_INTRODUCTIONS_ENABLED) throw new AutomaticIntroductionsDisabledError();
   const proposalRef = adminDb.doc(`proposals/${proposalId}`);
   const invitationRef = adminDb.doc(`invitations/${proposalId}`);
 
@@ -354,6 +356,7 @@ export async function recordCandidateDecision(
   decision: "interested" | "passed",
   passType: PassType | null,
 ): Promise<{ alreadyRecorded: boolean; blockedIncompatible?: boolean }> {
+  if (!AUTOMATIC_INTRODUCTIONS_ENABLED) throw new AutomaticIntroductionsDisabledError();
   const invitationRef = adminDb.doc(`invitations/${invitationId}`);
   const proposalRef = adminDb.doc(`proposals/${invitationId}`); // same id as the source proposal
   const introductionRef = adminDb.doc(`introductions/${invitationId}`);

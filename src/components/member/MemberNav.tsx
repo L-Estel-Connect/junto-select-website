@@ -4,10 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Wordmark from "@/components/Wordmark";
+import { signOutUser } from "@/lib/firebase/auth";
 import { memberFetchJson } from "@/lib/member/memberFetch";
 import { useMemberQuery } from "@/lib/member/useMemberQuery";
 import { useMemberUid } from "./MemberContext";
+import { useSharedProfile } from "@/lib/introduction/profileCache";
+import { useBilling } from "@/lib/billing/useBilling";
 import type { MemberLifecycleSummary } from "@/lib/matching/memberLifecycleTypes";
+import { AUTOMATIC_INTRODUCTIONS_ENABLED } from "@/lib/matching/automaticIntroductions";
 
 // "Ver mi perfil" and "Editar mi perfil" used to be two separate nav rows
 // pointing at the same /member/profile route (the second just deep-linking
@@ -15,10 +19,11 @@ import type { MemberLifecycleSummary } from "@/lib/matching/memberLifecycleTypes
 // the primary nav never shows two rows that open the same screen. The
 // #editar-perfil anchor itself is unchanged and still used by direct
 // in-page links elsewhere (MemberHome, ContactSection, SettingsSection).
+// The private profile is the home page, so "Mi perfil" is /member and also
+// covers the /member/profile/** edit pages.
 const NAV_ITEMS = [
-  { href: "/member", label: "Inicio" },
-  { href: "/member/profile", label: "Mi perfil" },
-  { href: "/member/proposals", label: "Selecciones" },
+  { href: "/member", label: "Mi perfil" },
+  { href: "/member/proposals", label: "Propuestas" },
   { href: "/member/connections", label: "Conexiones" },
   { href: "/member/plan", label: "Mi plan" },
   { href: "/member/settings", label: "Ajustes" },
@@ -31,7 +36,7 @@ function AttentionDot() {
 
 function isActivePath(pathname: string, href: string): boolean {
   const base = href.split("#")[0];
-  return base === "/member" ? pathname === "/member" : pathname.startsWith(base);
+  return base === "/member" ? pathname === "/member" || pathname.startsWith("/member/profile") : pathname.startsWith(base);
 }
 
 function HamburgerIcon() {
@@ -48,8 +53,27 @@ export default function MemberNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const uid = useMemberUid();
+  // Selecciones and Conexiones only exist once an introductions profile is
+  // finished; a Select member without one uses the rest of the area.
+  const { profile } = useSharedProfile(uid);
+  // "Mi plan" is the dormant Membresía Select: shown only to accounts that
+  // have (or had) a subscription. /member/plan itself still exists.
+  const { billing } = useBilling(uid);
+  const hasPlan = Boolean(billing && billing.status !== "none");
+  const navItems = NAV_ITEMS.filter(
+    (i) =>
+      (i.href !== "/member/plan" || hasPlan) &&
+      !(
+        (!AUTOMATIC_INTRODUCTIONS_ENABLED || (profile && !profile.meta.onboardingFinalized)) &&
+        (i.href === "/member/proposals" || i.href === "/member/connections")
+      ),
+  );
+  // Nothing to count while automatic introductions are off.
   const summaryQuery = useMemberQuery(
-    () => memberFetchJson<{ summary: MemberLifecycleSummary }>("/api/member/lifecycle-summary"),
+    () =>
+      AUTOMATIC_INTRODUCTIONS_ENABLED
+        ? memberFetchJson<{ summary: MemberLifecycleSummary }>("/api/member/lifecycle-summary")
+        : Promise.resolve({ summary: null as MemberLifecycleSummary | null }),
     [uid],
   );
   const summary = summaryQuery.data?.summary;
@@ -80,7 +104,7 @@ export default function MemberNav() {
         </Link>
 
         <nav className="hidden items-center gap-5 md:flex">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <Link
               key={item.label}
               href={item.href}
@@ -94,6 +118,13 @@ export default function MemberNav() {
               {attentionFor(item.href) && <AttentionDot />}
             </Link>
           ))}
+          <button
+            type="button"
+            onClick={() => void signOutUser()}
+            className="whitespace-nowrap text-[11px] uppercase tracking-[0.1em] text-ink-soft transition-colors hover:text-ink"
+          >
+            Cerrar sesión
+          </button>
         </nav>
 
         <button
@@ -129,7 +160,7 @@ export default function MemberNav() {
             </div>
 
             <nav className="mt-8 flex flex-col">
-              {NAV_ITEMS.map((item) => (
+              {navItems.map((item) => (
                 <Link
                   key={item.label}
                   href={item.href}
@@ -142,6 +173,13 @@ export default function MemberNav() {
                   {attentionFor(item.href) && <AttentionDot />}
                 </Link>
               ))}
+              <button
+                type="button"
+                onClick={() => void signOutUser()}
+                className="border-b border-hairline py-4 text-left text-[16px] text-ink-soft"
+              >
+                Cerrar sesión
+              </button>
             </nav>
           </div>
         </div>

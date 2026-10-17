@@ -76,9 +76,9 @@ export default function AuthButtons({ magicLinkReturnPath = "/introduction" }: A
 
   if (view === "email-sent") {
     return (
-      <div className="w-full text-center">
+      <div className="w-full">
         <p className="text-[15px] text-ink">
-          Te hemos enviado un enlace a <strong>{email}</strong>.
+          Te hemos enviado un enlace a <strong className="break-all">{email}</strong>.
         </p>
         <p className="mt-2 text-[15px] text-ink-soft">
           Ábrelo desde este mismo dispositivo para continuar.

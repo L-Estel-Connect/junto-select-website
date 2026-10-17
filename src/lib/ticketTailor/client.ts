@@ -1,4 +1,5 @@
 import "server-only";
+import { isStagingDeploy } from "@/lib/config/deployEnv";
 
 /**
  * Server-only Ticket Tailor client abstraction — analogous in spirit to
@@ -46,7 +47,23 @@ import "server-only";
  */
 export const TICKET_TAILOR_INTEGRATION_VERIFIED = true as const;
 
-const TICKET_TAILOR_API_BASE = "https://api.tickettailor.com";
+const TICKET_TAILOR_API_BASE = localMockBase() ?? "https://api.tickettailor.com";
+
+/**
+ * Local testing only: `TICKET_TAILOR_LOCAL_MOCK_URL` points the client at
+ * the local stand-in in scripts/local-test/mock-services.mjs. Accepted
+ * only for a loopback host, so it can never redirect the API key anywhere
+ * else; unset in apphosting.yaml, so production is unaffected.
+ */
+function localMockBase(): string | null {
+  const raw = process.env.TICKET_TAILOR_LOCAL_MOCK_URL;
+  if (!raw) return null;
+  const url = new URL(raw);
+  if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") {
+    throw new Error("TICKET_TAILOR_LOCAL_MOCK_URL must point at localhost");
+  }
+  return url.origin;
+}
 
 export interface CreateDiscountParams {
   code: string;
@@ -115,6 +132,23 @@ export interface TicketTailorClient {
    * a reason to skip the Firestore-side invalidation.
    */
   invalidateDiscount(discountId: string): Promise<void>;
+  /**
+   * READ-ONLY: `GET /v1/events/:event_id`. Used only by the admin Events
+   * Manager's "Importar" to pre-fill a form the admin then reviews. Never
+   * creates or changes anything in Ticket Tailor. Returns the raw JSON
+   * object (or null on 404). The schema was checked against a real
+   * response on 2026-10-12 (event ev_9175061); ticketTailorImport.ts still
+   * reads every field defensively.
+   */
+  getEvent(eventId: string): Promise<Record<string, unknown> | null>;
+  /**
+   * READ-ONLY: `GET /v1/event_series/:event_series_id/events`. The number
+   * in a public Ticket Tailor link (…/events/juntoselect/2439069) is the
+   * event SERIES id (`es_2439069`), not an event id: the dated event
+   * inside it has its own id (`ev_9175061`). Verified against the real
+   * API on 2026-10-12. Returns the series' events (or null on 404).
+   */
+  listEventSeriesEvents(eventSeriesId: string): Promise<Record<string, unknown>[] | null>;
 }
 
 interface TicketTailorDiscountResponse {
@@ -199,10 +233,63 @@ function appendTicketTypes(parts: string[], ticketTypeIds: string[]): void {
   }
 }
 
+/**
+ * A member waits on this call when claiming a code, so a slow or stalled
+ * Ticket Tailor never holds the request open: past this, the code stays
+ * "being prepared" and the retry finishes it.
+ */
+const TICKET_TAILOR_TIMEOUT_MS = 12_000;
+
+/** Discount ids the staging client makes up; never a real Ticket Tailor id. */
+export const STAGING_SIMULATED_DISCOUNT_PREFIX = "staging-sim-";
+
+/**
+ * Staging only: reads go to the real API (the Events Manager import), but
+ * discount codes are simulated in memory, never sent to Ticket Tailor. The
+ * whole member journey (claim, code shown, one per cycle) can then be
+ * tested end to end, while Ticket Tailor stays untouched. The live client
+ * also refuses writes on staging, as a second guard.
+ */
+class StagingTicketTailorClient implements TicketTailorClient {
+  constructor(private readonly reads: TicketTailorClient | null) {}
+
+  async createDiscount(params: CreateDiscountParams): Promise<TicketTailorDiscount> {
+    return {
+      id: `${STAGING_SIMULATED_DISCOUNT_PREFIX}${params.code}`,
+      code: params.code,
+      ticketTypeIds: params.ticketTypeIds,
+      percentage: params.percentage,
+    };
+  }
+
+  async findDiscountByCode(): Promise<TicketTailorDiscount | null> {
+    // Nothing is ever created in Ticket Tailor from staging, so nothing to adopt.
+    return null;
+  }
+
+  async getEvent(eventId: string): Promise<Record<string, unknown> | null> {
+    if (!this.reads) throw new Error("TICKET_TAILOR_API_KEY is not configured");
+    return this.reads.getEvent(eventId);
+  }
+
+  async listEventSeriesEvents(eventSeriesId: string): Promise<Record<string, unknown>[] | null> {
+    if (!this.reads) throw new Error("TICKET_TAILOR_API_KEY is not configured");
+    return this.reads.listEventSeriesEvents(eventSeriesId);
+  }
+
+  async invalidateDiscount(): Promise<void> {
+    // Simulated codes have nothing to delete in Ticket Tailor.
+  }
+}
+
 class LiveTicketTailorClient implements TicketTailorClient {
   constructor(private readonly apiKey: string) {}
 
   private assertVerified(operation: string): void {
+    if (isStagingDeploy()) {
+      // Staging may read events (Events Manager import) but never create or delete discount codes.
+      throw new Error(`ticket_tailor_writes_disabled_in_staging: refusing "${operation}"`);
+    }
     if (!TICKET_TAILOR_INTEGRATION_VERIFIED) {
       throw new Error(
         `ticket_tailor_integration_not_verified: refusing to perform "${operation}" — real integration is not yet activated (see src/lib/ticketTailor/client.ts doc comment: the contract is verified, but activation is a separate, deliberate rollout step).`,
@@ -224,6 +311,7 @@ class LiveTicketTailorClient implements TicketTailorClient {
       method: "POST",
       headers: this.headers({ "Content-Type": "application/x-www-form-urlencoded" }),
       body: buildCreateDiscountRequestBody(params),
+      signal: AbortSignal.timeout(TICKET_TAILOR_TIMEOUT_MS),
     });
     if (!res.ok) {
       // Ticket Tailor's own error response — safe to log in full: it is
@@ -242,6 +330,7 @@ class LiveTicketTailorClient implements TicketTailorClient {
     this.assertVerified("findDiscountByCode");
     const res = await fetch(`${TICKET_TAILOR_API_BASE}/v1/discounts?code=${encodeURIComponent(code)}`, {
       headers: this.headers(),
+      signal: AbortSignal.timeout(TICKET_TAILOR_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`ticket_tailor_find_discount_failed_${res.status}`);
     const data = (await res.json()) as { data?: TicketTailorDiscountResponse[] };
@@ -249,11 +338,35 @@ class LiveTicketTailorClient implements TicketTailorClient {
     return match ? parseDiscount(match) : null;
   }
 
+  async getEvent(eventId: string): Promise<Record<string, unknown> | null> {
+    // Read-only, so no assertVerified gate: it cannot change anything.
+    const res = await fetch(`${TICKET_TAILOR_API_BASE}/v1/events/${encodeURIComponent(eventId)}`, {
+      headers: this.headers(),
+      signal: AbortSignal.timeout(TICKET_TAILOR_TIMEOUT_MS),
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`ticket_tailor_get_event_failed_${res.status}`);
+    return (await res.json()) as Record<string, unknown>;
+  }
+
+  async listEventSeriesEvents(eventSeriesId: string): Promise<Record<string, unknown>[] | null> {
+    // Read-only, so no assertVerified gate: it cannot change anything.
+    const res = await fetch(`${TICKET_TAILOR_API_BASE}/v1/event_series/${encodeURIComponent(eventSeriesId)}/events`, {
+      headers: this.headers(),
+      signal: AbortSignal.timeout(TICKET_TAILOR_TIMEOUT_MS),
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`ticket_tailor_list_series_events_failed_${res.status}`);
+    const body = (await res.json()) as { data?: unknown };
+    return Array.isArray(body.data) ? (body.data as Record<string, unknown>[]) : [];
+  }
+
   async invalidateDiscount(discountId: string): Promise<void> {
     this.assertVerified("invalidateDiscount");
     const res = await fetch(`${TICKET_TAILOR_API_BASE}/v1/discounts/${discountId}`, {
       method: "DELETE",
       headers: this.headers(),
+      signal: AbortSignal.timeout(TICKET_TAILOR_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`ticket_tailor_invalidate_discount_failed_${res.status}`);
   }
@@ -287,6 +400,10 @@ export function getTicketTailorClient(): TicketTailorClient {
   if (override) return override;
   if (cached) return cached;
   const key = process.env.TICKET_TAILOR_API_KEY;
+  if (isStagingDeploy()) {
+    cached = new StagingTicketTailorClient(key ? new LiveTicketTailorClient(key) : null);
+    return cached;
+  }
   if (!key) {
     throw new Error("TICKET_TAILOR_API_KEY is not configured");
   }

@@ -49,7 +49,7 @@ service cloud.firestore {
     // to touch in this change. Flagged again in the final report as a
     // pre-existing gap, not introduced or worsened here.
     // `meta.matchingAnchorAt`/`matchingSubscriptionId`/
-    // `matchingPeriodsProcessed`/`nextMatchingDueAt` (added for the
+    // `matchingPeriodsProcessed`/`nextMatchingDueAt`/`matchingPausedAt` (added for the
     // per-member-anniversary matching model — see
     // src/lib/matching/dueScheduler.ts) carry the exact same risk as
     // `searchStatus` above and get the identical treatment: only the
@@ -89,7 +89,8 @@ service cloud.firestore {
         && request.resource.data.meta.get('matchingAnchorAt', null) == resource.data.meta.get('matchingAnchorAt', null)
         && request.resource.data.meta.get('matchingSubscriptionId', null) == resource.data.meta.get('matchingSubscriptionId', null)
         && request.resource.data.meta.get('matchingPeriodsProcessed', null) == resource.data.meta.get('matchingPeriodsProcessed', null)
-        && request.resource.data.meta.get('nextMatchingDueAt', null) == resource.data.meta.get('nextMatchingDueAt', null);
+        && request.resource.data.meta.get('nextMatchingDueAt', null) == resource.data.meta.get('nextMatchingDueAt', null)
+        && request.resource.data.meta.get('matchingPausedAt', null) == resource.data.meta.get('matchingPausedAt', null);
     }
 
     // Legacy-contact activation (see src/lib/legacyImport/) — UNLIKE
@@ -115,6 +116,16 @@ service cloud.firestore {
         && request.resource.data.meta.get('legacyImportId', null) == resource.data.meta.get('legacyImportId', null);
     }
 
+    // Identity and duplicate review (see resolvePersonId) are decided by
+    // the team, server-side. Locked against client writes so a member can
+    // never mark themself "clear" or re-point which real person they are,
+    // which would let a confirmed duplicate back into client searches.
+    function identityStateUnchanged() {
+      return request.resource.data.meta.get('personId', null) == resource.data.meta.get('personId', null)
+        && request.resource.data.meta.get('duplicateStatus', 'clear') == resource.data.meta.get('duplicateStatus', 'clear')
+        && request.resource.data.meta.get('duplicateOf', null) == resource.data.meta.get('duplicateOf', null);
+    }
+
     match /profiles/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow create: if request.auth != null
@@ -124,7 +135,8 @@ service cloud.firestore {
         && request.auth.uid == uid
         && birthDateIsEligible(request.resource.data.private.birthDate)
         && matchingStateUnchanged()
-        && legacyActivationStateUnchanged();
+        && legacyActivationStateUnchanged()
+        && identityStateUnchanged();
       allow delete: if false;
     }
 

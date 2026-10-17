@@ -2,13 +2,41 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { signInRedirectPath } from "@/lib/account/signInRedirect";
 import { useAuth } from "@/lib/firebase/useAuth";
 import { IntroductionError, IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
 import DebugOverlay from "@/components/introduction/DebugOverlay";
 import { logDebugEvent } from "@/lib/introduction/onboardingDebug";
 import { MemberUidProvider } from "./MemberContext";
 import MemberNav from "./MemberNav";
+import RequireAccountChoice from "@/components/account/RequireAccountChoice";
+import { OnboardingHeader, inOnboarding } from "@/components/introduction/OnboardingFrame";
+import { useSharedProfile } from "@/lib/introduction/profileCache";
+import { useBilling } from "@/lib/billing/useBilling";
+import { isEntitledStatus } from "@/lib/billing/types";
+
+/**
+ * While a profile is still being completed, its pages (/member/profile/**)
+ * use the focused onboarding header instead of the member menu, whose
+ * destinations would only send an unconfirmed profile back here. Ajustes
+ * gets the same header when the account has no membership either, since
+ * every other member destination is closed to it.
+ */
+function ShellHeader({ uid }: { uid: string }) {
+  const pathname = usePathname();
+  const { profile } = useSharedProfile(uid);
+  const { billing, loading: billingLoading } = useBilling(uid);
+  if (pathname.startsWith("/member/profile") && inOnboarding(profile)) return <OnboardingHeader />;
+  if (
+    pathname.startsWith("/member/settings") &&
+    inOnboarding(profile) &&
+    (billingLoading || !(billing && isEntitledStatus(billing.status)))
+  ) {
+    return <OnboardingHeader />;
+  }
+  return <MemberNav />;
+}
 
 /**
  * Privacidad/Términos moved out of the primary header nav (which should
@@ -61,7 +89,7 @@ export default function MemberShell({ children }: { children: ReactNode }) {
     // the landing page can explain why someone was sent back here instead
     // of silently bouncing them with no context.
     if (!loading && !user) {
-      router.replace("/introduction?session=expired");
+      router.replace(signInRedirectPath(window.location.pathname));
     }
   }, [loading, user, router]);
 
@@ -90,11 +118,13 @@ export default function MemberShell({ children }: { children: ReactNode }) {
   return (
     <MemberUidProvider value={user.uid}>
       <DebugOverlay />
-      <div className="flex min-h-svh flex-col">
-        <MemberNav />
-        <div className="flex-1">{children}</div>
-        <MemberFooter />
-      </div>
+      <RequireAccountChoice>
+        <div className="flex min-h-svh flex-col">
+          <ShellHeader uid={user.uid} />
+          <div className="flex-1">{children}</div>
+          <MemberFooter />
+        </div>
+      </RequireAccountChoice>
     </MemberUidProvider>
   );
 }

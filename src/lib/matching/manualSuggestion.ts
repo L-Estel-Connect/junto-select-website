@@ -21,6 +21,7 @@ import { scorePair, SCORING_VERSION, type ScoreResult } from "./scoring";
 import { MANUAL_SUGGESTION_CYCLE_ID, manualProposalId } from "./config";
 import type { PairHistoryExclusionReason } from "./types";
 import { queueOutboundEmail } from "@/lib/notifications/outboundEmails";
+import { AUTOMATIC_INTRODUCTIONS_ENABLED } from "./automaticIntroductions";
 
 /**
  * "Founder / manual suggestion" — the exceptional path described in the
@@ -188,7 +189,8 @@ export type CreateManualSuggestionResult =
         | "candidate_not_eligible"
         | "hard_filter_failed"
         | "pair_not_eligible"
-        | "already_suggested";
+        | "already_suggested"
+        | "automatic_introductions_disabled";
       hardFilterFailures?: HardFilterFailure[];
       pairHistoryReason?: PairHistoryExclusionReason;
     };
@@ -206,6 +208,9 @@ export type CreateManualSuggestionResult =
 export async function createManualSuggestion(
   params: CreateManualSuggestionParams,
 ): Promise<CreateManualSuggestionResult> {
+  // Sending a proposal to a member is part of the switched-off automatic
+  // introductions; the team now works from /admin/clientes.
+  if (!AUTOMATIC_INTRODUCTIONS_ENABLED) return { ok: false, error: "automatic_introductions_disabled" };
   const [recipientSnap, candidateSnap] = await Promise.all([
     adminDb.doc(`profiles/${params.recipientUid}`).get(),
     adminDb.doc(`profiles/${params.candidateUid}`).get(),

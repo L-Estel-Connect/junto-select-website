@@ -39,7 +39,7 @@ export default function AdminLoginPage() {
         return;
       }
 
-      router.replace("/admin");
+      router.replace("/admin/clientes");
     } catch (err) {
       setPending(false);
       const code = (err as { code?: string })?.code;

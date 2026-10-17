@@ -134,6 +134,11 @@ export interface EventReconnectRequestDocument {
 export interface ReconnectStateView {
   windowState: ReconnectWindowState;
   eventLabel: string;
+  /** Whether the admin has switched Reconnect on for this event at all. */
+  reconnectEnabled: boolean;
+  /** When the 48h discovery window opens/closes (ISO), from the event date; null without a date. Lets the page say when it opens. */
+  opensAt: string | null;
+  closesAt: string | null;
   /** Only meaningful once activated — null otherwise. */
   requestsRemaining: number | null;
   isParticipant: boolean;

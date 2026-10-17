@@ -8,6 +8,7 @@ import { AdminError, AdminLoading } from "@/components/admin/States";
 import Badge from "@/components/admin/Badge";
 import PhotoThumb from "@/components/admin/PhotoThumb";
 import MemberSuggestPanel from "@/components/admin/MemberSuggestPanel";
+import { AUTOMATIC_INTRODUCTIONS_ENABLED } from "@/lib/matching/automaticIntroductions";
 import {
   activityLabel,
   distanceLabel,
@@ -136,12 +137,16 @@ export default function MemberDetailPage({ params }: { params: Promise<{ uid: st
             </div>
           </div>
         </div>
-        <button
-          onClick={() => setShowSuggest(true)}
-          className="shrink-0 rounded-full border border-ink px-4 py-2 text-[13px] font-medium text-ink hover:bg-ink hover:text-white"
-        >
-          Sugerir alguien
-        </button>
+        {/* Sends an in-app proposal and an email: part of the switched-off
+            automatic introductions (the server refuses it too). */}
+        {AUTOMATIC_INTRODUCTIONS_ENABLED && (
+          <button
+            onClick={() => setShowSuggest(true)}
+            className="shrink-0 rounded-full border border-ink px-4 py-2 text-[13px] font-medium text-ink hover:bg-ink hover:text-white"
+          >
+            Sugerir alguien
+          </button>
+        )}
       </div>
 
       {/* Membresía — read-only mirror of Stripe, never editable here */}
@@ -169,7 +174,7 @@ export default function MemberDetailPage({ params }: { params: Promise<{ uid: st
         </p>
       </section>
 
-      {/* Beneficio de evento (-20%) — uno por evento elegible, nunca un estado "usado" fabricado */}
+      {/* Beneficio de evento (-20%) — un código por ciclo mensual (más los emitidos antes, por evento); nunca un estado "usado" fabricado */}
       {member.eventBenefits.length > 0 && (
         <section className="mt-10">
           <SectionHeading>Beneficio de evento (-20%)</SectionHeading>

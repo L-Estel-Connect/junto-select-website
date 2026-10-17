@@ -25,6 +25,43 @@ function NeutralMessage({ title, body }: { title: string; body: string }) {
   );
 }
 
+function madridDateTime(iso: string): string {
+  const d = new Date(iso);
+  const day = d.toLocaleDateString("es-ES", { timeZone: "Europe/Madrid", weekday: "long", day: "numeric", month: "long" });
+  const time = d.toLocaleTimeString("es-ES", { timeZone: "Europe/Madrid", hour: "2-digit", minute: "2-digit" });
+  return `el ${day.replace(",", "")} a las ${time}`;
+}
+
+/** Why Reconnect can't be used right now, in plain words: not switched on, not open yet (and when it opens), or finished. */
+function WindowClosedMessage({ state }: { state: ReconnectStateView }) {
+  if (!state.reconnectEnabled || !state.opensAt) {
+    return (
+      <NeutralMessage
+        title="Reconnect no está disponible para este evento"
+        body="Reconnect solo se abre después de los eventos en los que está activado."
+      />
+    );
+  }
+  if (state.windowState === "not_yet_open") {
+    return (
+      <NeutralMessage
+        title="Reconnect aún no está abierto"
+        body={`Se abrirá ${madridDateTime(state.opensAt)} y estará disponible durante 48 horas. Entra con el mismo email con el que compraste tu entrada.`}
+      />
+    );
+  }
+  return (
+    <NeutralMessage
+      title="El periodo de Reconnect ha terminado"
+      body={
+        state.closesAt
+          ? `Reconnect estuvo abierto hasta ${madridDateTime(state.closesAt)}. Si aceptaste alguna conexión, la encontrarás en Mis conexiones.`
+          : "Si aceptaste alguna conexión, la encontrarás en Mis conexiones."
+      }
+    />
+  );
+}
+
 /**
  * Orchestrates every state the product spec defines for the 48h discovery
  * window / 72h response window pair, in the order the spec lists them:
@@ -45,13 +82,16 @@ export default function ReconnectHome({ uid, eventId }: { uid: string; eventId: 
   );
   const { profile } = useSharedProfile(uid);
   const { user } = useAuth();
-  const [requestsRemaining, setRequestsRemaining] = useState<number | null>(null);
+  // `undefined` = not seeded yet. The server legitimately answers `null`
+  // (not a participant), so `null` can't double as the "unseeded" marker:
+  // that re-set state on every render and crashed the page (React #301).
+  const [requestsRemaining, setRequestsRemaining] = useState<number | null | undefined>(undefined);
 
   // Adjusted during render (not in an effect) — seeds local state from the
   // server's first response exactly once, then locally controlled via
   // onRequestsRemainingChange as requests are sent (same pattern as
   // ContactSection.tsx's `prefs`).
-  if (stateQuery.data && requestsRemaining === null) {
+  if (stateQuery.data && requestsRemaining === undefined) {
     setRequestsRemaining(stateQuery.data.state.requestsRemaining);
   }
 
@@ -66,6 +106,12 @@ export default function ReconnectHome({ uid, eventId }: { uid: string; eventId: 
   if (!stateQuery.data) return <IntroductionLoading />;
 
   const { state } = stateQuery.data;
+  const closedMessage = <WindowClosedMessage state={state} />;
+
+  // Before Reconnect opens the attendee list is often not imported yet, and
+  // when it's switched off there is no list to be on: "no ticket found"
+  // would be wrong in both cases, so say when it opens or that it's off.
+  if (!state.isParticipant && (state.windowState === "not_yet_open" || !state.reconnectEnabled)) return closedMessage;
 
   if (!state.isParticipant) {
     // Deliberately explicit about the exact email checked, and that this
@@ -106,12 +152,7 @@ export default function ReconnectHome({ uid, eventId }: { uid: string; eventId: 
     // widens WHO can still reach the activation form, never search/gallery
     // or new-request-creation, which stay governed by windowState alone.
     if (state.windowState !== "open" && !state.hasPendingIncomingRequest) {
-      return (
-        <NeutralMessage
-          title="Reconnect no está disponible ahora mismo"
-          body="El periodo de Reconnect para este evento no está abierto en este momento."
-        />
-      );
+      return closedMessage;
     }
     return (
       <ReconnectActivationForm

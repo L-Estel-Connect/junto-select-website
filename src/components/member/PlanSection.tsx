@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { MEMBERSHIP_SALES_OPEN } from "@/lib/billing/membershipSales";
+import { useEffect, useState, type ReactNode } from "react";
 import { auth } from "@/lib/firebase/client";
 import { IntroductionError, IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
 import { useMemberProfile } from "./useMemberProfile";
@@ -10,11 +11,12 @@ import { isEntitledStatus, type BillingDocument } from "@/lib/billing/types";
 import { isMarketAvailabilityEligible } from "@/lib/introduction/completion";
 import { memberFetchJson } from "@/lib/member/memberFetch";
 import { useMemberQuery } from "@/lib/member/useMemberQuery";
-import type { MemberEventBenefitView } from "@/lib/eventBenefits/types";
+import type { MemberEventBenefitState, MemberEventBenefitView } from "@/lib/eventBenefits/types";
 import { primaryButtonClasses } from "@/lib/styles";
+import { CONTACT_EMAIL } from "@/lib/site/content";
 
 const MARKET_NOT_AVAILABLE_MESSAGE =
-  "Junto Select está disponible actualmente solo para Madrid. Para recibir selecciones, necesitas vivir en Madrid, cerca de Madrid o venir a Madrid con cierta frecuencia. Si tu situación cambia, podrás actualizar esta respuesta más adelante.";
+  "Junto Select está disponible actualmente solo para Madrid. Para recibir propuestas, necesitas vivir en Madrid, cerca de Madrid o venir a Madrid con cierta frecuencia. Si tu situación cambia, podrás actualizar esta respuesta más adelante.";
 
 async function authedFetch(path: string, body?: Record<string, unknown>) {
   const idToken = await auth.currentUser?.getIdToken();
@@ -50,8 +52,8 @@ function formatEventDate(ymd: string | null): string | null {
 }
 
 const DISCLOSURES = [
-  "Recibe hasta 3 selecciones cuidadosas al mes — las que no uses no se acumulan.",
-  "Como miembro, también tienes un 20 % de descuento en cada evento Junto Select elegible.",
+  "Hasta 3 propuestas al mes. Las que no uses no se acumulan.",
+  "Como miembro, también recibes un código personal del 20 % por ciclo mensual para un encuentro Junto Select elegible.",
 ];
 
 function chargeFrequencyLabel(durationMonths: number): string {
@@ -102,7 +104,15 @@ function PlanCard({
  * (see the Ticket Tailor API audit) — showing nothing false is safer than
  * showing an unverified claim.
  */
-function EventBenefitCard({ benefit }: { benefit: MemberEventBenefitView }) {
+function EventBenefitCard({
+  benefit,
+  onRetry,
+  retrying,
+}: {
+  benefit: MemberEventBenefitView;
+  onRetry: () => void;
+  retrying: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   const eventDate = formatEventDate(benefit.eventDate);
   const validUntil = formatDate(benefit.validUntil);
@@ -138,6 +148,11 @@ function EventBenefitCard({ benefit }: { benefit: MemberEventBenefitView }) {
             </button>
           </div>
           {validUntil && <p className="mt-2 text-[12px] text-ink-soft">Válido hasta el {validUntil}.</p>}
+          {benefit.simulated && (
+            <p className="mt-2 text-[12px] text-[#8a3b3b]">
+              Código de prueba del entorno de staging: no existe en Ticket Tailor y no funciona al comprar.
+            </p>
+          )}
           {benefit.checkoutUrl && (
             <a
               href={benefit.checkoutUrl}
@@ -149,52 +164,194 @@ function EventBenefitCard({ benefit }: { benefit: MemberEventBenefitView }) {
             </a>
           )}
         </>
+      ) : benefit.state === "failed" ? (
+        <div className="mt-3">
+          <p role="alert" className="text-[13px] text-[#8a3b3b]">
+            No hemos podido generar tu código todavía. Tu código está reservado: no perderás el beneficio de este
+            ciclo.
+          </p>
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={retrying}
+            className="mt-2 text-[12px] font-medium uppercase tracking-[0.1em] text-ink underline decoration-hairline underline-offset-4 disabled:opacity-50"
+          >
+            {retrying ? "Reintentando…" : "Reintentar"}
+          </button>
+          <p className="mt-2 text-[12px] text-ink-soft">
+            Si sigue sin aparecer, escríbenos a{" "}
+            <a className="underline" href={`mailto:${CONTACT_EMAIL}`}>
+              {CONTACT_EMAIL}
+            </a>
+            .
+          </p>
+        </div>
       ) : (
-        <p className="mt-3 text-[13px] text-ink-soft">Estamos preparando tu código para este evento.</p>
+        <p className="mt-3 text-[13px] text-ink-soft">Estamos preparando tu código para este evento. Solo tarda unos segundos.</p>
       )}
     </div>
   );
 }
 
+const CLAIM_ERRORS: Record<string, string> = {
+  cycle_already_claimed: "Ya has usado el código de este ciclo mensual.",
+  event_already_has_code: "Ya tienes un código para este encuentro.",
+  event_not_eligible: "Este encuentro ya no está disponible para el beneficio.",
+  no_active_cycle: "Tu membresía no tiene un ciclo activo en este momento.",
+};
+
 /**
- * "Beneficio de evento" — one card per eligible Junto Select event
- * covered by the member's current membership entitlement, read ONLY from
- * /api/member/event-benefit (Firestore/Junto stays the read path; the
- * browser never talks to Ticket Tailor or sees its API key). Each event
- * has its own independent, single-use code — no accumulation, no code
- * shared across events (see the architecture decision).
+ * "Beneficio de evento" — the member's one 20 % code per monthly cycle,
+ * read ONLY from /api/member/event-benefit (the browser never talks to
+ * Ticket Tailor or sees its API key). While this cycle's code is unused
+ * the member picks the eligible event it's for; the server enforces one
+ * per cycle. Codes already held (including any issued before the monthly
+ * model) are listed as before.
  */
-function EventBenefitSection({ uid }: { uid: string }) {
+export function EventBenefitSection({ uid }: { uid: string }) {
   const benefitQuery = useMemberQuery(
-    () => memberFetchJson<{ benefits: MemberEventBenefitView[] }>("/api/member/event-benefit"),
+    () => memberFetchJson<MemberEventBenefitState>("/api/member/event-benefit"),
     [uid],
   );
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
 
   const loading = !benefitQuery.data && !benefitQuery.error;
   const benefits = benefitQuery.data?.benefits ?? [];
+  const cycle = benefitQuery.data?.cycle ?? null;
+  const claimable = benefitQuery.data?.claimableEvents ?? [];
+  const nextCycle = cycle ? formatEventDate(cycle.cycleEnd) : null;
+  // cycleEnd is exclusive; "hasta el …" names the cycle's last day.
+  const lastDay = cycle
+    ? formatEventDate(new Date(Date.parse(`${cycle.cycleEnd}T00:00:00Z`) - 86400000).toISOString().slice(0, 10))
+    : null;
+
+  // A code still being prepared is re-read a few times, so it appears
+  // without a page reload as soon as Ticket Tailor confirms it.
+  const preparing = (benefitQuery.data?.benefits ?? []).some((b) => b.state === "preparing");
+  const [polls, setPolls] = useState(0);
+  useEffect(() => {
+    if (!preparing || polls >= 6) return;
+    const t = setTimeout(() => {
+      setPolls((n) => n + 1);
+      benefitQuery.reload();
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [preparing, polls, benefitQuery]);
+
+  // Asking again for the same event returns the same code and retries its
+  // activation: it can never create a second code.
+  async function handleRetry(ticketTailorEventId: string) {
+    setRetryingId(ticketTailorEventId);
+    try {
+      await memberFetchJson("/api/member/event-benefit", {
+        method: "POST",
+        body: JSON.stringify({ ticketTailorEventId }),
+      });
+    } catch {
+      // The card keeps showing the failed state and the contact address.
+    } finally {
+      setRetryingId(null);
+      setPolls(0);
+      benefitQuery.reload();
+    }
+  }
+
+  async function handleClaim(ticketTailorEventId: string) {
+    setClaimingId(ticketTailorEventId);
+    setClaimError(null);
+    try {
+      await memberFetchJson("/api/member/event-benefit", {
+        method: "POST",
+        body: JSON.stringify({ ticketTailorEventId }),
+      });
+    } catch (err) {
+      const code = (err as Error & { code?: string }).code ?? (err instanceof Error ? err.message : "");
+      setClaimError(CLAIM_ERRORS[code] ?? "No hemos podido generar tu código. Inténtalo de nuevo.");
+    } finally {
+      setClaimingId(null);
+      benefitQuery.reload();
+    }
+  }
 
   return (
     <div className="mt-10 border-t border-hairline pt-8">
       <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">Beneficio de evento</p>
       <p className="mt-2 max-w-[46ch] text-[13px] leading-relaxed text-ink-soft">
-        Como miembro de Junto Select, recibes un 20 % de descuento en una entrada para cada evento Junto
-        Select elegible que tenga lugar durante tu membresía activa. Un código por evento — no se acumulan
-        ni se comparten entre eventos.
+        Como miembro Select, recibes un código personal del 20 % para utilizar una sola vez por ciclo
+        mensual en un encuentro Junto Select elegible. No es acumulable con otros descuentos.
       </p>
       {loading || benefitQuery.error ? (
         <p className="mt-4 text-[14px] text-ink-soft">
           {benefitQuery.error ? "No hemos podido cargar tu beneficio de evento." : "Cargando…"}
         </p>
-      ) : benefits.length === 0 ? (
-        <p className="mt-4 text-[14px] text-ink-soft">
-          Todavía no hay ningún evento con beneficio disponible para tu periodo de membresía actual.
-        </p>
       ) : (
-        <div className="mt-4 space-y-3">
-          {benefits.map((benefit) => (
-            <EventBenefitCard key={benefit.ticketTailorEventId} benefit={benefit} />
-          ))}
-        </div>
+        <>
+          {cycle && !cycle.claimed && (
+            <div className="mt-4 rounded-2xl border border-hairline bg-white p-5">
+              <p className="text-[15px] font-medium text-ink">Tu código de este ciclo está disponible</p>
+              {claimable.length === 0 ? (
+                <p className="mt-2 text-[13px] text-ink-soft">
+                  Todavía no hay ningún encuentro elegible dentro de tu periodo de membresía. Podrás pedir tu
+                  código cuando se publique uno{lastDay ? `, hasta el ${lastDay}` : ""}.
+                </p>
+              ) : (
+                <>
+                  <p className="mt-2 text-[13px] text-ink-soft">
+                    Elige el encuentro para el que quieres tu código{lastDay ? ` (disponible hasta el ${lastDay})` : ""}.
+                  </p>
+                  <ul className="mt-3 space-y-2">
+                    {claimable.map((event) => (
+                      <li key={event.ticketTailorEventId} className="flex items-center justify-between gap-3 border-t border-hairline pt-2">
+                        <span className="text-[13px] text-ink">
+                          {event.eventLabel}
+                          <span className="block text-ink-soft">{formatEventDate(event.eventDate)}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleClaim(event.ticketTailorEventId)}
+                          disabled={claimingId !== null}
+                          className="shrink-0 text-[12px] font-medium uppercase tracking-[0.1em] text-ink underline decoration-hairline underline-offset-4 disabled:opacity-50"
+                        >
+                          {claimingId === event.ticketTailorEventId ? "Generando…" : "Pedir mi código"}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {claimError && (
+                <p role="alert" className="mt-3 text-[13px] text-[#8a3b3b]">
+                  {claimError}
+                </p>
+              )}
+            </div>
+          )}
+          {cycle?.claimed && nextCycle && (
+            <p className="mt-4 text-[13px] text-ink-soft">
+              Ya has pedido el código de este ciclo. El siguiente estará disponible el {nextCycle}.
+            </p>
+          )}
+          {benefits.length > 0 ? (
+            <div className="mt-4 space-y-3">
+              {benefits.map((benefit) => (
+                <EventBenefitCard
+                  key={`${benefit.ticketTailorEventId}-${benefit.code ?? "pending"}`}
+                  benefit={benefit}
+                  onRetry={() => handleRetry(benefit.ticketTailorEventId)}
+                  retrying={retryingId === benefit.ticketTailorEventId}
+                />
+              ))}
+            </div>
+          ) : (
+            !cycle && (
+              <p className="mt-4 text-[14px] text-ink-soft">
+                Todavía no hay ningún código disponible para tu periodo de membresía actual.
+              </p>
+            )
+          )}
+        </>
       )}
     </div>
   );
@@ -298,9 +455,177 @@ function ActiveMembership({
  * of payment — it's used only to choose which transient banner to show
  * while the real state (from the Firestore listener above) catches up.
  */
+
+/**
+ * The three plans, the required confirmations and the button to Stripe.
+ * Used on Mi plan and, for "Búsqueda activa", as the last step of the
+ * profile (`returnTo: "profile"` brings Stripe back to that step).
+ * `beforeCheckout` runs first (e.g. recording the introductions consent).
+ */
+export function PlanCheckoutForm({
+  marketEligible,
+  returnTo,
+  beforeCheckout,
+  disabledReason,
+  leadingConfirmation,
+  leadingConfirmed,
+}: {
+  marketEligible: boolean;
+  returnTo?: "profile";
+  beforeCheckout?: () => Promise<void>;
+  disabledReason?: string | null;
+  /** An extra required box shown first in "Confirmaciones" (the Introducciones participation consent). */
+  leadingConfirmation?: ReactNode;
+  leadingConfirmed?: boolean;
+}) {
+  const [selectedPlan, setSelectedPlan] = useState<PlanKey>("three_month");
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [immediateServiceRequested, setImmediateServiceRequested] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+  async function handleCheckout() {
+    setCheckoutError(null);
+    if (!termsAccepted) {
+      setCheckoutError("Debes aceptar los términos y condiciones para continuar.");
+      return;
+    }
+    if (!immediateServiceRequested) {
+      setCheckoutError("Debes confirmar que quieres empezar ya para continuar.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await beforeCheckout?.();
+      const url = await authedFetch("/api/billing/create-checkout-session", {
+        planKey: selectedPlan,
+        termsAccepted: true,
+        immediateServiceRequested: true,
+        ...(returnTo ? { returnTo } : {}),
+      });
+      window.location.href = url;
+    } catch (err) {
+      setCheckoutError(
+        err instanceof Error && err.message === "market_not_available"
+          ? MARKET_NOT_AVAILABLE_MESSAGE
+          : "No hemos podido iniciar el pago. Inténtalo de nuevo en unos minutos.",
+      );
+      setSubmitting(false);
+    }
+  }
+
+  const missingConfirmations =
+    (leadingConfirmation && !leadingConfirmed ? 1 : 0) + (termsAccepted ? 0 : 1) + (immediateServiceRequested ? 0 : 1);
+  const checkboxLabelClasses = "flex items-start gap-3 text-[14px] leading-relaxed text-ink";
+
+  return (
+    <>
+      <div className="mt-6">
+        <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">Incluye</p>
+        <ul className="mt-3 space-y-2 text-[14px] leading-relaxed text-ink-soft">
+          {DISCLOSURES.map((line) => (
+            <li key={line} className="flex gap-3">
+              <span aria-hidden className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-[var(--laton,#625952)]" />
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="mt-6 space-y-3">
+        {PLAN_KEYS.map((key) => (
+          <PlanCard key={key} planKey={key} selected={selectedPlan === key} onSelect={() => setSelectedPlan(key)} />
+        ))}
+      </div>
+
+      <fieldset className="mt-8 space-y-4 rounded-md border border-hairline bg-white/60 p-5">
+        <legend className="px-1 text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">Confirmaciones</legend>
+        {leadingConfirmation}
+        <label className={checkboxLabelClasses}>
+          <input
+            type="checkbox"
+            checked={termsAccepted}
+            onChange={(e) => setTermsAccepted(e.target.checked)}
+            className="mt-1 h-4 w-4 shrink-0"
+          />
+          <span>
+            He leído y acepto los{" "}
+            <a href="/terminos" target="_blank" className="underline decoration-hairline underline-offset-4">
+              Términos y condiciones
+            </a>{" "}
+            y la{" "}
+            <a href="/privacidad" target="_blank" className="underline decoration-hairline underline-offset-4">
+              Política de privacidad
+            </a>
+            , incluida la renovación automática.
+          </span>
+        </label>
+
+        <label className={checkboxLabelClasses}>
+          <input
+            type="checkbox"
+            checked={immediateServiceRequested}
+            onChange={(e) => setImmediateServiceRequested(e.target.checked)}
+            className="mt-1 h-4 w-4 shrink-0"
+          />
+          <span>
+            Solicito que mi membresía y búsqueda activa comiencen inmediatamente. He leído y acepto
+            las condiciones aplicables al desistimiento recogidas en los{" "}
+            <a href="/terminos" target="_blank" className="underline decoration-hairline underline-offset-4">
+              Términos y condiciones
+            </a>
+            .
+          </span>
+        </label>
+      </fieldset>
+
+      <div className="mt-6 flex items-center justify-between border-t border-hairline pt-4 text-[15px]">
+        <span className="text-ink">Total a pagar ahora</span>
+        <span className="font-medium text-ink">{PLAN_DISPLAY[selectedPlan].priceEuros} €</span>
+      </div>
+
+      {!marketEligible && (
+        <p role="alert" className="mt-4 text-[13px] leading-relaxed text-[#8a3b3b]">
+          {MARKET_NOT_AVAILABLE_MESSAGE}
+        </p>
+      )}
+
+      <button
+        type="button"
+        onClick={handleCheckout}
+        disabled={submitting || !termsAccepted || !immediateServiceRequested || !marketEligible || !!disabledReason}
+        className={`${primaryButtonClasses} mt-4 w-full`}
+      >
+        {submitting ? "Redirigiendo a Stripe…" : `Continuar al pago — ${PLAN_DISPLAY[selectedPlan].priceEuros} €`}
+      </button>
+      {!checkoutError && missingConfirmations > 0 && (
+        <p className="mt-2 text-center text-[13px] text-ink-soft">
+          {missingConfirmations === 1 ? "Falta 1 confirmación." : `Faltan ${missingConfirmations} confirmaciones.`}
+        </p>
+      )}
+      {disabledReason && !checkoutError && missingConfirmations === 0 && (
+        <p className="mt-2 text-center text-[13px] text-ink-soft">{disabledReason}</p>
+      )}
+      {checkoutError && (
+        <p role="alert" className="mt-3 text-[13px] text-[#8a3b3b]">
+          {checkoutError}
+        </p>
+      )}
+      <p className="mt-3 text-[12px] text-ink-soft">
+        Serás redirigido/a a Stripe para completar el pago de forma segura. Junto Select nunca ve ni
+        almacena los datos de tu tarjeta.
+      </p>
+    </>
+  );
+}
+
 export default function PlanSection({ uid }: { uid: string }) {
-  const { profile, ready, error, refresh } = useMemberProfile(uid);
   const { billing, loading: billingLoading, error: billingError } = useBilling(uid);
+  // A Select member manages their membership here even without a finished
+  // introductions profile (membership benefits never require one).
+  const { profile, ready, error, refresh } = useMemberProfile(uid, {
+    allowUnfinished: billingLoading ? null : !!billing && isEntitledStatus(billing.status),
+  });
 
   // Read via a mount-gated effect, not directly during render: this value
   // depends on `window.location`, which doesn't exist during server
@@ -319,12 +644,8 @@ export default function PlanSection({ uid }: { uid: string }) {
     setCheckoutParam(new URLSearchParams(window.location.search).get("checkout"));
   }, []);
 
-  const [selectedPlan, setSelectedPlan] = useState<PlanKey>("three_month");
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [immediateServiceRequested, setImmediateServiceRequested] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [manageError, setManageError] = useState<string | null>(null);
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   if (!ready) {
     if (error) return <IntroductionError message={error} onRetry={() => void refresh()} />;
@@ -337,34 +658,6 @@ export default function PlanSection({ uid }: { uid: string }) {
 
   const entitled = isEntitledStatus(billing.status);
   const marketEligible = profile ? isMarketAvailabilityEligible(profile) : true;
-
-  async function handleCheckout() {
-    setCheckoutError(null);
-    if (!termsAccepted) {
-      setCheckoutError("Debes aceptar los términos y condiciones para continuar.");
-      return;
-    }
-    if (!immediateServiceRequested) {
-      setCheckoutError("Debes confirmar que quieres empezar ya para continuar.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const url = await authedFetch("/api/billing/create-checkout-session", {
-        planKey: selectedPlan,
-        termsAccepted: true,
-        immediateServiceRequested: true,
-      });
-      window.location.href = url;
-    } catch (err) {
-      setCheckoutError(
-        err instanceof Error && err.message === "market_not_available"
-          ? MARKET_NOT_AVAILABLE_MESSAGE
-          : "No hemos podido iniciar el pago. Inténtalo de nuevo en unos minutos.",
-      );
-      setSubmitting(false);
-    }
-  }
 
   async function handleManage() {
     setManageError(null);
@@ -400,8 +693,8 @@ export default function PlanSection({ uid }: { uid: string }) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[560px] flex-col px-6 py-14 sm:px-0">
-      <h1 className="font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">Mi plan</h1>
+    <div className="mx-auto flex w-full max-w-[560px] flex-col py-14">
+      <h1 className="font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">Mi plan</h1>
 
       {checkoutParam === "success" && !entitled && (
         <div className="mt-4 rounded-xl border border-hairline bg-white p-4 text-[14px] text-ink-soft">
@@ -417,13 +710,24 @@ export default function PlanSection({ uid }: { uid: string }) {
 
       {entitled ? (
         <>
-          <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-            Tu membresía está activa: Junto Select está buscando por ti y recibirás hasta 3 selecciones
-            al mes, siempre que encontremos perfiles compatibles con tus criterios en Madrid.
-          </p>
-          {!marketEligible && (
+          {profile?.meta.onboardingFinalized ? (
+            <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+              Tu membresía está activa: Junto Select está buscando por ti y recibirás hasta 3 propuestas
+              al mes, siempre que encontremos perfiles compatibles con tus criterios en Madrid.
+            </p>
+          ) : (
+            <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+              Tu membresía está activa. Tu 20 % en un encuentro al mes ya está disponible. Si quieres
+              introducciones privadas,{" "}
+              <a href="/member/bienvenida" className="underline decoration-hairline underline-offset-4">
+                completa tu perfil privado
+              </a>{" "}
+              cuando quieras: la búsqueda empieza en cuanto esté completo.
+            </p>
+          )}
+          {profile?.meta.onboardingFinalized && !marketEligible && (
             <div className="mt-4 rounded-xl border border-hairline bg-white p-4 text-[14px] text-ink-soft">
-              Tus selecciones están en pausa porque Junto Select está disponible actualmente solo para
+              Tus propuestas están en pausa porque Junto Select está disponible actualmente solo para
               Madrid. Actualiza tu disponibilidad en{" "}
               <a href="/member/profile/about" className="underline decoration-hairline underline-offset-4">
                 Sobre ti
@@ -440,12 +744,20 @@ export default function PlanSection({ uid }: { uid: string }) {
             manageError={manageError}
           />
         </>
+      ) : !MEMBERSHIP_SALES_OPEN ? (
+        // Membresía is closed to new subscriptions: nothing to buy here.
+        <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
+          Tu perfil privado forma parte de nuestra red. Si prefieres que busquemos por ti, conoce nuestro{" "}
+          <a href="/matchmaking" className="underline decoration-hairline underline-offset-4">
+            matchmaking privado
+          </a>
+          .
+        </p>
       ) : (
         <>
           <p className="mt-2 max-w-[46ch] text-[15px] leading-relaxed text-ink-soft">
-            Formar parte de Junto Select es gratuito: tu perfil permanece en nuestra base privada y
-            puede aparecer como una posible selección para otros miembros. Para recibir tú mismo/a
-            hasta 3 selecciones al mes, hazte miembro.
+            Tu perfil privado forma parte de la red y podemos proponerlo a miembros Select
+            compatibles. Con la Membresía Select, además, buscamos activamente por ti.
           </p>
 
           <div className="mt-10 border-t border-hairline">
@@ -455,91 +767,7 @@ export default function PlanSection({ uid }: { uid: string }) {
             </div>
           </div>
 
-          <div className="mt-8 space-y-3">
-            {PLAN_KEYS.map((key) => (
-              <PlanCard key={key} planKey={key} selected={selectedPlan === key} onSelect={() => setSelectedPlan(key)} />
-            ))}
-          </div>
-
-          <div className="mt-8">
-            <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-ink-soft">
-              Antes de continuar
-            </p>
-            <ul className="mt-3 space-y-2 text-[13px] leading-relaxed text-ink-soft">
-              {DISCLOSURES.map((line) => (
-                <li key={line} className="flex gap-2">
-                  <span aria-hidden className="mt-1 h-1 w-1 shrink-0 rounded-full bg-ink-soft" />
-                  <span>{line}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <label className="mt-6 flex items-start gap-3 text-[13px] leading-relaxed text-ink">
-            <input
-              type="checkbox"
-              checked={termsAccepted}
-              onChange={(e) => setTermsAccepted(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0"
-            />
-            <span>
-              He leído y acepto los{" "}
-              <a href="/terminos" target="_blank" className="underline decoration-hairline underline-offset-4">
-                Términos y condiciones
-              </a>{" "}
-              y la{" "}
-              <a href="/privacidad" target="_blank" className="underline decoration-hairline underline-offset-4">
-                Política de privacidad
-              </a>
-              , incluida la renovación automática.
-            </span>
-          </label>
-
-          <label className="mt-4 flex items-start gap-3 text-[13px] leading-relaxed text-ink">
-            <input
-              type="checkbox"
-              checked={immediateServiceRequested}
-              onChange={(e) => setImmediateServiceRequested(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0"
-            />
-            <span>
-              Solicito que mi membresía y búsqueda activa comiencen inmediatamente. He leído y acepto
-              las condiciones aplicables al desistimiento recogidas en los{" "}
-              <a href="/terminos" target="_blank" className="underline decoration-hairline underline-offset-4">
-                Términos y condiciones
-              </a>
-              .
-            </span>
-          </label>
-
-          <div className="mt-6 flex items-center justify-between border-t border-hairline pt-4 text-[14px]">
-            <span className="text-ink">Total a pagar ahora</span>
-            <span className="font-medium text-ink">{PLAN_DISPLAY[selectedPlan].priceEuros} €</span>
-          </div>
-
-          {!marketEligible && (
-            <p role="alert" className="mt-4 text-[13px] leading-relaxed text-[#8a3b3b]">
-              {MARKET_NOT_AVAILABLE_MESSAGE}
-            </p>
-          )}
-
-          <button
-            type="button"
-            onClick={handleCheckout}
-            disabled={submitting || !termsAccepted || !immediateServiceRequested || !marketEligible}
-            className="mt-4 w-full rounded-full bg-ink px-9 py-4 text-center text-[13px] font-medium uppercase tracking-[0.18em] text-white transition-opacity disabled:opacity-40"
-          >
-            {submitting ? "Redirigiendo a Stripe…" : `Continuar al pago — ${PLAN_DISPLAY[selectedPlan].priceEuros} €`}
-          </button>
-          {checkoutError && (
-            <p role="alert" className="mt-3 text-[13px] text-[#8a3b3b]">
-              {checkoutError}
-            </p>
-          )}
-          <p className="mt-3 text-[12px] text-ink-soft">
-            Serás redirigido/a a Stripe para completar el pago de forma segura. Junto Select nunca ve ni
-            almacena los datos de tu tarjeta.
-          </p>
+          <PlanCheckoutForm marketEligible={marketEligible} />
         </>
       )}
     </div>

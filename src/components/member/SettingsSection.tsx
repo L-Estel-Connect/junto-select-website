@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/firebase/useAuth";
 import { auth } from "@/lib/firebase/client";
 import { signOutUser } from "@/lib/firebase/auth";
 import { IntroductionError, IntroductionLoading } from "@/components/introduction/RequireIntroductionAuth";
 import { useMemberProfile } from "./useMemberProfile";
+import { useBilling } from "@/lib/billing/useBilling";
+import { isEntitledStatus } from "@/lib/billing/types";
+import { getNextOnboardingRoute } from "@/lib/introduction/completion";
 
 const linkClasses =
   "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
@@ -39,7 +41,7 @@ function SettingsRow({ label, value }: { label: string; value: React.ReactNode }
  * Stripe billing immediately, so it must never be triggerable by a stray
  * or accidental click.
  */
-function DeleteProfileModal({
+export function DeleteProfileModal({
   onClose,
   onDeleted,
 }: {
@@ -125,37 +127,55 @@ function DeleteProfileModal({
 
 export default function SettingsSection({ uid }: { uid: string }) {
   const { user } = useAuth();
-  const { ready, error, refresh } = useMemberProfile(uid);
+  const { billing, loading: billingLoading } = useBilling(uid);
+  // Ajustes stays open to an unfinished profile too: signing out and
+  // deleting the account must be possible at any point of the questionnaire.
+  const { profile, ready, error, refresh } = useMemberProfile(uid, { allowUnfinished: true });
+  const finalized = !!profile?.meta.onboardingFinalized;
+  const entitled = !billingLoading && !!billing && isEntitledStatus(billing.status);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const router = useRouter();
   if (!ready) {
     if (error) return <IntroductionError message={error} onRetry={() => void refresh()} />;
     return <IntroductionLoading />;
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[560px] flex-col px-6 py-14 sm:px-0">
-      <h1 className="font-serif text-[26px] font-normal leading-snug text-ink sm:text-[28px]">
+    <div className="mx-auto flex w-full max-w-[560px] flex-col py-14">
+      <h1 className="font-serif text-[30px] font-normal leading-[1.15] text-ink sm:text-[40px]">
         Ajustes
       </h1>
 
       <SettingsGroup title="Cuenta">
         <SettingsRow label="Email" value={user?.email ?? "—"} />
-        <div className="border-b border-hairline py-4">
-          <Link href="/member/profile#editar-perfil" className={`text-[14px] ${linkClasses}`}>
-            Editar información del perfil
-          </Link>
-        </div>
-        <div className="border-b border-hairline py-4">
-          <Link href="/member/profile/contact" className={`text-[14px] ${linkClasses}`}>
-            Preferencias de contacto
-          </Link>
-        </div>
-        <div className="border-b border-hairline py-4">
-          <Link href="/member/plan" className={`text-[14px] ${linkClasses}`}>
-            Gestionar mi membresía
-          </Link>
-        </div>
+        {finalized && (
+          <>
+            <div className="border-b border-hairline py-4">
+              <Link href="/member/profile#editar-perfil" className={`text-[14px] ${linkClasses}`}>
+                Editar información del perfil
+              </Link>
+            </div>
+            <div className="border-b border-hairline py-4">
+              <Link href="/member/profile/contact" className={`text-[14px] ${linkClasses}`}>
+                Preferencias de contacto
+              </Link>
+            </div>
+          </>
+        )}
+        {!finalized && profile && (
+          <div className="border-b border-hairline py-4">
+            <Link href={getNextOnboardingRoute(profile)} className={`text-[14px] ${linkClasses}`}>
+              Continuar mi perfil
+            </Link>
+          </div>
+        )}
+        {/* The dormant Membresía: only for accounts with a subscription record. */}
+        {(entitled || (!!billing && billing.status !== "none")) && (
+          <div className="border-b border-hairline py-4">
+            <Link href="/member/plan" className={`text-[14px] ${linkClasses}`}>
+              Gestionar mi membresía
+            </Link>
+          </div>
+        )}
       </SettingsGroup>
 
       <SettingsGroup title="Privacidad">
@@ -212,8 +232,10 @@ export default function SettingsSection({ uid }: { uid: string }) {
         <DeleteProfileModal
           onClose={() => setShowDeleteModal(false)}
           onDeleted={() => {
-            void signOutUser();
-            router.replace("/");
+            // A full navigation, not router.replace + signOut: signing out
+            // first makes MemberShell redirect to the sign-in page before
+            // the confirmation can show. The confirmation page signs out.
+            window.location.replace("/perfil-eliminado");
           }}
         />
       )}

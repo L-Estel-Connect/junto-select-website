@@ -19,7 +19,17 @@ import { diagnoseProfileStatus, isMarketAvailabilityEligible } from "@/lib/intro
  * (resident / near / frequent visitor — all equivalent) is irrelevant to
  * whether or how well they match.
  */
-export function isProfileInEligiblePool(profile: ProfileDocument): boolean {
+export interface PoolOptions {
+  /**
+   * The automatic monthly cycle is Madrid-only (V1 scope). The team's
+   * matchmaking search is national (Lara, 15 Oct 2026) and passes false;
+   * location then becomes a search filter, not a pool gate.
+   */
+  requireMadrid?: boolean;
+}
+
+export function isProfileInEligiblePool(profile: ProfileDocument, options: PoolOptions = {}): boolean {
+  const requireMadrid = options.requireMadrid ?? true;
   // NON-NEGOTIABLE, checked first and unconditionally: a legacy-contact
   // profile that hasn't finished activation can NEVER enter the pool,
   // regardless of what `profileStatus` or anything else says — see
@@ -27,6 +37,7 @@ export function isProfileInEligiblePool(profile: ProfileDocument): boolean {
   // (types.ts) for why this is deliberate defense-in-depth on top of,
   // never instead of, the ordinary completion pipeline below.
   if (profile.meta.pendingLegacyActivation) return false;
+  if (isAwaitingServiceChoice(profile)) return false;
   if (profile.meta.profileStatus !== "active_for_matching") return false;
   if (
     profile.meta.duplicateStatus === "suspected" ||
@@ -36,13 +47,26 @@ export function isProfileInEligiblePool(profile: ProfileDocument): boolean {
   }
   // V1 product scope: Madrid only — unknown availability is excluded, same
   // as any other unknown self-report data (never assumed compatible).
+  if (!requireMadrid) return true;
   if (profile.visible.market !== "madrid") return false;
   if (!isMarketAvailabilityEligible(profile)) return false;
   return true;
 }
 
+/**
+ * A profile started from "Elige tu modalidad" (it carries
+ * `meta.requestedService`) joins the pool only once its owner has finalized
+ * it: by choosing the passive network, or by paying for Select. Until then
+ * a complete profile is NOT silently treated as passive. Profiles created
+ * before that choice existed have no `requestedService` and are unaffected.
+ */
+export function isAwaitingServiceChoice(profile: ProfileDocument): boolean {
+  return !!profile.meta.requestedService && !profile.meta.onboardingFinalized;
+}
+
 export type EligibilityFailureReason =
   | "legacy_pending_activation"
+  | "awaiting_service_choice"
   | "profile_status_not_active"
   | "gender_preference_ambiguous"
   | "duplicate_suspected"
@@ -77,6 +101,7 @@ export interface EligibilityDiagnosis {
 export function explainIneligibility(profile: ProfileDocument): EligibilityDiagnosis {
   const reasons: EligibilityFailureReason[] = [];
   if (profile.meta.pendingLegacyActivation) reasons.push("legacy_pending_activation");
+  if (isAwaitingServiceChoice(profile)) reasons.push("awaiting_service_choice");
   if (profile.meta.profileStatus !== "active_for_matching") reasons.push("profile_status_not_active");
   // Called out as its own top-level reason (in addition to also showing
   // up inside profileStatus.sections.preferences.missingFields) because

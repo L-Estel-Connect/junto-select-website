@@ -142,30 +142,27 @@ browser.
    Firestore (`invitationRequests/{id}`, below) and the user-facing
    request still succeeds; only the Brevo sync itself is unavailable,
    recorded as `brevoSyncStatus: "failed"` on the document.
-2. `BREVO_LIST_ID` is set to `12` in `apphosting.yaml` — the account
-   owner's confirmed EXISTING Brevo list. Never point this at a new or
-   different list without the account owner explicitly saying so.
-3. **Attribute mapping is deliberately narrow** (`src/lib/brevoPayload.ts`,
-   pure/unit-tested): only `NOMBRE`, `GENERO`, `PROFESION` (only if
-   filled), `TELEFONO` (only if filled). `GENERO` reuses an EXISTING Brevo
-   attribute — the account owner confirmed its values are exactly `Mujer`
-   / `Hombre`, which is exactly what the homepage form's radio values map
-   to. `NOMBRE`/`PROFESION`/`TELEFONO` are assumed-common CRM field names
-   but **not independently verified** — confirm they exist in Brevo
-   (Contacts → Settings → Contact attributes) with these exact internal
-   names before relying on them being populated; if Brevo's API rejects
-   unrecognized attribute keys outright (behavior not verified against a
-   real account from this environment), an unrecognized name here would
-   fail the whole sync — which is now safe either way, since Firestore
-   (`invitationRequests/{id}`, below) is what actually captures the
-   submission, not Brevo.
-4. Age-confirmation and communications-consent data, and the free-text
-   "Cuéntanos sobre ti" bio, are **NOT sent to Brevo** — they were never
-   confirmed to be existing Brevo attributes, and the account owner asked
-   not to have new attributes created speculatively. The durable,
-   timestamped record of that consent lives in Firestore instead (next
-   section).
-5. The route uses `updateEnabled: true` with `email` as the sole identity
+2. **Community list.** The "Recibir invitaciones" form adds contacts to
+   the existing community list 12 (`BREVO_LIST_ID`, set to `"12"` in
+   `apphosting.yaml`). Lara decided (13 Oct 2026) not to create another
+   list: new cities are segmented inside list 12 by the `CIUDAD`
+   attribute, never by separate lists. Existing contacts were given
+   `CIUDAD = Madrid` in Brevo.
+3. **Attributes** (`src/lib/brevoPayload.ts`, pure and tested): only
+   `NOMBRE`, `GENERO` (`Mujer`/`Hombre`) and `CIUDAD` (`Madrid`,
+   `Valencia`, `Barcelona`, `Málaga` or `Otra`). All three exist in Brevo;
+   the code never creates attributes. Everything else (age range,
+   interests, the "other city" text, phone, company, consent text and
+   version) stays in Firestore only.
+4. **Consent.** The form has one required box ("Quiero recibir por email
+   las invitaciones y novedades de Junto Select. He leído la política de
+   privacidad."). Its exact text and version (`invitaciones_v1`) are stored
+   on the Firestore record. The Brevo payload carries no
+   `emailBlacklisted` flag, so an existing contact's consent and
+   subscription status are left exactly as they are.
+5. **Staging never calls Brevo** (`isStagingDeploy()`): the record is kept
+   with `brevoSyncStatus: "skipped_staging"`.
+6. The route uses `updateEnabled: true` with `email` as the sole identity
    key, so a repeat submission from the same address updates the existing
    Brevo contact rather than creating a duplicate.
 
@@ -1016,6 +1013,28 @@ invoker service account) not done here. Also deploy the new composite
 index (`firebase deploy --only firestore:indexes`) and the updated
 `firestore.rules` before enabling the schedule.
 
+### Paid but not yet eligible (pay-first members)
+
+Paying turns on `searchStatus: active_search`, but a member only receives
+their own proposals once their Introductions profile is also finalized
+(with the participation consent) and in the eligible pool — one rule,
+`src/lib/matching/activeSearch.ts`, used by both the scheduler and the
+engine, and re-derived from the profile's content rather than trusting the
+client-writable `meta.profileStatus`.
+
+When a due period arrives for a paying member who isn't eligible, the scan
+leaves the period untouched and sets `meta.matchingPausedAt` (server-only,
+locked in `firestore.rules`). Before this, such a period ran with nobody to
+process, was marked completed, and the member was stuck forever. As soon as
+the member becomes eligible (finalizing calls
+`POST /api/member/matching/reevaluate` for their own uid; every scan also
+re-checks), matching restarts at the current period without replaying the
+months they spent ineligible. Losing entitlement (cancellation, expiry)
+also pauses; a new subscription restarts the clock. A cycle frozen by the
+old behaviour (completed, `member_period`, zero recipients) is reopened
+automatically the next time its member is eligible. Existing profiles and
+matching records are not migrated or rewritten.
+
 ### Matching period vs. billing renewal — never conflated
 
 Two independent systems, on purpose: (1) the matching period above,
@@ -1243,6 +1262,32 @@ billing, and was explicitly left unfixed here per direct instruction — it
 does not block a member from ever having completed onboarding earlier
 under the older schema, only affects that one recovery path going
 forward. **TODO, tracked, not fixed in this change.**
+
+## Member 20 % event benefit (one code per monthly cycle)
+
+Every Select member gets one personal, single-use 20 % code per monthly
+cycle, for one eligible Junto Select event they choose on "Mi plan".
+Cycles are calendar months from the subscription's start date
+(`billing.subscriptionStartedAt`, falling back to the profile's matching
+anchor for the same subscription), whatever the plan: 1, 3 or 6 cycles per
+payment. No cycle exists outside the paid period, so nothing is issued
+while a renewal is pending or after cancellation.
+
+- Claim: `POST /api/member/event-benefit {ticketTailorEventId}`. The cycle
+  lock (`eventBenefitCycles/{uid}_{subscriptionId}_{cycleIndex}`) and the
+  code (`eventBenefits/...`) are written in one transaction, so a cycle is
+  used once however many requests arrive; repeating the same request
+  returns the same code. The event must be upcoming, have the benefit
+  enabled, and fall within the paid period. One live code per member per
+  event.
+- Ticket Tailor discount: 20 %, max 1 redemption, the event's ticket types,
+  expiring at the end of the event day (Madrid). If Ticket Tailor fails the
+  code waits; `/api/admin/billing/run-due-event-benefits` (and the admin
+  "Sincronizar" button, per event) only retry these, they never issue codes.
+- Losing entitlement invalidates every code for an upcoming event.
+- Codes issued by the earlier one-per-event engine keep working unchanged.
+  `npx tsx scripts/audit-event-benefits.mts` is a read-only count of them
+  (and of anything else worth checking) before deciding what to do.
 
 ## Admin Dashboard (`/admin`)
 
@@ -1583,6 +1628,52 @@ firebase deploy --only firestore:rules,storage:rules
 
 or paste the contents of `firestore.rules` / `storage.rules` directly
 into Firebase Console → Firestore Database → Rules / Storage → Rules.
+
+### Storage CORS: one origin per site address
+
+Member photos are read by the browser straight from the Storage bucket, so
+the bucket needs a CORS rule listing every address the site is served
+from. Without it the upload succeeds but the photo shows "Cargando…" and
+then "No se pudo cargar la foto". Staging got its rule on 13 Oct 2026.
+Before production goes live on a new domain (e.g. juntoselect.com), add
+that origin to the production bucket:
+
+```json
+[{ "origin": ["https://<site-address>"], "method": ["GET", "HEAD"], "maxAgeSeconds": 3600 }]
+```
+
+```bash
+gcloud storage buckets update gs://<bucket> --cors-file=cors.json
+```
+
+## Staging environment (not set up yet)
+
+Staging must be a **separate Firebase project**. `select-dev-508407` is
+production: never use it for staging.
+
+What staging needs (owner steps, in this order):
+1. Create a Firebase project, e.g. `junto-select-staging`, on the Blaze plan.
+   Add a Web app, enable Authentication (Google + email link), Firestore and
+   Storage. Deploy `firestore.rules`, `storage.rules` and
+   `firestore.indexes.json` to it (`firebase deploy --only firestore,storage --project <staging-id>`).
+2. Create an App Hosting backend in that project on the branch to review,
+   with environment name `staging`, so `apphosting.staging.yaml` applies.
+   Fill in its `REPLACE_WITH_` values from the staging Web app config.
+3. In that project's Secret Manager: `STRIPE_SECRET_KEY` (sk_test_…),
+   `STRIPE_WEBHOOK_SECRET` (from a TEST-mode webhook pointing at the staging
+   URL), `MATCHING_ADMIN_SECRET` (new random value), `ANTHROPIC_API_KEY`,
+   `TICKET_TAILOR_API_KEY` (writes are refused in staging; reads only).
+   Grant each to the backend with `firebase apphosting:secrets:grantaccess`.
+4. Stripe TEST mode: three prices (49 €/1 mes, 129 €/3 meses, 234 €/6 meses).
+5. No Brevo key or list in staging.
+6. Cloud Scheduler jobs, if wanted, only in the staging project and only
+   against the staging URL with the staging `MATCHING_ADMIN_SECRET`.
+
+Code guards (`src/lib/config/deployEnv.ts`, on when `JUNTO_DEPLOY_ENV=staging`):
+the server refuses to start Firebase Admin against `select-dev-508407`,
+refuses non-test Stripe keys, never calls Brevo (no contacts, lists or
+emails) and never writes to Ticket Tailor (no discount codes). The Events
+Manager's read-only Ticket Tailor import still works.
 
 ## Privacy notes
 

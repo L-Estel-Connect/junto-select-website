@@ -1,4 +1,5 @@
 import "server-only";
+import { AUTOMATIC_INTRODUCTIONS_ENABLED, AUTOMATIC_INTRODUCTION_EMAILS } from "@/lib/matching/automaticIntroductions";
 import { adminDb } from "@/lib/firebase/admin";
 
 /**
@@ -33,7 +34,11 @@ export type OutboundEmailType =
    * echoed back to a third party, which doesn't apply to a business's own
    * unsolicited inquiry about itself.
    */
-  | "collaboration_proposal";
+  | "collaboration_proposal"
+  /** Internal lead alert to the Junto contact address, from /api/matchmaking/inquiry. Carries the applicant's details on purpose, like collaboration_proposal. */
+  | "matchmaking_inquiry"
+  /** Acknowledgement to the applicant's own address. No profile data, only their first name and the programme they chose. */
+  | "matchmaking_inquiry_received";
 
 export type OutboundEmailStatus = "pending" | "sending" | "sent" | "failed";
 
@@ -85,6 +90,12 @@ export async function queueOutboundEmail(
   >,
   id?: string,
 ): Promise<void> {
+  // Defence in depth: with automatic introductions off, nothing should
+  // produce these, and nothing is sent if something ever does.
+  if (!AUTOMATIC_INTRODUCTIONS_ENABLED && (AUTOMATIC_INTRODUCTION_EMAILS as readonly string[]).includes(entry.type)) {
+    console.warn(`queueOutboundEmail: ${entry.type} not queued, automatic introductions are off`);
+    return;
+  }
   const ref = id ? adminDb.collection("outboundEmails").doc(id) : adminDb.collection("outboundEmails").doc();
 
   if (id) {

@@ -1,8 +1,7 @@
 import "server-only";
-import type { InvitationPayload } from "./types";
+import type { CommunityPayload } from "./types";
 import { buildBrevoContactPayload } from "./brevoPayload";
-
-const BREVO_CONTACTS_URL = "https://api.brevo.com/v3/contacts";
+import { isStagingDeploy } from "@/lib/config/deployEnv";
 
 export class BrevoConfigError extends Error {}
 
@@ -19,47 +18,52 @@ export { buildBrevoContactPayload } from "./brevoPayload";
 export type { BrevoContactPayload } from "./brevoPayload";
 
 /**
- * Sends an invitation request to Brevo as a contact — see
- * `brevoPayload.ts` for the attribute-mapping rationale (why only
- * NOMBRE/GENERO/PROFESION/TELEFONO are sent, and why consent/age/bio data
- * deliberately isn't). `BREVO_LIST_ID` is required to attach the contact
- * to your existing list; without it the contact is still created/updated
- * in Brevo, just not attached to any list — see README "Brevo
- * configuration required".
+ * Overridable only so local testing can point at a stand-in server instead
+ * of the real Brevo API (see README "Local testing"). Unset in production.
  */
-export async function upsertBrevoContact(input: InvitationPayload) {
+function contactsUrl(): string {
+  const base = process.env.BREVO_API_BASE_URL?.replace(/\/+$/, "") || "https://api.brevo.com/v3";
+  return `${base}/contacts`;
+}
+
+/**
+ * Syncs a "Recibir invitaciones" registration to Brevo: the contact is
+ * created or updated and added to `BREVO_LIST_ID` (list 12, the account
+ * owner's existing list). Without `BREVO_LIST_ID` the contact is still
+ * created or updated but joins no list.
+ */
+export async function upsertBrevoContact(input: CommunityPayload) {
   const apiKey = process.env.BREVO_API_KEY;
+  if (isStagingDeploy()) {
+    // Staging never writes to Brevo (no mailing list, no contact).
+    throw new BrevoConfigError("Brevo is disabled in staging");
+  }
   if (!apiKey) {
     throw new BrevoConfigError("BREVO_API_KEY is not configured");
   }
 
-  const listId = process.env.BREVO_LIST_ID
-    ? Number(process.env.BREVO_LIST_ID)
-    : undefined;
+  const listId = process.env.BREVO_LIST_ID ? Number(process.env.BREVO_LIST_ID) : undefined;
 
-  const response = await fetch(BREVO_CONTACTS_URL, {
+  const response = await fetch(contactsUrl(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
       "api-key": apiKey,
     },
-    body: JSON.stringify(buildBrevoContactPayload(input, listId)),
+    body: JSON.stringify(
+      buildBrevoContactPayload(input, { listId: Number.isFinite(listId) ? listId : undefined }),
+    ),
   });
 
   if (!response.ok) {
-    // Brevo returns 204 on a plain update; anything else in the 2xx range
-    // we already accept above. From here down is a genuine failure.
     let detail = "";
     try {
       const body = (await response.json()) as { message?: string };
       detail = body.message ?? "";
     } catch {
-      // response body wasn't JSON — ignore, we still have the status.
+      // Non-JSON error body — the status code alone is recorded.
     }
-    throw new BrevoRequestError(
-      detail || "Brevo request failed",
-      response.status,
-    );
+    throw new BrevoRequestError(detail || "Brevo request failed", response.status);
   }
 }

@@ -52,6 +52,13 @@ export interface BillingDocument {
   currentPeriodEnd: unknown | null; // Firestore Timestamp
   cancelAtPeriodEnd: boolean;
   canceledAt: unknown | null; // Firestore Timestamp
+  /**
+   * Stripe's `start_date` for `stripeSubscriptionId` — anchors the monthly
+   * 20 % benefit cycles (see eventBenefits/eligibility.ts). Optional: billing
+   * docs written before this field existed fall back to the profile's
+   * matching anchor for the same subscription.
+   */
+  subscriptionStartedAt?: unknown | null; // Firestore Timestamp
   /** Set on the most recent invoice.payment_failed for this subscription; cleared on success. */
   lastPaymentFailedAt: unknown | null; // Firestore Timestamp
   termsAcceptance: TermsAcceptance | null;

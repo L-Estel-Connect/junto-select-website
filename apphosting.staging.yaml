@@ -1,0 +1,105 @@
+# Firebase App Hosting overrides for the STAGING backend only.
+#
+# Used only by an App Hosting backend whose environment name is "staging"
+# (Firebase Console > App Hosting > backend > Settings > Environment), in
+# a SEPARATE Firebase project. It is merged over apphosting.yaml, variable
+# by variable. Production (select-dev-508407) never reads this file.
+#
+# JUNTO_DEPLOY_ENV=staging switches on the code guards in
+# src/lib/config/deployEnv.ts: the app refuses the production Firebase
+# project, live Stripe keys, every Brevo call and every Ticket Tailor
+# write, even if a value below is wrong.
+#
+# Secrets (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, MATCHING_ADMIN_SECRET,
+# ANTHROPIC_API_KEY, TICKET_TAILOR_API_KEY) are looked up in the STAGING
+# project's own Secret Manager, so they are separate by construction. Set
+# them there with Stripe TEST values. See README "Staging environment".
+#
+# The values below are the staging project's public web config and Stripe
+# TEST price ids (filled in on 2026-10-12, first staging rollout).
+env:
+  - variable: JUNTO_DEPLOY_ENV
+    value: "staging"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: APP_BASE_URL
+    value: "https://junto-select-website--junto-select-staging.europe-west4.hosted.app"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: "AIzaSyCwVbQN0hPJJy70A1WYugVcX8xrI8wbO8k"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: "junto-select-staging.firebaseapp.com"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: "junto-select-staging"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: "junto-select-staging.firebasestorage.app"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "551197042484"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:551197042484:web:2356e62861eb14588e2761"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # No Brevo in staging: no list, no key, no email. The code guard refuses
+  # Brevo calls anyway; these keep the live list id and key out entirely.
+  # App Hosting rejects an empty value, so these are inert placeholders.
+  - variable: BREVO_LIST_ID
+    value: "0"
+    availability:
+      - RUNTIME
+  - variable: BREVO_API_KEY
+    value: "disabled-in-staging"
+    availability:
+      - RUNTIME
+
+  # Stripe TEST-mode Price IDs (49 €/1 mes, 129 €/3 meses, 234 €/6 meses),
+  # created in the Stripe Dashboard with "Test mode" on.
+  - variable: STRIPE_PRICE_MONTHLY
+    value: "price_1UPoBNGlmEAMyuMwsX5Z5yQx"
+    availability:
+      - RUNTIME
+  - variable: STRIPE_PRICE_THREE_MONTH
+    value: "price_1UPoBOGlmEAMyuMwwMD79Ynm"
+    availability:
+      - RUNTIME
+  - variable: STRIPE_PRICE_SIX_MONTH
+    value: "price_1UPoBOGlmEAMyuMwUFsGteRm"
+    availability:
+      - RUNTIME
+
+  # Optional in staging: no Anthropic key is set, so AI presentation
+  # generation is off here. An inert placeholder replaces the production
+  # Secret Manager reference, so the rollout does not need the secret.
+  - variable: ANTHROPIC_API_KEY
+    value: "disabled-in-staging"
+    availability:
+      - RUNTIME
+
+  # Staging admins: Lara's Google account, plus a staging-only test admin
+  # used by the automated review. The .test address cannot receive email;
+  # it exists only as a user in the staging Auth project.
+  - variable: ADMIN_ALLOWLIST_EMAILS
+    value: "lara.dewavrin@gmail.com,staging-admin@junto-select-staging.test"
+    availability:
+      - RUNTIME

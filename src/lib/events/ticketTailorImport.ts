@@ -1,0 +1,181 @@
+import "server-only";
+import { getTicketTailorClient } from "@/lib/ticketTailor/client";
+
+/**
+ * What a Ticket Tailor import pre-fills in the Events Manager form. Every
+ * field is optional: the mapping was checked against a real Ticket Tailor
+ * response on 2026-10-12, but each value is still read defensively and
+ * anything missing is simply left for the admin to type. Nothing is saved
+ * here; the admin reviews the form and saves it.
+ */
+export interface TicketTailorImport {
+  ticketTailorEventId: string;
+  fields: {
+    label?: string;
+    eventDate?: string;
+    startTime?: string;
+    endTime?: string;
+    imageUrl?: string;
+    description?: string;
+    venuePublic?: string;
+    ticketTailorCheckoutUrl?: string;
+    ticketTailorTicketTypeIds?: string[];
+    publicStatus?: "tickets_available";
+  };
+  /** Human-readable names of what was filled / what needs typing. */
+  imported: string[];
+  missing: string[];
+  /** Things the admin should check before publishing. */
+  notes: string[];
+  /**
+   * Ticket Tailor's full event description. It pre-fills the website
+   * description only when that field is still empty (the form never
+   * replaces text the admin typed), and stays visible for reference.
+   */
+  ticketTailorDescription: string | null;
+}
+
+const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
+const text = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
+
+function htmlToText(html: string): string {
+  return html
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h\d)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function dateTime(v: unknown): { date?: string; time?: string } {
+  const o = obj(v);
+  if (!o) return {};
+  const date = text(o.date)?.match(/^\d{4}-\d{2}-\d{2}$/)?.[0];
+  const time = text(o.time)?.match(/^\d{2}:\d{2}/)?.[0];
+  const iso = text(o.iso)?.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+  return { date: date ?? iso?.[1], time: time ?? iso?.[2] };
+}
+
+const truthy = (v: unknown) => v === true || v === "true";
+
+/**
+ * Picks the event to import from a series: the next one still to come, or
+ * the latest one if all are past. Our events are single-date series, so
+ * this is normally the only entry.
+ */
+export function pickSeriesEvent(events: Record<string, unknown>[], now: Date = new Date()): Record<string, unknown> | null {
+  const unix = (e: Record<string, unknown>) => {
+    const u = obj(e.start)?.unix;
+    return typeof u === "number" ? u : 0;
+  };
+  const sorted = [...events].sort((a, b) => unix(a) - unix(b));
+  return sorted.find((e) => unix(e) * 1000 >= now.getTime()) ?? sorted[sorted.length - 1] ?? null;
+}
+
+export function mapTicketTailorEvent(ticketTailorEventId: string, raw: Record<string, unknown>, pastedUrl: string | null): TicketTailorImport {
+  const fields: TicketTailorImport["fields"] = {};
+  const imported: string[] = [];
+  const notes: string[] = [];
+
+  const name = text(raw.name);
+  if (name) {
+    fields.label = name;
+    imported.push("título");
+  }
+  const start = dateTime(raw.start);
+  if (start.date) {
+    fields.eventDate = start.date;
+    imported.push("fecha");
+  }
+  if (start.time) {
+    fields.startTime = start.time;
+    imported.push("hora de inicio");
+  }
+  const end = dateTime(raw.end);
+  if (end.time) {
+    fields.endTime = end.time;
+    imported.push("hora de fin");
+  }
+  const description = text(raw.description);
+  const ticketTailorDescription = description ? htmlToText(description).slice(0, 4000) : null;
+  if (ticketTailorDescription) {
+    fields.description = ticketTailorDescription.slice(0, 1200);
+    imported.push("descripción");
+  }
+  const images = obj(raw.images);
+  const image = text(images?.header) ?? text(images?.thumbnail);
+  if (image && image.startsWith("https://")) {
+    fields.imageUrl = image;
+    imported.push("imagen");
+  }
+
+  const url = pastedUrl ?? text(raw.url) ?? text(raw.checkout_url);
+  if (url && url.startsWith("https://")) {
+    fields.ticketTailorCheckoutUrl = url;
+    imported.push("enlace de compra");
+  }
+
+  const ticketTypes = Array.isArray(raw.ticket_types) ? raw.ticket_types.map(obj).filter((t): t is Record<string, unknown> => !!t) : [];
+  const ids = ticketTypes.map((t) => text(t.id)).filter((id): id is string => !!id && id.startsWith("tt_"));
+  if (ids.length > 0) {
+    // Kept on the record for the old member codes; not shown to the admin any more.
+    fields.ticketTailorTicketTypeIds = ids;
+  }
+
+  // Only "on sale" is suggested: "not available" can mean sold out or not on sale yet, so that call stays the admin's.
+  if (truthy(raw.tickets_available)) {
+    fields.publicStatus = "tickets_available";
+    imported.push("disponibilidad de entradas");
+  }
+
+  const venue = obj(raw.venue);
+  const venueName = text(venue?.name);
+  if (venueName) {
+    fields.venuePublic = venueName.slice(0, 160);
+    imported.push("lugar");
+    notes.push("Revisa el lugar: en la web se muestra tal cual, así que quita la dirección exacta si no quieres publicarla.");
+  }
+  notes.push("El precio no se importa: escríbelo solo si quieres mostrarlo.");
+
+  const all = ["título", "fecha", "hora de inicio", "hora de fin", "lugar", "descripción", "imagen", "enlace de compra"];
+  const missing = all.filter((f) => !imported.some((i) => i.startsWith(f)));
+  missing.push("ciudad");
+  return { ticketTailorEventId, fields, imported, missing, notes, ticketTailorDescription };
+}
+
+export type ImportResult = { ok: true; value: TicketTailorImport } | { ok: false; error: "not_found" | "not_configured" | "request_failed"; detail?: string };
+
+/** Reads one event from Ticket Tailor (read-only) and maps it for the form. */
+export async function importTicketTailorEvent(ticketTailorEventId: string, pastedUrl: string | null): Promise<ImportResult> {
+  let client;
+  try {
+    client = getTicketTailorClient();
+  } catch {
+    return { ok: false, error: "not_configured" };
+  }
+  try {
+    // The number on the public page is the event SERIES id ("es_" in the
+    // API); the dated event inside it has a different "ev_" id. The series
+    // listing leaves out the name, image, description and venue, so the
+    // chosen event is then read in full. Falls back to reading the number
+    // as an event id, in case one is pasted directly.
+    const seriesEvents = await client.listEventSeriesEvents(`es_${ticketTailorEventId}`);
+    const picked = seriesEvents ? pickSeriesEvent(seriesEvents) : null;
+    const pickedId = text(picked?.id);
+    const raw = pickedId ? ((await client.getEvent(pickedId)) ?? picked) : await client.getEvent(`ev_${ticketTailorEventId}`);
+    if (!raw) return { ok: false, error: "not_found" };
+    const value = mapTicketTailorEvent(ticketTailorEventId, raw, pastedUrl);
+    if (seriesEvents && seriesEvents.length > 1) {
+      value.notes.push(`Este enlace de Ticket Tailor tiene ${seriesEvents.length} fechas: se ha importado la próxima. Revisa la fecha.`);
+    }
+    return { ok: true, value };
+  } catch (error) {
+    return { ok: false, error: "request_failed", detail: error instanceof Error ? error.message : String(error) };
+  }
+}

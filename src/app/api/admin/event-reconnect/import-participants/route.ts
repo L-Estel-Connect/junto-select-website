@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import { requireAdminOrRespond } from "@/lib/admin/apiGuard";
 import { describeError } from "@/lib/admin/describeError";
-import { importEventParticipants, type ImportEventParticipantRow } from "@/lib/eventReconnect/participants";
+import { findAlreadyImportedEmails, importEventParticipants, type ImportEventParticipantRow } from "@/lib/eventReconnect/participants";
+import { isValidParticipantEmail } from "@/lib/eventReconnect/ticketTailorCsv";
 
 export const runtime = "nodejs";
 
 /**
  * V1 import path: Lara exports attendee/order data from Ticket Tailor's
- * own dashboard (CSV) and the admin UI turns that into this small JSON
- * array — see participants.ts's doc comment for why this deliberately
- * does NOT pull from a live Ticket Tailor attendee-list API (no such
+ * own dashboard (CSV) and the admin UI reads it (ticketTailorCsv.ts) into
+ * this small JSON array; `dryRun: true` previews who is new. See
+ * participants.ts's doc comment for why this deliberately does NOT pull from a live Ticket Tailor attendee-list API (no such
  * endpoint has been verified against this codebase's Ticket Tailor
  * integration; only /v1/discounts has). Safe to re-run on a corrected
  * export: already-imported rows are left untouched (see
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
   const admin = await requireAdminOrRespond(request);
   if (admin instanceof NextResponse) return admin;
 
-  let body: { eventId?: unknown; rows?: unknown };
+  let body: { eventId?: unknown; rows?: unknown; dryRun?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
   for (const raw of body.rows) {
     if (!raw || typeof raw !== "object") continue;
     const r = raw as Record<string, unknown>;
-    if (typeof r.email !== "string" || !r.email.trim()) continue;
+    if (typeof r.email !== "string" || !isValidParticipantEmail(r.email)) continue;
     rows.push({
       email: r.email,
       firstName: typeof r.firstName === "string" ? r.firstName : null,
@@ -42,6 +43,17 @@ export async function POST(request: Request) {
       phone: typeof r.phone === "string" ? r.phone : null,
       ticketTailorOrderId: typeof r.ticketTailorOrderId === "string" ? r.ticketTailorOrderId : null,
     });
+  }
+
+  // Preview only: nothing is written, the screen shows who is new.
+  if (body.dryRun === true) {
+    try {
+      const alreadyImported = await findAlreadyImportedEmails(body.eventId.trim(), rows.map((r) => r.email));
+      return NextResponse.json({ ok: true, preview: { valid: rows.length, alreadyImported } });
+    } catch (error) {
+      console.error("event-reconnect import-participants: preview failed", error);
+      return NextResponse.json({ ok: false, error: "failed_to_preview", detail: describeError(error) }, { status: 500 });
+    }
   }
 
   try {

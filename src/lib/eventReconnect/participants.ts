@@ -31,6 +31,14 @@ export interface ImportEventParticipantsResult {
   alreadyImported: number;
 }
 
+/** For the import preview: which of these emails already have a participant record for this event. Reads only. */
+export async function findAlreadyImportedEmails(eventId: string, emails: string[]): Promise<string[]> {
+  const normalized = [...new Set(emails.map(normalizeEmail).filter(Boolean))];
+  const refs = normalized.map((e) => adminDb.doc(`eventParticipants/${eventParticipantId(eventId, e)}`));
+  const snaps = refs.length ? await adminDb.getAll(...refs) : [];
+  return normalized.filter((_, i) => snaps[i]?.exists);
+}
+
 /**
  * Upserts one EventParticipant per row, deduped by {eventId, normalizedEmail}
  * — a second ticket bought by the same email for the same event safely

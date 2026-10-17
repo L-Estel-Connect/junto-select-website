@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isAuthorizedAdminRequest } from "@/lib/matching/adminAuth";
 import { runMatchingCycle } from "@/lib/matching/engine";
 import type { CycleConfig, CycleMode } from "@/lib/matching/types";
+import { AutomaticIntroductionsDisabledError } from "@/lib/matching/automaticIntroductions";
 
 export const runtime = "nodejs";
 
@@ -43,6 +44,9 @@ export async function POST(request: Request) {
     const cycle = await runMatchingCycle(cycleId, mode as CycleMode, config ?? {});
     return NextResponse.json({ ok: true, cycle });
   } catch (error) {
+    if (error instanceof AutomaticIntroductionsDisabledError) {
+      return NextResponse.json({ ok: false, error: "automatic_introductions_disabled" }, { status: 409 });
+    }
     console.error("Matching cycle run failed:", error);
     return NextResponse.json({ ok: false, error: "cycle_run_failed" }, { status: 500 });
   }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { AUTOMATIC_INTRODUCTIONS_ENABLED } from "@/lib/matching/automaticIntroductions";
 import { requireFirebaseUser } from "@/lib/firebase/serverAuth";
 import { decideProposalForMember } from "@/lib/matching/memberLifecycle";
 import type { PassType } from "@/lib/matching/types";
@@ -16,6 +17,10 @@ export const runtime = "nodejs";
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireFirebaseUser(request);
   if (auth instanceof NextResponse) return auth;
+  // See automaticIntroductions.ts: no new invitation or introduction while off.
+  if (!AUTOMATIC_INTRODUCTIONS_ENABLED) {
+    return NextResponse.json({ ok: false, error: "automatic_introductions_disabled" }, { status: 410 });
+  }
 
   const { id } = await context.params;
 

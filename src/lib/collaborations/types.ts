@@ -1,6 +1,6 @@
 /**
  * Plain types for the public /colaboraciones brand-partnership form — same
- * convention as src/lib/types.ts's InvitationPayload. This is a one-off
+ * convention as src/lib/types.ts's CommunityPayload. This is a one-off
  * business inquiry, never a newsletter/marketing signup: there is no
  * "aceptaComunicaciones" field here, deliberately, and the API route never
  * calls upsertBrevoContact.
