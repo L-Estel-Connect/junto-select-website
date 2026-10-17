@@ -6,6 +6,15 @@
 // Needs: emulators (auth/firestore/storage), start.sh (app + mock services).
 // Locally there is no Anthropic key, so generation fails for real and the
 // manual fallback is what gets tested; one journey stubs a successful draft.
+//
+// On STAGING (junto-select-staging only), with Application Default
+// Credentials that can write to that project:
+//   STAGING_URL=https://junto-select-website--junto-select-staging.europe-west4.hosted.app \
+//     node scripts/local-test/candidate-age-ui.cjs
+// Sign-in links are created with the Admin SDK (no email is sent). Staging
+// answers generation with a simulated draft, so the failing journeys make
+// the browser see the same 502 production returned. Its own edad-* test
+// accounts are deleted at the end.
 const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require("playwright");
@@ -13,15 +22,20 @@ const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore } = require("firebase-admin/firestore");
 
-const project = process.env.GCLOUD_PROJECT || "";
-if (!process.env.FIRESTORE_EMULATOR_HOST || !project.startsWith("demo-")) {
+const STAGING = process.env.STAGING_URL || "";
+if (STAGING && !STAGING.includes("junto-select-staging")) {
+  console.error("Refusing: STAGING_URL must be the junto-select-staging site.");
+  process.exit(1);
+}
+const project = STAGING ? "junto-select-staging" : process.env.GCLOUD_PROJECT || "";
+if (!STAGING && (!process.env.FIRESTORE_EMULATOR_HOST || !project.startsWith("demo-"))) {
   console.error("Refusing to run outside the emulators.");
   process.exit(1);
 }
 initializeApp({ projectId: project });
 const db = getFirestore();
 
-const APP = "http://localhost:3000";
+const APP = STAGING ? STAGING.replace(/\/$/, "") : "http://localhost:3000";
 const AUTH_EMU = `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}`;
 const SHOTS = ".local-test/candidate-age-ui";
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -62,6 +76,14 @@ async function magicLinkTarget(email) {
 }
 
 async function signInOnIntroduction(page, email, entryUrl) {
+  if (STAGING) {
+    // Same link Firebase would email, made by the Admin SDK so nothing is sent.
+    const link = await getAuth().generateSignInWithEmailLink(email, { url: entryUrl, handleCodeInApp: true });
+    await page.goto(entryUrl);
+    await page.evaluate((e) => localStorage.setItem("junto_email_for_signin", e), email);
+    await page.goto(link);
+    return;
+  }
   await page.goto(entryUrl);
   await page.click("text=Continuar con email");
   await page.fill("input[type=email]", email);
@@ -137,11 +159,13 @@ async function waitFor(fn, ms = 15000) {
 }
 // ------------------------------------
 
+const created = [];
 const profileOf = async (uid) => (await db.doc(`profiles/${uid}`).get()).data();
 
 /** Opens the free private-network entry and signs in. Returns { ctx, page, uid }. */
 async function start(browser, tag) {
-  const email = `edad.${tag}.${Date.now()}@example.test`;
+  const email = `edad.${tag}.${Date.now()}@${STAGING ? "junto-select-staging.test" : "example.test"}`;
+  created.push(email);
   const ctx = await browser.newContext({ viewport: DESKTOP, locale: "es-ES" });
   const page = await ctx.newPage();
   await page.goto(`${APP}/matchmaking`, { waitUntil: "networkidle" });
@@ -213,6 +237,11 @@ async function finishProfile(page, uid, tag, ai) {
   const tas = page.locator("textarea");
   // Typed without blurring the last one: Generar must save the answers itself.
   for (let i = 0; i < 3; i++) await tas.nth(i).fill(answers[i]);
+  if (ai === "fails" && STAGING) {
+    await page.route("**/api/introduction/generate-presentation", (r) =>
+      r.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ ok: false, error: "generation_failed" }) }),
+    );
+  }
   if (ai === "stub") {
     await page.route("**/api/introduction/generate-presentation", (r) =>
       r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, text: "Texto generado de prueba." }) }),
@@ -297,6 +326,16 @@ async function finishProfile(page, uid, tag, ai) {
   }
 
   await browser.close();
+  if (STAGING) {
+    // Remove this run's own test accounts (and their profile documents).
+    for (const email of created) {
+      const user = await getAuth().getUserByEmail(email).catch(() => null);
+      if (!user) continue;
+      for (const col of ["profiles", "users", "introductionsConsent", "candidateLocations"]) await db.doc(`${col}/${user.uid}`).delete().catch(() => {});
+      await getAuth().deleteUser(user.uid).catch(() => {});
+    }
+    console.log(`cleaned up ${created.length} staging test accounts`);
+  }
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
   process.exit(failed.length ? 1 : 0);
