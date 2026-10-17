@@ -103,3 +103,23 @@ env:
     value: "lara.dewavrin@gmail.com,staging-admin@junto-select-staging.test"
     availability:
       - RUNTIME
+
+  # Instagram access test (Phase 1 proof of concept, staging only; see
+  # src/lib/instagramTest/config.ts). The Instagram app ID is public. Both
+  # secrets live only in the staging project's Secret Manager, set by Lara:
+  #   firebase apphosting:secrets:set INSTAGRAM_TEST_APP_SECRET --project junto-select-staging
+  #   firebase apphosting:secrets:set INSTAGRAM_TEST_META_APP_SECRET --project junto-select-staging
+  # The second is the Meta app secret (App settings > Basic): Meta's docs
+  # don't say which of the two signs webhooks, so both are checked.
+  - variable: INSTAGRAM_TEST_APP_ID
+    value: "REPLACE_WITH_INSTAGRAM_APP_ID"
+    availability:
+      - RUNTIME
+  - variable: INSTAGRAM_TEST_APP_SECRET
+    secret: INSTAGRAM_TEST_APP_SECRET
+    availability:
+      - RUNTIME
+  - variable: INSTAGRAM_TEST_META_APP_SECRET
+    secret: INSTAGRAM_TEST_META_APP_SECRET
+    availability:
+      - RUNTIME
