@@ -16,7 +16,7 @@ function check(name: string, ok: boolean) {
 for (const t of ["SELECT", "select", "Select", "SELECT!", "¡Sélect!", "Quiero info: select 🙌", "select."]) check(`keyword matches «${t}»`, matchesKeyword(t, TEST_KEYWORDS));
 for (const t of ["selection", "preselect", "SELECTO", "hola", "", "sel ect"]) check(`keyword ignores «${t}»`, !matchesKeyword(t, TEST_KEYWORDS));
 check("multi-word keyword", matchesKeyword("Quiero mi INVITACIÓN ya", ["mi invitacion"]));
-check("reply text links the Únete page", TEST_REPLY_TEXT.includes("https://www.juntoselect.com/unete"));
+check("reply text links the live home page", TEST_REPLY_TEXT.endsWith("https://www.juntoselect.com/"));
 
 // Signature
 const secret = "test-secret";

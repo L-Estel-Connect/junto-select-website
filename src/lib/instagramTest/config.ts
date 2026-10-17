@@ -25,8 +25,9 @@ import { getAppBaseUrl } from "@/lib/config/appBaseUrl";
 export const ALLOWED_INSTAGRAM_USERNAME = "lara_estel";
 export const MAX_TEST_REPLIES = 3;
 export const TEST_KEYWORDS = ["select"];
+// The live site has no /unete page yet (404 on 17 Oct 2026, before the new site ships), so the test links to the home page.
 export const TEST_REPLY_TEXT =
-  "¡Hola! Gracias por tu interés en Junto Select. Aquí tienes el enlace para solicitar tu invitación: https://www.juntoselect.com/unete";
+  "¡Hola! Gracias por tu interés en Junto Select. Aquí tienes el enlace para solicitar tu invitación: https://www.juntoselect.com/";
 /** Meta only allows a private reply within 7 days of the comment. */
 export const PRIVATE_REPLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
