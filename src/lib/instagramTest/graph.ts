@@ -117,3 +117,27 @@ export async function sendPrivateReply(token: string, igUserId: string, commentI
     }),
   );
 }
+
+export interface ApiComment {
+  id: string;
+  text?: string;
+  timestamp?: string;
+  username?: string;
+  from?: { id?: string; username?: string };
+  parent_id?: string;
+}
+
+/** Read-only: comments on one of the connected account's own media, straight from the API (no webhook involved). */
+export async function listComments(token: string, mediaId: string): Promise<ApiComment[]> {
+  const fields = "id,text,timestamp,username,from,parent_id";
+  const res = await parse<{ data: ApiComment[] }>(
+    await fetch(`${GRAPH_BASE}/${encodeURIComponent(mediaId)}/comments?fields=${fields}&limit=50`, { headers: bearer(token) }),
+  );
+  return res.data ?? [];
+}
+
+export async function getMedia(token: string, mediaId: string): Promise<{ id: string; permalink?: string; media_product_type?: string; comments_count?: number; timestamp?: string }> {
+  return parse(
+    await fetch(`${GRAPH_BASE}/${encodeURIComponent(mediaId)}?fields=id,permalink,media_product_type,comments_count,timestamp`, { headers: bearer(token) }),
+  );
+}

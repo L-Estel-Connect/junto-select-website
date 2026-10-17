@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Badge from "@/components/admin/Badge";
 import { AdminError, AdminLoading } from "@/components/admin/States";
 import { adminFetchJson } from "@/lib/admin/adminFetch";
-import { useAdminQuery } from "@/lib/admin/useAdminQuery";
 
 interface TestEvent {
   commentId: string;
@@ -22,7 +21,29 @@ interface TestEvent {
   error: { message?: string; code?: number | null; subcode?: number | null } | null;
 }
 
+interface ApiCommentCheck {
+  commentId: string;
+  username: string | null;
+  text: string | null;
+  timestamp: string | null;
+  isReply: boolean;
+  keywordMatched: boolean;
+  decision: string;
+  receivedByWebhook: boolean;
+}
+
+interface Diagnosis {
+  checkedAt: string;
+  account: { ok: boolean; username?: string; igUserId?: string; accountType?: string | null; error?: string };
+  subscription: { ok: boolean; fields: string[]; error?: string };
+  reel: { ok: boolean; mediaId?: string | null; permalink?: string | null; productType?: string | null; commentsCount?: number | null; error?: string };
+  comments: { ok: boolean; items: ApiCommentCheck[]; error?: string };
+  error?: string;
+}
+
 interface StateResponse {
+  diagnosis: Diagnosis | null;
+  serverTime: string;
   setup: { appId: string | null; redirectUri: string; webhookUrl: string; verifyToken: string | null; error: string | null; graphVersion: string; allowedUsername: string };
   test: { keywords: string[]; replyText: string; maxReplies: number };
   state: {
@@ -74,7 +95,33 @@ function fmt(iso: string | null) {
 
 export default function InstagramTestPanel() {
   const result = useSearchParams().get("result");
-  const { data, error, reload } = useAdminQuery(() => adminFetchJson<StateResponse>("/api/admin/instagram-test/state"), []);
+  const [data, setData] = useState<StateResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadedAt, setLoadedAt] = useState<string | null>(null);
+
+  // "Actualizar" re-reads everything and re-checks the Instagram API. It shows
+  // that it's working, when it last succeeded, and any error, while keeping
+  // the last good data on screen.
+  const fetchState = useCallback(() => {
+    adminFetchJson<StateResponse>("/api/admin/instagram-test/state")
+      .then((res) => {
+        setData(res);
+        setError(null);
+        setLoadedAt(res.serverTime);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    fetchState();
+  }, [fetchState]);
+
+  function reload() {
+    setLoading(true);
+    fetchState();
+  }
   const [media, setMedia] = useState<MediaRow[] | null>(null);
   const [commenter, setCommenter] = useState("");
   const [busy, setBusy] = useState(false);
@@ -105,9 +152,8 @@ export default function InstagramTestPanel() {
     }
   }
 
-  if (error) return <AdminError message={error} />;
-  if (!data) return <AdminLoading />;
-  const { setup, state, test, events, deliveries } = data;
+  if (!data) return error ? <AdminError message={`No se pudo cargar: ${error}`} /> : <AdminLoading />;
+  const { setup, state, test, events, deliveries, diagnosis } = data;
   const card = "rounded-2xl border border-hairline bg-white p-6";
   const btn = "rounded-full bg-ink px-4 py-2 text-[13px] font-medium text-paper disabled:opacity-40";
   const ghost = "rounded-full border border-hairline px-4 py-2 text-[13px] font-medium text-ink hover:border-rose disabled:opacity-40";
@@ -121,6 +167,15 @@ export default function InstagramTestPanel() {
           Página temporal para comprobar que Meta nos envía los comentarios y que podemos responder en privado. No es la herramienta final.
           Solo se puede conectar @{setup.allowedUsername}, solo se responde en un Reel y a una cuenta de prueba, y como máximo {test.maxReplies} veces.
         </p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button className="rounded-full bg-ink px-4 py-2 text-[13px] font-medium text-paper disabled:opacity-40" disabled={loading} onClick={reload}>
+            {loading ? "Actualizando…" : "Actualizar"}
+          </button>
+          <span className="text-[12px] text-ink-soft" aria-live="polite">
+            {loading ? "Leyendo datos y comprobando la API de Instagram…" : loadedAt ? `Actualizado a las ${new Date(loadedAt).toLocaleTimeString("es-ES")}` : ""}
+          </span>
+        </div>
+        {error && <div className="mt-3"><AdminError message={`La última actualización falló: ${error}`} /></div>}
         {result && <p className="mt-3 text-[13px] text-ink">Resultado de la conexión: <code>{result}</code></p>}
         {actionError && <div className="mt-3"><AdminError message={actionError} /></div>}
       </div>
@@ -211,12 +266,49 @@ export default function InstagramTestPanel() {
           )}
           {state.sendEnabled && <button className={btn} disabled={busy} onClick={() => act({ action: "disable_sending" })}>Desactivar envío</button>}
           <button className={ghost} disabled={busy} onClick={() => act({ action: "reset_test" })}>Reiniciar contador</button>
-          <button className={ghost} onClick={reload}>Actualizar</button>
         </div>
       </section>
 
       <section className={card}>
-        <h2 className="text-[15px] font-medium text-ink">5 · Comentarios recibidos</h2>
+        <h2 className="text-[15px] font-medium text-ink">Comprobación directa con la API de Instagram</h2>
+        <p className="mt-1 text-[12px] text-ink-soft">Solo lectura, sin webhook. Se repite en cada actualización. Nunca envía nada.</p>
+        {!diagnosis ? (
+          <p className="mt-2 text-[13px] text-ink-soft">—</p>
+        ) : diagnosis.error ? (
+          <AdminError message={diagnosis.error} />
+        ) : (
+          <>
+            <ul className="mt-3 space-y-1 text-[13px] text-ink">
+              <li>Cuenta: {diagnosis.account.ok ? `@${diagnosis.account.username} (${diagnosis.account.accountType ?? "?"})` : `error: ${diagnosis.account.error}`}</li>
+              <li>Suscripción de la app: {diagnosis.subscription.error ? `error: ${diagnosis.subscription.error}` : diagnosis.subscription.fields.join(", ") || "ningún campo"}</li>
+              <li>Reel: {diagnosis.reel.ok ? `${diagnosis.reel.productType}, ${diagnosis.reel.commentsCount ?? "?"} comentarios según Instagram` : `error: ${diagnosis.reel.error}`}</li>
+            </ul>
+            {diagnosis.comments.error && <p className="mt-2 text-[13px] text-[#8a3b3b]">Comentarios: {diagnosis.comments.error}</p>}
+            {diagnosis.comments.ok && (
+              <ul className="mt-3 space-y-2">
+                {diagnosis.comments.items.length === 0 && <li className="text-[13px] text-ink-soft">La API no muestra comentarios en este Reel.</li>}
+                {diagnosis.comments.items.map((c) => {
+                  const d = DECISIONS[c.decision] ?? { label: c.decision, tone: "neutral" as const };
+                  return (
+                    <li key={c.commentId} className="rounded-xl border border-hairline px-4 py-3 text-[13px]">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-ink">@{c.username ?? "?"}: «{c.text ?? ""}»</span>
+                        <Badge tone={d.tone}>{d.label}</Badge>
+                      </div>
+                      <p className="mt-1 text-[12px] text-ink-soft">
+                        {fmt(c.timestamp)} · palabra clave {c.keywordMatched ? "sí" : "no"}{c.isReply ? " · respuesta a otro comentario" : ""} · webhook de Meta: {c.receivedByWebhook ? "recibido" : "no recibido"}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </>
+        )}
+      </section>
+
+      <section className={card}>
+        <h2 className="text-[15px] font-medium text-ink">5 · Comentarios recibidos por webhook</h2>
         {events.length === 0 ? (
           <p className="mt-2 text-[13px] text-ink-soft">Todavía no ha llegado ningún comentario.</p>
         ) : (

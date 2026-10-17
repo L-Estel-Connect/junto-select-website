@@ -13,6 +13,7 @@ import {
   getWebhookVerifyToken,
   instagramTestEnabled,
 } from "@/lib/instagramTest/config";
+import { runDiagnosis } from "@/lib/instagramTest/diagnose";
 import { getSubscriptions, listRecentMedia } from "@/lib/instagramTest/graph";
 import { FieldValue, deliveriesCol, eventsCol, locksCol, readState, readToken, stateRef } from "@/lib/instagramTest/store";
 
@@ -35,6 +36,10 @@ export async function GET(request: Request) {
     } catch (error) {
       setup = { appId: null, redirectUri: getOAuthRedirectUri(), webhookUrl: getWebhookUrl(), verifyToken: null, error: (error as Error).message };
     }
+    // Every load (and every "Actualizar") re-checks the API directly, read-only.
+    const diagnosis = new URL(request.url).searchParams.get("diagnose") === "0"
+      ? null
+      : await runDiagnosis(async (commentId) => (await eventsCol.doc(commentId).get()).exists).catch((error) => ({ error: describeError(error) }));
     const s = await readState();
     const [events, deliveries, locks] = await Promise.all([
       eventsCol.orderBy("receivedAt", "desc").limit(30).get(),
@@ -44,6 +49,8 @@ export async function GET(request: Request) {
     return NextResponse.json({
       ok: true,
       setup: { ...setup, graphVersion: GRAPH_VERSION, allowedUsername: ALLOWED_INSTAGRAM_USERNAME },
+      diagnosis,
+      serverTime: new Date().toISOString(),
       test: { keywords: TEST_KEYWORDS, replyText: TEST_REPLY_TEXT, maxReplies: MAX_TEST_REPLIES },
       state: {
         connected: !!s.token,
