@@ -4,7 +4,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // The private candidate network is open to adults (18 and over); keep
-    // in sync with MINIMUM_AGE in src/lib/introduction/age.ts. Event age
+    // in sync with CANDIDATE_MINIMUM_AGE in src/lib/introduction/age.ts. Event age
     // rules are separate and not enforced here.
     // `bd` may be null (not answered yet) or a Timestamp (birth date).
     // Someone born on or before "today minus 18 years" is eligible.

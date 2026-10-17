@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Timestamp } from "firebase/firestore";
 import { aboutMeSteps, type AboutMeStep } from "@/lib/introduction/aboutMeFields";
-import { isEligibleAge } from "@/lib/introduction/age";
+import { isEligibleCandidateAge } from "@/lib/introduction/age";
 import { getNextOnboardingRoute, isAboutMeComplete } from "@/lib/introduction/completion";
 import { markAboutMeComplete, saveStepAnswer } from "@/lib/introduction/profile";
 import { useSharedProfile } from "@/lib/introduction/profileCache";
@@ -246,7 +246,7 @@ export default function OnboardingWizard({ uid }: { uid: string }) {
     // and never see a generic save error instead of a clear explanation.
     if (currentStep.id === "birthDate") {
       const birthDateISO = value as string;
-      if (!isEligibleAge(birthDateISO)) {
+      if (!isEligibleCandidateAge(birthDateISO)) {
         setIneligible(true);
         return;
       }

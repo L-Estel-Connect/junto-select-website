@@ -4,7 +4,10 @@
  * and never derived from this. Firestore rules mirror it: see
  * birthDateIsEligible in firestore.rules.
  */
-export const MINIMUM_AGE = 18;
+export const CANDIDATE_MINIMUM_AGE = 18;
+
+/** Reconnect activation's own floor, unchanged by the 18+ candidate rule. */
+export const MINIMUM_AGE = 35;
 
 /**
  * Exact age in whole years as of `at` (defaults to now), from an
@@ -22,6 +25,10 @@ export function getAge(birthDateISO: string, at: Date = new Date()): number {
 
 export function isEligibleAge(birthDateISO: string): boolean {
   return getAge(birthDateISO) >= MINIMUM_AGE;
+}
+
+export function isEligibleCandidateAge(birthDateISO: string): boolean {
+  return getAge(birthDateISO) >= CANDIDATE_MINIMUM_AGE;
 }
 
 /**

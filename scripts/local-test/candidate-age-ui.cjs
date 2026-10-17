@@ -6,6 +6,8 @@
 // Needs: emulators (auth/firestore/storage), start.sh (app + mock services).
 // Locally there is no Anthropic key, so generation fails for real and the
 // manual fallback is what gets tested; one journey stubs a successful draft.
+// The browser runs on Madrid time, like real users, so birth dates are
+// stored at Madrid midnight and compared as Madrid dates.
 //
 // On STAGING (junto-select-staging only), with Application Default
 // Credentials that can write to that project:
@@ -166,7 +168,7 @@ const profileOf = async (uid) => (await db.doc(`profiles/${uid}`).get()).data();
 async function start(browser, tag) {
   const email = `edad.${tag}.${Date.now()}@${STAGING ? "junto-select-staging.test" : "example.test"}`;
   created.push(email);
-  const ctx = await browser.newContext({ viewport: DESKTOP, locale: "es-ES" });
+  const ctx = await browser.newContext({ viewport: DESKTOP, locale: "es-ES", timezoneId: "Europe/Madrid" });
   const page = await ctx.newPage();
   await page.goto(`${APP}/matchmaking`, { waitUntil: "networkidle" });
   await page.locator(".mm-card.free").getByRole("link", { name: "Crear mi perfil privado" }).click();
@@ -291,7 +293,7 @@ async function finishProfile(page, uid, tag, ai) {
       await finishProfile(page, uid, a.tag, a.ai);
       const p = await profileOf(uid);
       check(`${a.tag}: profile finalized`, p?.meta?.onboardingFinalized === true);
-      check(`${a.tag}: birth date stored`, p?.private?.birthDate?.toDate().toISOString().slice(0, 10) === a.dob);
+      check(`${a.tag}: birth date stored`, p?.private?.birthDate?.toDate().toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" }) === a.dob);
       check(`${a.tag}: presentation approved`, p?.presentation?.status === "approved", p?.presentation?.approvedText?.slice(0, 40));
       if (a.ai === "fails") check(`${a.tag}: approved text is the manual one`, p?.presentation?.approvedText?.startsWith(`Me llamo Prueba ${a.tag}.`) && !p?.presentation?.generatedText);
       if (a.tag === "18") check("18: own age preference can start at 18", p?.dealbreakers?.ageMin === 18, String(p?.dealbreakers?.ageMin));
