@@ -600,7 +600,7 @@ function AutomationDetail({
                         <button className={ghost} onClick={() => setConfirm(null)}>Cancelar</button>
                       </>
                     ) : (
-                      <button className={link} disabled={busy} onClick={() => setConfirm(`send:${c.commentId}`)}>
+                      <button className="text-[12px] text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink disabled:opacity-40" disabled={busy} onClick={() => setConfirm(`send:${c.commentId}`)}>
                         {c.decision === "send_failed" ? "Reintentar el envío" : "Enviar a esta persona"}
                       </button>
                     )}
