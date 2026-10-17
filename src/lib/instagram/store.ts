@@ -7,12 +7,14 @@ import { decrypt, encrypt, type EncryptedValue } from "./crypto";
 /**
  * Server-only Firestore documents (firestore.rules denies every client read
  * and write outside the listed collections):
- *   instagramAutomation/state              connection + automation settings, token encrypted
+ *   instagramAutomation/state              account connection (token encrypted), daily limit, totals
+ *   instagramAutomations/{id}              one per Reel: keyword, message, status
  *   instagramComments/{commentId}          one per comment seen (doc id = de-duplication)
  *   instagramReplyLocks/{mediaId_fromId}   one message per person on a Reel
  *   instagramWebhookDeliveries/{auto}      every webhook POST, fields only (no body)
  */
 export const stateRef = adminDb.doc("instagramAutomation/state");
+export const automationsCol = adminDb.collection("instagramAutomations");
 export const commentsCol = adminDb.collection("instagramComments");
 export const locksCol = adminDb.collection("instagramReplyLocks");
 export const deliveriesCol = adminDb.collection("instagramWebhookDeliveries");
@@ -33,18 +35,34 @@ export interface InstagramState {
   connectedBy?: string;
   subscribed?: boolean;
   subscribeError?: string | null;
+  /** Single-automation fields from before 17 Oct 2026, moved into instagramAutomations by migrateLegacyState. */
   mediaId?: string | null;
   mediaPermalink?: string | null;
   mediaCaption?: string | null;
   keyword?: string | null;
   replyText?: string | null;
   status?: AutomationStatus;
-  /** Comments older than this never get a message (set each time the automation is activated). */
   activeSince?: Timestamp | null;
+  migratedAt?: Timestamp;
   dailyLimit?: number;
   dailyDate?: string;
   dailyCount?: number;
   sentTotal?: number;
+  updatedAt?: Timestamp;
+}
+
+export interface Automation {
+  mediaId: string;
+  mediaPermalink?: string | null;
+  mediaCaption?: string | null;
+  keyword?: string | null;
+  replyText?: string | null;
+  status: AutomationStatus;
+  /** Comments written before this are historical and never get an automatic message. */
+  createdAt?: Timestamp | null;
+  createdBy?: string;
+  /** Set at each activation: comments written before it never get an automatic message. */
+  activeSince?: Timestamp | null;
   updatedAt?: Timestamp;
 }
 

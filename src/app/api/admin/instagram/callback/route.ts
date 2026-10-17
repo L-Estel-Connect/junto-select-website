@@ -20,7 +20,7 @@ function back(result: string) {
  * Instagram Login return. Refuses any account other than the configured
  * one: its token is never stored. On success, subscribes the account to
  * comment notifications for this app (a setting on our app's side, not in
- * the Instagram account's settings). Connecting never activates sending.
+ * the Instagram account's settings). Connecting never changes an automation.
  */
 export async function GET(request: Request) {
   const admin = await requireAdminFromCookie().catch(() => null);
@@ -48,8 +48,6 @@ export async function GET(request: Request) {
       subscribeError = error instanceof GraphError ? `${error.message} (code ${error.code ?? error.status})` : String(error);
     }
 
-    const snap = await stateRef.get();
-    const status = snap.data()?.status;
     await stateRef.set(
       {
         igUserId: String(me.user_id ?? me.id),
@@ -63,8 +61,6 @@ export async function GET(request: Request) {
         connectedBy: admin.email,
         subscribed,
         subscribeError,
-        // A (re)connection never turns sending on.
-        status: status === "active" ? "paused" : (status ?? "paused"),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },

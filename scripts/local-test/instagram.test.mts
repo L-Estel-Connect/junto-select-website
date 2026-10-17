@@ -62,34 +62,37 @@ check("outer-array shape parsed (as in the docs)", extractCommentChanges([flatSh
 check("garbage ignored", extractCommentChanges("nope").comments.length === 0);
 
 // Decisions
-const ts = (ms: number) => ({ toMillis: () => ms }) as never;
+const ts = (ms: number) => ({ toMillis: () => ms });
 const now = Date.now();
-const s = {
-  token: { ciphertext: "x", iv: "x", tag: "x" },
-  igUserId: "IG1",
-  username: "juntoselect",
+const account = { token: { ciphertext: "x", iv: "x", tag: "x" }, igUserId: "IG1", username: "juntoselect" };
+const auto = {
   mediaId: "M1",
   keyword: "SELECT",
   replyText: "Hola https://www.juntoselect.com/",
   status: "active" as const,
+  createdAt: ts(now - 3600_000),
   activeSince: ts(now - 60_000),
 };
 const c = a[0];
-check("any follower's matching comment is sent when active", decide(c, s, now) === "send");
-check("paused: detected, not sent", decide(c, { ...s, status: "paused" }, now) === "dry_run");
-check("off: ignored and not stored", decide(c, { ...s, status: "off" }, now) === "automation_off");
-check("no status yet counts as off", decide(c, { ...s, status: undefined }, now) === "automation_off");
-check("not connected", decide(c, { ...s, token: undefined }, now) === "not_connected");
-check("other Reel ignored", decide({ ...c, mediaId: "M2" }, s, now) === "other_reel");
-check("no Reel chosen ignored", decide(c, { ...s, mediaId: null }, now) === "other_reel");
-check("no keyword ignored", decide({ ...c, text: "qué bonito" }, s, now) === "no_keyword");
-check("custom keyword", decide({ ...c, text: "quiero INFO" }, { ...s, keyword: "info" }, now) === "send");
-check("own comment ignored", decide({ ...c, fromId: "IG1" }, s, now) === "own_comment");
-check("own username ignored", decide({ ...c, fromUsername: "JuntoSelect", fromId: "5" }, s, now) === "own_comment");
-check("other account's webhook ignored", decide({ ...c, entryId: "OTHER" }, s, now) === "other_account");
-check("older than 7 days ignored", decide({ ...c, entryTime: Math.floor((now - 8 * 86400000) / 1000) }, s, now) === "too_old");
-check("comment before activation not sent", decide({ ...c, entryTime: Math.floor((now - 3600_000) / 1000) }, s, now) === "before_activation");
-check("missing message not sent", decide(c, { ...s, replyText: null }, now) === "not_configured");
+const at = (msAgo: number) => ({ ...c, entryTime: Math.floor((now - msAgo) / 1000) });
+check("new matching comment is sent when active", decide(c, account, auto, now) === "send");
+check("paused: detected, not sent", decide(c, account, { ...auto, status: "paused" }, now) === "dry_run");
+check("off: ignored and not stored", decide(c, account, { ...auto, status: "off" }, now) === "automation_off");
+check("not connected", decide(c, { ...account, token: undefined }, auto, now) === "not_connected");
+check("Reel without automation ignored", decide(c, account, null, now) === "no_automation");
+check("other Reel's automation ignored", decide({ ...c, mediaId: "M2" }, account, auto, now) === "no_automation");
+check("no keyword ignored", decide({ ...c, text: "qué bonito" }, account, auto, now) === "no_keyword");
+check("custom keyword", decide({ ...c, text: "quiero INFO" }, account, { ...auto, keyword: "info" }, now) === "send");
+check("own comment ignored", decide({ ...c, fromId: "IG1" }, account, auto, now) === "own_comment");
+check("own username ignored", decide({ ...c, fromUsername: "JuntoSelect", fromId: "5" }, account, auto, now) === "own_comment");
+check("other account's webhook ignored", decide({ ...c, entryId: "OTHER" }, account, auto, now) === "other_account");
+check("written before the automation existed: historical, never sent", decide(at(2 * 3600_000), account, auto, now) === "historical");
+check("historical even when active and within 7 days", decide(at(3600_000 + 1000), account, auto, now) === "historical");
+check("written after creation but before activation: not sent", decide(at(30 * 60_000), account, auto, now) === "before_activation");
+check("active with no activation time: not sent", decide(c, account, { ...auto, activeSince: null }, now) === "before_activation");
+check("older than 7 days ignored", decide(at(8 * 86400000), account, { ...auto, createdAt: ts(now - 9 * 86400000) }, now) === "too_old");
+check("missing message not sent", decide(c, account, { ...auto, replyText: null }, now) === "not_configured");
+check("keyword change re-labels (SELECT comment, OCTUBRE keyword)", decide({ ...c, text: "SELECT" }, account, { ...auto, keyword: "OCTUBRE" }, now) === "no_keyword");
 
 // Daily limit day (Madrid)
 check("madrid day format", /^\d{4}-\d{2}-\d{2}$/.test(madridDay(now)));
