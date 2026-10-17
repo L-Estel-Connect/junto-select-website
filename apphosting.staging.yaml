@@ -112,7 +112,7 @@ env:
   # The second is the Meta app secret (App settings > Basic): Meta's docs
   # don't say which of the two signs webhooks, so both are checked.
   - variable: INSTAGRAM_TEST_APP_ID
-    value: "REPLACE_WITH_INSTAGRAM_APP_ID"
+    value: "29106111172408257"
     availability:
       - RUNTIME
   - variable: INSTAGRAM_TEST_APP_SECRET
