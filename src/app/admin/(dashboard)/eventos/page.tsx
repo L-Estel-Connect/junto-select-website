@@ -451,6 +451,18 @@ export default function EventsManagerPage() {
             </div>
           </div>
 
+          {/* 5. Reconnect */}
+          <h3 className="mt-6 text-[12px] font-medium uppercase tracking-[0.14em] text-ink-soft">5 · Reconnect</h3>
+          <label className="mt-2 flex items-center gap-2 text-[13px] text-ink">
+            <input type="checkbox" className="h-4 w-4" checked={form.reconnectEnabled} onChange={(e) => set("reconnectEnabled", e.target.checked)} />
+            Reconnect activado (después del evento)
+          </label>
+          <p className="mt-1 text-[12px] text-ink-soft">
+            {form.reconnectEnabled
+              ? "Se abrirá a las 00:01 del día siguiente al evento, durante 48 horas, para los participantes importados de Ticket Tailor."
+              : "Desactivado: los participantes no podrán usar Reconnect para este evento."}
+          </p>
+
           <details className="mt-5">
             <summary className="cursor-pointer text-[12px] font-medium text-ink-soft">Más opciones</summary>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -469,10 +481,6 @@ export default function EventsManagerPage() {
                 <input id="ev-price" inputMode="decimal" className={input} value={form.priceFromEuros} onChange={(e) => set("priceFromEuros", e.target.value)} placeholder="Vacío = no se muestra" />
               </div>
             </div>
-            <label className="mt-3 flex items-center gap-2 text-[13px] text-ink">
-              <input type="checkbox" className="h-4 w-4" checked={form.reconnectEnabled} onChange={(e) => set("reconnectEnabled", e.target.checked)} />
-              Reconnect activado (después del evento)
-            </label>
           </details>
 
           {error && (

@@ -4,6 +4,40 @@ import { useState } from "react";
 import { adminFetchJson } from "@/lib/admin/adminFetch";
 import type { EligibleTicketTailorEventDocument } from "@/lib/eventBenefits/types";
 import type { ReconnectAdminSummary } from "@/lib/eventReconnect/adminSummary";
+import { parseTicketTailorCsv, SKIP_REASON_LABELS, type ParsedTicketTailorCsv } from "@/lib/eventReconnect/ticketTailorCsv";
+
+type ImportRow = { email: string; firstName: string | null; lastName: string | null; phone: string | null; ticketTailorOrderId: string | null };
+
+const FIELD_LABELS: Record<string, string> = {
+  email: "Email",
+  firstName: "Nombre",
+  lastName: "Apellidos",
+  fullName: "Nombre completo",
+  phone: "Teléfono",
+  orderId: "Pedido",
+  status: "Estado",
+};
+
+/** What the pasted text or file holds: a Ticket Tailor CSV, or the older JSON array (still accepted). */
+function readImportText(text: string): ParsedTicketTailorCsv {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("[")) return parseTicketTailorCsv(trimmed);
+  let rows: unknown;
+  try {
+    rows = JSON.parse(trimmed);
+  } catch {
+    rows = null;
+  }
+  if (!Array.isArray(rows)) {
+    return { ok: false, error: "El texto empieza como JSON pero no es una lista válida.", columns: {}, rows: [], skipped: [], duplicatesInFile: 0, withoutFirstName: 0, totalDataRows: 0 };
+  }
+  // Same checks as the CSV, by turning the JSON back into a small CSV.
+  const esc = (v: unknown) => `"${String(typeof v === "string" ? v : "").replace(/"/g, '""')}"`;
+  const csv = ["email,first name,last name,phone,order id"]
+    .concat(rows.map((r: Record<string, unknown>) => [r?.email, r?.firstName, r?.lastName, r?.phone, r?.ticketTailorOrderId].map(esc).join(",")))
+    .join("\n");
+  return parseTicketTailorCsv(csv);
+}
 
 function formatDate(value: unknown): string | null {
   const ts = value as { toDate?: () => Date } | null | undefined;
@@ -18,7 +52,8 @@ function formatDate(value: unknown): string | null {
  * product spec: extend the existing Ticket Tailor event/admin architecture,
  * never build a separate event-management product. Lara needs exactly
  * three things beyond what already exists here: force-close, a participant
- * import, and a read-only summary — everything else (the 48h/72h windows)
+ * import (the Ticket Tailor CSV, previewed before anything is saved), and a
+ * read-only summary — everything else (the 48h/72h windows)
  * derives automatically from eventDate/reconnectEnabled, which are edited
  * via the page's own register form (see "Editar" on the parent card).
  */
@@ -30,6 +65,7 @@ export default function ReconnectEventControls({ event }: { event: EligibleTicke
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ parsed: ParsedTicketTailorCsv; alreadyImported: string[] } | null>(null);
   const [summary, setSummary] = useState<ReconnectAdminSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
@@ -52,27 +88,56 @@ export default function ReconnectEventControls({ event }: { event: EligibleTicke
     }
   }
 
-  async function handleImport() {
+  const toRows = (parsed: ParsedTicketTailorCsv): ImportRow[] =>
+    parsed.rows.map(({ email, firstName, lastName, phone, ticketTailorOrderId }) => ({ email, firstName, lastName, phone, ticketTailorOrderId }));
+
+  async function handlePreview(text: string) {
     setImportError(null);
     setImportResult(null);
-    let rows: unknown;
-    try {
-      rows = JSON.parse(importText);
-      if (!Array.isArray(rows)) throw new Error("not_array");
-    } catch {
-      setImportError('Pega un array JSON, p.ej. [{"email":"a@b.com","firstName":"Ana"}]');
+    setPreview(null);
+    const parsed = readImportText(text);
+    if (!parsed.ok) {
+      setImportError(parsed.error ?? "No se ha podido leer el archivo.");
       return;
     }
+    setImporting(true);
+    try {
+      const { preview: p } = await adminFetchJson<{ preview: { valid: number; alreadyImported: string[] } }>(
+        "/api/admin/event-reconnect/import-participants",
+        { method: "POST", body: JSON.stringify({ eventId: event.ticketTailorEventId, rows: toRows(parsed), dryRun: true }) },
+      );
+      setPreview({ parsed, alreadyImported: p.alreadyImported });
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "No se ha podido revisar el archivo.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function handleFile(file: File) {
+    const text = await file.text();
+    setImportText(text);
+    await handlePreview(text);
+  }
+
+  async function handleImport() {
+    if (!preview) return;
+    setImportError(null);
     setImporting(true);
     try {
       const { result } = await adminFetchJson<{
         result: { attempted: number; imported: number; alreadyImported: number };
       }>("/api/admin/event-reconnect/import-participants", {
         method: "POST",
-        body: JSON.stringify({ eventId: event.ticketTailorEventId, rows }),
+        body: JSON.stringify({ eventId: event.ticketTailorEventId, rows: toRows(preview.parsed) }),
       });
-      setImportResult(`${result.imported} nuevos, ${result.alreadyImported} ya existentes, de ${result.attempted}.`);
+      const skipped = preview.parsed.skipped.length;
+      setImportResult(
+        `Importación hecha: ${result.imported} participantes nuevos, ${result.alreadyImported} ya estaban importados` +
+          (skipped ? `, ${skipped} filas descartadas.` : "."),
+      );
       setImportText("");
+      setPreview(null);
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "No se ha podido importar.");
     } finally {
@@ -135,24 +200,106 @@ export default function ReconnectEventControls({ event }: { event: EligibleTicke
       {importOpen && (
         <div className="mt-3">
           <p className="text-[12px] text-ink-soft">
-            Pega aquí el array JSON exportado de Ticket Tailor: email, firstName, lastName, phone,
-            ticketTailorOrderId (solo email es obligatorio).
+            Sube el CSV exportado de Ticket Tailor (pedidos o entradas) o pega su contenido. Solo el email es
+            obligatorio; el nombre se usa en la galería. Nada se guarda hasta que confirmes.
           </p>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            aria-label="Archivo CSV de Ticket Tailor"
+            className="mt-2 block text-[12px]"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleFile(file);
+              e.target.value = "";
+            }}
+          />
           <textarea
             value={importText}
-            onChange={(e) => setImportText(e.target.value)}
+            onChange={(e) => {
+              setImportText(e.target.value);
+              setPreview(null);
+            }}
             rows={4}
-            placeholder='[{"email":"ana@example.com","firstName":"Ana"}]'
+            placeholder={"Order ID,First name,Last name,Email\n12345,Ana,García,ana@example.com"}
+            aria-label="Contenido del CSV"
             className="mt-2 w-full rounded-md border border-hairline px-3 py-2 font-mono text-[12px]"
           />
           <button
             type="button"
-            onClick={handleImport}
+            onClick={() => handlePreview(importText)}
             disabled={importing || !importText.trim()}
-            className="mt-2 rounded-full bg-ink px-4 py-1.5 text-[12px] font-medium text-white disabled:opacity-50"
+            className="mt-2 rounded-full border border-hairline px-4 py-1.5 text-[12px] font-medium text-ink-soft hover:text-ink disabled:opacity-50"
           >
-            {importing ? "Importando…" : "Importar"}
+            {importing && !preview ? "Revisando…" : "Revisar"}
           </button>
+
+          {preview && (() => {
+            const { parsed, alreadyImported } = preview;
+            const existing = new Set(alreadyImported);
+            const newCount = parsed.rows.filter((r) => !existing.has(r.email)).length;
+            return (
+              <div className="mt-3 rounded-md bg-paper p-3 text-[12px] leading-relaxed text-ink" data-testid="import-preview">
+                <p>
+                  <strong>Columnas detectadas:</strong>{" "}
+                  {Object.entries(parsed.columns)
+                    .map(([k, v]) => `${FIELD_LABELS[k] ?? k} ← «${v}»`)
+                    .join(" · ")}
+                </p>
+                <p className="mt-1">
+                  <strong>{parsed.totalDataRows} filas:</strong> {newCount} participantes nuevos, {parsed.rows.length - newCount} ya
+                  importados, {parsed.duplicatesInFile} entradas repetidas del mismo email, {parsed.skipped.length} descartadas.
+                </p>
+                {parsed.withoutFirstName > 0 && (
+                  <p className="mt-1 text-ink-soft">
+                    {parsed.withoutFirstName} sin nombre: podrán activar Reconnect, pero no aparecerán en la galería hasta hacerlo.
+                  </p>
+                )}
+                {parsed.skipped.length > 0 && (
+                  <ul className="mt-1 list-disc pl-5 text-[#8a3b3b]">
+                    {parsed.skipped.slice(0, 10).map((r) => (
+                      <li key={r.line}>
+                        Línea {r.line}: {SKIP_REASON_LABELS[r.reason]}
+                        {r.value ? ` (${r.value})` : ""}
+                      </li>
+                    ))}
+                    {parsed.skipped.length > 10 && <li>… y {parsed.skipped.length - 10} más.</li>}
+                  </ul>
+                )}
+                {parsed.rows.length > 0 && (
+                  <table className="mt-2 w-full text-left">
+                    <thead>
+                      <tr className="text-ink-soft">
+                        <th className="pr-2 font-medium">Nombre</th>
+                        <th className="pr-2 font-medium">Apellidos</th>
+                        <th className="pr-2 font-medium">Email</th>
+                        <th className="font-medium" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsed.rows.slice(0, 8).map((r) => (
+                        <tr key={r.email}>
+                          <td className="pr-2">{r.firstName ?? "—"}</td>
+                          <td className="pr-2">{r.lastName ?? ""}</td>
+                          <td className="pr-2">{r.email}</td>
+                          <td className="text-ink-soft">{existing.has(r.email) ? "ya importado" : "nuevo"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                {parsed.rows.length > 8 && <p className="mt-1 text-ink-soft">… y {parsed.rows.length - 8} más.</p>}
+                <button
+                  type="button"
+                  onClick={handleImport}
+                  disabled={importing || newCount === 0}
+                  className="mt-3 rounded-full bg-ink px-4 py-1.5 text-[12px] font-medium text-white disabled:opacity-50"
+                >
+                  {importing ? "Importando…" : newCount === 0 ? "Nada nuevo que importar" : `Importar ${newCount} participantes`}
+                </button>
+              </div>
+            );
+          })()}
           {importResult && <p className="mt-2 text-[12px] text-ink-soft">{importResult}</p>}
           {importError && <p className="mt-2 text-[12px] text-[#8a3b3b]">{importError}</p>}
         </div>

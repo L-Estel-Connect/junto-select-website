@@ -30,6 +30,9 @@ NODE_PATH=$(npm root -g) node scripts/local-test/delete-profile.cjs           # 
 node scripts/local-test/delete-profile-staging.cjs                          # same on STAGING (junto-select-staging only, its own throwaway accounts)
 NODE_PATH=$(npm root -g) node scripts/local-test/account-exit.cjs             # leaving at any point: Ajustes and deletion from an unfinished profile, Guardar y salir signs out, Tu cuenta deletion, 404
 NODE_PATH=$(npm root -g) node scripts/local-test/link-crawl.cjs [url]        # every public page and link at 3 sizes, signed-out redirects, private APIs refuse anonymous calls (read-only; pass a URL for staging)
+node scripts/local-test/reconnect.cjs                                     # Reconnect end to end: import, verification, gallery, 3 requests, mutual interest, contacts, 48 h window, force close
+NODE_PATH=$(npm root -g) node scripts/local-test/reconnect-ui.cjs         # Reconnect screens: visible switch, Ticket Tailor CSV import with preview, participant page in every state
+npx tsx --conditions=react-server scripts/local-test/reconnect-csv.test.mts    # Ticket Tailor CSV reading (columns, duplicates, cancelled orders)
 ```
 
 - Open http://localhost:3000 to click through by hand. Magic-link emails are
