@@ -2,16 +2,15 @@
 
 import { updateProfileFields } from "./profile";
 import type { ContactPreferences } from "./types";
+import { isValidPhone } from "./phone";
+
+export { isValidPhone };
 
 export async function saveContactPreferences(
   uid: string,
   contactPreferences: ContactPreferences,
 ): Promise<void> {
   await updateProfileFields(uid, { contactPreferences });
-}
-
-export function isValidPhone(value: string): boolean {
-  return /^[+]?[\d\s()-]{7,20}$/.test(value.trim());
 }
 
 export function isValidInstagram(value: string): boolean {

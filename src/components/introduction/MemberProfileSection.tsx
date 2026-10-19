@@ -28,6 +28,8 @@ import ProfileCard from "./ProfileCard";
 import PrivateProfileView from "@/components/member/PrivateProfileView";
 import { auth } from "@/lib/firebase/client";
 import { IntroductionError, IntroductionLoading } from "./RequireIntroductionAuth";
+import PhoneField from "./PhoneField";
+import { composePhone, splitPhone } from "@/lib/introduction/phone";
 
 const linkClasses =
   "text-ink-soft underline decoration-hairline underline-offset-4 hover:text-ink";
@@ -53,6 +55,12 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
   const [completed, setCompleted] = useState(false);
   const [showFullProfile, setShowFullProfile] = useState(false);
   const consentRef = useRef<HTMLInputElement>(null);
+  // Phone is required to finish a NEW registration (never asked again of
+  // finalized profiles). Prefilled once from contactPreferences.phone.
+  const [phone, setPhone] = useState<{ dialCode: string; number: string } | null>(null);
+  const [phoneInvalid, setPhoneInvalid] = useState(false);
+  const phoneRef = useRef<HTMLInputElement>(null);
+  if (profile && phone === null) setPhone(splitPhone(profile.contactPreferences.phone));
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -104,6 +112,24 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
 
   const finalized = profile.meta.onboardingFinalized;
 
+  /** The phone to save, or null (and the field flagged) when it isn't usable yet. */
+  function phoneToSave(): string | null {
+    const value = phone ? composePhone(phone.dialCode, phone.number) : null;
+    if (!value) {
+      setPhoneInvalid(true);
+      setError(phone?.number.trim() ? "Revisa tu teléfono para terminar." : "Para terminar, indícanos tu teléfono.");
+      phoneRef.current?.focus();
+    }
+    return value;
+  }
+
+  /** Writes only contactPreferences.phone, and only when it changed. */
+  async function savePhone(value: string) {
+    if (value === profile?.contactPreferences.phone) return;
+    await updateProfileFields(uid, { "contactPreferences.phone": value });
+    mutate((prev) => ({ ...prev, contactPreferences: { ...prev.contactPreferences, phone: value } }));
+  }
+
   async function recordConsent() {
     await memberFetchJson("/api/member/introductions-consent", {
       method: "POST",
@@ -117,6 +143,7 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
       consentRef.current?.focus();
       return;
     }
+    if (!phoneToSave()) return;
     await updateProfileFields(uid, {}, { requestedService: "passive" });
     mutate((prev) => ({ ...prev, meta: { ...prev.meta, requestedService: "passive" } }));
     await handleFinalize();
@@ -125,9 +152,12 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
   async function handleFinalize() {
     if (!profile) return; // defensive only — guarded against above before this closure is ever reachable
     setError(null);
+    const phoneValue = phoneToSave();
+    if (!phoneValue) return;
     setSaving(true);
     try {
       if (profile.meta.pendingLegacyActivation) {
+        await savePhone(phoneValue);
         // Legacy-contact activation (Path B): pendingLegacyActivation can
         // ONLY be cleared by this dedicated, independently-re-verifying
         // server endpoint (see claim.ts activateLegacyProfile) — the
@@ -160,6 +190,7 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
         consentRef.current?.focus();
         return;
       }
+      await savePhone(phoneValue);
       await memberFetchJson("/api/member/introductions-consent", {
         method: "POST",
         body: JSON.stringify({ introductionsConsent: true }),
@@ -242,6 +273,22 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
     </label>
   );
 
+  const phoneField = phone && (
+    <PhoneField
+      dialCode={phone.dialCode}
+      number={phone.number}
+      invalid={phoneInvalid}
+      inputRef={phoneRef}
+      onChange={(next) => {
+        setPhone(next);
+        if (phoneInvalid && composePhone(next.dialCode, next.number)) {
+          setPhoneInvalid(false);
+          setError(null);
+        }
+      }}
+    />
+  );
+
   const errorNote = error && (
     <p role="alert" className="mt-4 text-sm text-[#8a3b3b]">
       {error}
@@ -300,14 +347,13 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
 
       {!awaitingSelectPayment && (
         <div className="mt-10">
-          {!profile.meta.pendingLegacyActivation && (
-            <fieldset className="rounded-md border border-hairline bg-white/60 p-5">
-              <legend className="px-1 text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">
-                Confirmación
-              </legend>
-              {consentBox}
-            </fieldset>
-          )}
+          <fieldset className="rounded-md border border-hairline bg-white/60 p-5">
+            <legend className="px-1 text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">
+              Confirmación
+            </legend>
+            {phoneField}
+            {!profile.meta.pendingLegacyActivation && <div className="mt-6">{consentBox}</div>}
+          </fieldset>
           <button
             type="button"
             disabled={saving}
@@ -353,16 +399,29 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
               <PlanCheckoutForm
                 marketEligible={isMarketAvailabilityEligible(profile)}
                 returnTo="profile"
-                beforeCheckout={recordConsent}
+                beforeCheckout={async () => {
+                  const phoneValue = phoneToSave();
+                  if (!phoneValue) throw new Error("phone_required");
+                  await savePhone(phoneValue);
+                  await recordConsent();
+                }}
                 disabledReason={consent ? null : "Para continuar, marca la casilla de participación."}
-                leadingConfirmation={consentBox}
+                leadingConfirmation={
+                  <>
+                    {phoneField}
+                    <div className="mt-6">{consentBox}</div>
+                  </>
+                }
                 leadingConfirmed={consent}
               />
             </>
           ) : (
             // Membresía is closed: a profile started on the active journey
-            // finishes as a private profile, with the same consent box.
-            consentBox
+            // finishes as a private profile, with the same phone and consent box.
+            <>
+              {phoneField}
+              <div className="mt-6">{consentBox}</div>
+            </>
           )}
 
           <div className={MEMBERSHIP_SALES_OPEN ? "mt-12 border-t border-hairline pt-8" : "mt-8"}>

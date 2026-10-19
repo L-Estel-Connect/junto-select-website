@@ -269,6 +269,7 @@ async function finishProfile(page, uid, tag, ai) {
   await page.getByRole("button", { name: "Continuar" }).waitFor({ timeout: 20000 });
   await page.getByRole("button", { name: "Continuar" }).click();
   await page.waitForURL(/\/member\/profile(\?.*)?$/, { timeout: 20000 });
+  await page.getByLabel("Tu teléfono").fill("600 000 000");
   await page.getByText("Acepto participar en las introducciones privadas").click();
   await page.getByRole("button", { name: "Guardar y finalizar" }).click();
   await page.getByTestId("onboarding-complete").waitFor({ timeout: 20000 });

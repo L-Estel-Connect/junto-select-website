@@ -3,6 +3,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireFirebaseUser } from "@/lib/firebase/serverAuth";
 import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/legal/versions";
+import { hasUsablePhone } from "@/lib/introduction/phone";
 
 export const runtime = "nodejs";
 
@@ -27,6 +28,13 @@ export async function POST(request: Request) {
   }
   if ((body as { introductionsConsent?: unknown })?.introductionsConsent !== true) {
     return NextResponse.json({ ok: false, error: "consent_required" }, { status: 400 });
+  }
+
+  // New registrations finish with a phone the team can use. Profiles that
+  // were already finalized are never held to it.
+  const profileSnap = await adminDb.doc(`profiles/${auth.uid}`).get();
+  if (profileSnap.get("meta.onboardingFinalized") !== true && !hasUsablePhone(profileSnap.get("contactPreferences.phone"))) {
+    return NextResponse.json({ ok: false, error: "phone_required" }, { status: 400 });
   }
 
   await adminDb.collection("introductionsConsent").doc(auth.uid).set(

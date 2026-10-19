@@ -283,6 +283,7 @@ async function statusOf(path) {
     });
     await page.goto(`${APP}/member/profile`);
     await page.waitForSelector("text=Guardar y finalizar", { timeout: 20000 });
+    await page.getByLabel("Tu teléfono").fill("600 000 000");
     await page.click("text=Guardar y finalizar");
     await page.waitForTimeout(800);
     check("free: finalize refused without participation consent", (await page.locator("p[role=alert]").innerText()).includes("confirma que aceptas participar"));
@@ -396,6 +397,7 @@ async function statusOf(path) {
     const body = await pg.locator("body").innerText();
     check("activa (closed): no plan or payment step", !/Elige tu plan|Continuar al pago|Membresía/.test(body));
     await pg.screenshot({ path: `${SHOTS}/activa-closed-1.png`, fullPage: true });
+    await pg.getByLabel("Tu teléfono").fill("600 000 000");
     await pg.check("text=Acepto participar en las introducciones privadas");
     await pg.click("text=Continuar con mi perfil privado");
     await pg.waitForTimeout(2500);

@@ -347,6 +347,7 @@ async function matchingJourneys() {
   await makeComplete(b, false);
   let re = await api(tb, "POST", "/api/member/matching/reevaluate");
   check("[pay first] complete but not finalized (no consent yet): still paused", re.data?.paused === true && (await meta(b)).matchingPeriodsProcessed === 0);
+  await db.doc(`profiles/${b}`).update({ "contactPreferences.phone": "+34 600 000 000" }); // required to finish a new registration
   check("[pay first] consent recorded", (await api(tb, "POST", "/api/member/introductions-consent", { introductionsConsent: true })).status === 200);
   await db.doc(`profiles/${b}`).update({ "meta.onboardingFinalized": true });
   re = await api(tb, "POST", "/api/member/matching/reevaluate");
