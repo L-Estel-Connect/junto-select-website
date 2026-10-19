@@ -24,10 +24,11 @@ export default function PhoneField({
   return (
     <div className="text-left">
       <label htmlFor="registro-telefono" className="block text-[15px] font-medium text-ink">
-        Tu teléfono
+        Tu teléfono <span className="text-[13px] font-normal text-ink-soft">(obligatorio)</span>
       </label>
       <p id="registro-telefono-ayuda" className="mt-1 text-[13px] leading-relaxed text-ink-soft">
-        Solo para que el equipo de Junto Select pueda contactarte. Nunca aparece en tu perfil.
+        Necesario para completar tu registro. Solo lo usa el equipo de Junto Select para contactarte y nunca aparece
+        en tu perfil.
       </p>
       <div className="mt-3 flex gap-2">
         <select
@@ -61,7 +62,11 @@ export default function PhoneField({
       </div>
       {invalid && (
         <p className="mt-2 text-[13px] text-[#8a3b3b]">
-          {other ? "Escribe tu número completo, empezando por + y el prefijo de tu país." : "Revisa el número de teléfono."}
+          {!number.trim()
+            ? "Indica tu número de teléfono."
+            : other
+              ? "Escribe tu número completo, empezando por + y el prefijo de tu país."
+              : "Revisa tu número de teléfono."}
         </p>
       )}
     </div>

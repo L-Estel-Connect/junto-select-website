@@ -342,13 +342,17 @@ async function completeProfile(browser, kind) {
       await page.getByText("Acepto participar en las introducciones privadas").click();
       // Phone is required to finish a new registration: +34 by default, empty number blocks.
       check("pasivo: country code defaults to +34", (await page.getByLabel("Prefijo del país").inputValue()) === "+34");
+      const review = await page.locator("main").innerText();
+      check("pasivo: review never calls contact optional", !/opcional/i.test(review));
+      check("pasivo: review says the phone is required", review.includes("Falta tu teléfono (obligatorio)") && review.includes("(obligatorio)"));
       await page.getByRole("button", { name: "Guardar y finalizar" }).click();
-      await page.getByText("Para terminar, indícanos tu teléfono.").waitFor({ timeout: 10000 });
+      await page.getByText("Para terminar, indica tu teléfono.").waitFor({ timeout: 10000 });
       await page.waitForTimeout(800);
       check("pasivo: cannot finish without a phone", (await profileOf(uid))?.meta?.onboardingFinalized === false);
       check("pasivo: no consent recorded without a phone", !(await db.doc(`introductionsConsent/${uid}`).get()).exists);
       await shot(page, "pasivo-06b-phone-required");
       await page.getByLabel("Tu teléfono").fill("612 345 678");
+      check("pasivo: required note goes once the phone is filled", (await page.getByText("Falta tu teléfono (obligatorio)").count()) === 0);
       await page.getByRole("button", { name: "Guardar y finalizar" }).click();
       const p = await waitFor(async () => {
         const d = await profileOf(uid);

@@ -117,7 +117,7 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
     const value = phone ? composePhone(phone.dialCode, phone.number) : null;
     if (!value) {
       setPhoneInvalid(true);
-      setError(phone?.number.trim() ? "Revisa tu teléfono para terminar." : "Para terminar, indícanos tu teléfono.");
+      setError(phone?.number.trim() ? "Para terminar, revisa tu teléfono." : "Para terminar, indica tu teléfono.");
       phoneRef.current?.focus();
     }
     return value;
@@ -245,6 +245,7 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
 
   const selectJourney = profile.meta.requestedService === "select";
   const contactSection = sections[sections.length - 1];
+  const phoneComplete = !!phone && !!composePhone(phone.dialCode, phone.number);
 
   const consentBox = (
     <label className="flex items-start gap-3 text-left text-[14px] leading-relaxed text-ink">
@@ -326,18 +327,27 @@ export default function MemberProfileSection({ uid }: { uid: string }) {
         <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">Revisa cada parte</p>
         <div className="mt-2 border-t border-hairline">
           {sections.map((section) => {
-            const optional = section === contactSection;
+            // Contacto: the phone is required to finish (field below);
+            // until it's filled in, the row points to it.
+            const missingPhone = section === contactSection && !phoneComplete;
             return (
               <div key={section.label} className="flex items-center justify-between border-b border-hairline py-3.5">
                 <span className="text-[15px] text-ink">
                   {section.label}
-                  {optional && !section.complete && <span className="ml-2 text-[13px] text-ink-soft">Opcional</span>}
+                  {missingPhone && <span className="ml-2 text-[13px] text-[#8a3b3b]">Falta tu teléfono (obligatorio)</span>}
                 </span>
-                {section.href && (
-                  <Link href={section.href} className={`text-[13px] ${linkClasses}`}>
-                    {optional && !section.complete ? "Añadir" : "Editar"}
-                    <span className="sr-only"> {section.label}</span>
-                  </Link>
+                {missingPhone ? (
+                  <a href="#registro-telefono" className={`text-[13px] ${linkClasses}`}>
+                    Añadir
+                    <span className="sr-only"> teléfono</span>
+                  </a>
+                ) : (
+                  section.href && (
+                    <Link href={section.href} className={`text-[13px] ${linkClasses}`}>
+                      Editar
+                      <span className="sr-only"> {section.label}</span>
+                    </Link>
+                  )
                 )}
               </div>
             );

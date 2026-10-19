@@ -186,7 +186,7 @@ async function main() {
   await page.goto(`${APP}/member`, { waitUntil: "domcontentloaded" });
   await page.getByText("Tu perfil privado").waitFor({ timeout: 20000 });
   check("existing: private profile page opens", page.url().endsWith("/member"));
-  check("existing: no phone field or request", (await page.locator("input[type=tel]").count()) === 0 && (await page.getByText("indícanos tu teléfono").count()) === 0);
+  check("existing: no phone field or request", (await page.locator("input[type=tel]").count()) === 0 && (await page.getByText(/indica tu teléfono|obligatorio/).count()) === 0);
   await page.getByRole("link", { name: "Editar Lo que buscas" }).click();
   await page.waitForURL(`${APP}/member/profile/preferences`, { timeout: 15000 });
   check("existing: can open an edit page", true);
