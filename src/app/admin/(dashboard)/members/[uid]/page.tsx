@@ -27,7 +27,7 @@ import {
   PAIR_HISTORY_REASON_LABELS,
 } from "@/lib/admin/labels";
 import type { MemberDetail } from "@/lib/admin/memberDetail";
-import { PLAN_DISPLAY } from "@/lib/billing/plans";
+import type { AdminMemberContact, ContactSource } from "@/lib/admin/memberContact";
 
 const EVENT_BENEFIT_STATUS_LABELS: Record<string, string> = {
   pending_external: "Preparando código",
@@ -36,29 +36,98 @@ const EVENT_BENEFIT_STATUS_LABELS: Record<string, string> = {
   invalidated: "Expirado / invalidado",
 };
 
-const BILLING_STATUS_LABELS: Record<string, string> = {
-  none: "Sin membresía",
-  active: "Activa",
-  trialing: "En prueba",
-  past_due: "Pago pendiente (reintentando)",
-  canceled: "Cancelada",
-  incomplete: "Pago incompleto",
-  incomplete_expired: "Pago incompleto (expirado)",
-  unpaid: "Impagada",
-};
-
-function adminFormatDate(value: unknown): string {
-  const ts = value as { toDate?: () => Date } | null | undefined;
-  const date = ts?.toDate ? ts.toDate() : null;
-  return date ? date.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" }) : "—";
-}
-
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-[11px] uppercase tracking-[0.08em] text-ink-soft">{label}</p>
       <p className="mt-0.5 text-[14px] text-ink">{value || "No especificado"}</p>
     </div>
+  );
+}
+
+const CONTACT_SOURCE_LABELS: Record<ContactSource, string> = {
+  cuenta: "Email de su cuenta",
+  perfil: "Indicado en su perfil",
+  cliente: "Ficha de cliente",
+  solicitud: "Solicitud de matchmaking",
+  evento: "Entrada de evento (Ticket Tailor)",
+  importacion: "Base de contactos importada",
+};
+
+const CONTACT_METHOD_LABELS: Record<string, string> = {
+  whatsapp: "WhatsApp",
+  telefono: "Teléfono",
+  email: "Email",
+  instagram: "Instagram",
+  linkedin: "LinkedIn",
+};
+
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label={`Copiar ${label}`}
+      onClick={() => {
+        void navigator.clipboard.writeText(value).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        });
+      }}
+      className="shrink-0 rounded-full border border-hairline px-3 py-1 text-[12px] font-medium text-ink hover:border-ink"
+    >
+      {copied ? "Copiado" : "Copiar"}
+    </button>
+  );
+}
+
+function ContactRow({ label, value, source }: { label: string; value: string | null; source?: ContactSource }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+      <div className="min-w-0">
+        <p className="text-[11px] uppercase tracking-[0.08em] text-ink-soft">{label}</p>
+        <p className={`mt-0.5 break-all text-[15px] ${value ? "text-ink" : "text-ink-soft"}`}>{value || "No facilitado"}</p>
+        {value && source && <p className="mt-0.5 text-[12px] text-ink-soft">{CONTACT_SOURCE_LABELS[source]}</p>}
+      </div>
+      {value && <CopyButton value={value} label={label.toLowerCase()} />}
+    </div>
+  );
+}
+
+function ContactSection({ contact }: { contact: AdminMemberContact }) {
+  const [primaryPhone, ...otherPhones] = contact.phones;
+  return (
+    <section className="mt-8">
+      <SectionHeading>Datos de contacto</SectionHeading>
+      <div className="mt-3 divide-y divide-hairline rounded-xl border border-hairline bg-white p-5">
+        <ContactRow label="Email" value={contact.email?.value ?? null} source={contact.email?.source} />
+        <ContactRow label="Teléfono" value={primaryPhone?.value ?? null} source={primaryPhone?.source} />
+        {otherPhones.map((p) => (
+          <ContactRow key={p.value} label="Otro teléfono" value={p.value} source={p.source} />
+        ))}
+        {contact.instagram && <ContactRow label="Instagram" value={contact.instagram} />}
+        {contact.linkedin && <ContactRow label="LinkedIn" value={contact.linkedin} />}
+        {contact.preferredMethod && (
+          <div className="py-3 last:pb-0">
+            <p className="text-[11px] uppercase tracking-[0.08em] text-ink-soft">Prefiere que le contacten por</p>
+            <p className="mt-0.5 text-[15px] text-ink">{CONTACT_METHOD_LABELS[contact.preferredMethod] ?? contact.preferredMethod}</p>
+          </div>
+        )}
+      </div>
+      <p className="mt-2 text-[12px] text-ink-soft">
+        Solo para el equipo. Desde aquí no se envía nada.
+        {contact.clientId && (
+          <>
+            {" "}
+            También es cliente:{" "}
+            <Link href={`/admin/clientes/${contact.clientId}`} className="underline decoration-hairline underline-offset-4 hover:text-ink">
+              ver ficha
+            </Link>
+            .
+          </>
+        )}
+      </p>
+    </section>
   );
 }
 
@@ -149,30 +218,10 @@ export default function MemberDetailPage({ params }: { params: Promise<{ uid: st
         )}
       </div>
 
-      {/* Membresía — read-only mirror of Stripe, never editable here */}
-      <section className="mt-10">
-        <SectionHeading>Membresía</SectionHeading>
-        <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-hairline bg-white p-5 sm:grid-cols-3">
-          <Field
-            label="Estado"
-            value={member.billing ? (BILLING_STATUS_LABELS[member.billing.status] ?? member.billing.status) : "Sin membresía"}
-          />
-          <Field label="Plan" value={member.billing?.planKey ? PLAN_DISPLAY[member.billing.planKey].label : ""} />
-          <Field
-            label={member.billing?.cancelAtPeriodEnd ? "Finaliza el" : "Próxima renovación"}
-            value={member.billing?.currentPeriodEnd ? adminFormatDate(member.billing.currentPeriodEnd) : ""}
-          />
-        </div>
-        {member.billing?.status === "past_due" && (
-          <p className="mt-2 text-[13px] text-[#8a3b3b]">
-            Último cobro fallido — Stripe está reintentando automáticamente.
-          </p>
-        )}
-        <p className="mt-2 text-[12px] text-ink-soft">
-          Stripe es la fuente de la verdad. Esta vista es solo de lectura — cualquier cambio de plan,
-          cancelación o reembolso se gestiona en el Stripe Dashboard, nunca desde aquí.
-        </p>
-      </section>
+      {/* Datos de contacto: admin-only (requireAdmin on the API). The
+          legacy Membresía/Stripe block is no longer shown here; billing/{uid}
+          is kept untouched and Stripe stays the source of truth. */}
+      <ContactSection contact={member.contact} />
 
       {/* Beneficio de evento (-20%) — un código por ciclo mensual (más los emitidos antes, por evento); nunca un estado "usado" fabricado */}
       {member.eventBenefits.length > 0 && (

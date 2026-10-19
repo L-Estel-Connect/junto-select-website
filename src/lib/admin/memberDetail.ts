@@ -16,6 +16,7 @@ import type { BillingDocument } from "@/lib/billing/types";
 import { listEventBenefitsForAdmin } from "@/lib/eventBenefits/lifecycle";
 import type { AdminEventBenefitView } from "@/lib/eventBenefits/types";
 import { ageOf, getProfileRow } from "./profiles";
+import { getMemberContact, type AdminMemberContact } from "./memberContact";
 
 const MONTHS_ES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -212,6 +213,8 @@ export interface MemberDetail {
   billing: BillingDocument | null;
   /** This member's 20% event benefits, one row per eligible event — see listEventBenefitsForAdmin. */
   eventBenefits: AdminEventBenefitView[];
+  /** Private contact details for the team (admin-only route) — see memberContact.ts. */
+  contact: AdminMemberContact;
 }
 
 export async function getMemberDetail(uid: string): Promise<MemberDetail | null> {
@@ -220,13 +223,14 @@ export async function getMemberDetail(uid: string): Promise<MemberDetail | null>
   const { profile } = row;
   const personId = resolvePersonId(uid, profile);
 
-  const [asRecipientSnap, asCandidateSnap, pairHistoryMap, currentCycle, billingSnap, eventBenefits] = await Promise.all([
+  const [asRecipientSnap, asCandidateSnap, pairHistoryMap, currentCycle, billingSnap, eventBenefits, contact] = await Promise.all([
     adminDb.collection("proposals").where("recipientPersonId", "==", personId).get(),
     adminDb.collection("proposals").where("candidatePersonId", "==", personId).get(),
     loadPairHistoryMapFor(personId),
     getCurrentCycle(),
     adminDb.doc(`billing/${uid}`).get(),
     listEventBenefitsForAdmin(uid),
+    getMemberContact(uid, profile),
   ]);
   const billing = billingSnap.exists ? (billingSnap.data() as BillingDocument) : null;
 
@@ -337,5 +341,6 @@ export async function getMemberDetail(uid: string): Promise<MemberDetail | null>
     currentCycle: currentCycleStatus,
     billing,
     eventBenefits,
+    contact,
   };
 }
