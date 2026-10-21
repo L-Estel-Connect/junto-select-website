@@ -582,3 +582,32 @@
   .salon .mm-faq summary { font-size: 20px; }
   .salon .mm-form-acts .btn { width: 100%; }
 }
+
+/* ---------- phone fixes (21 Oct 2026) ----------
+ * Phones only. Tablet and desktop are untouched, and 375 px and wider
+ * keep today's hero exactly.
+ */
+@media (max-width: 640px) {
+  /* The hero keeps the main CTA and the menu carries both actions, so the
+     squeezed 10 px header button goes on every phone, not only below 375 px.
+     Hidden rather than removed so the header keeps its exact height. */
+  .salon .hdr-actions .btn { visibility: hidden; }
+  /* The menu renders inside <header>, so its buttons were inheriting the
+     compact header-button size (10 px, tight tracking, no wrapping). */
+  .salon .menu .ctas .btn { padding: 17px 24px; font-size: 12px; letter-spacing: .16em; white-space: normal; }
+  .salon .menu nav a { font-size: clamp(32px, 10.5vw, 38px); }
+  .salon .menu-top button { padding-block: 12px; }
+  /* Actions and account links settle at the bottom instead of leaving the lower half empty. */
+  .salon .menu .ctas { margin-top: auto; }
+  .salon .menu .sec { gap: 14px; padding-top: 24px; border-top: 1px solid var(--linea); font-size: 16px; color: var(--tinta); }
+}
+/* Below 375 px CSS width (small Android phones, and any Android phone with a
+   larger system font, which Chrome applies as page zoom) the hero text grew
+   up under the floating header: reserve its height and let the type scale. */
+@media (max-width: 374px) {
+  .salon .hero .wrap { padding-top: 96px; }
+  .salon .hero h1 { font-size: clamp(30px, 11.8vw, 44px); }
+  .salon .mm-hero h1 { font-size: clamp(29px, 10.7vw, 40px); }
+  .salon .hero .eyebrow, .salon .mm-hero h1 .eyebrow { letter-spacing: .22em; }
+  .salon .hero-row > p { font-size: 16px; }
+}
