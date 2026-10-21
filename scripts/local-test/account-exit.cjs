@@ -3,7 +3,7 @@
 //   - an unfinished profile reaches Ajustes from the questionnaire header,
 //     and can delete the account from there;
 //   - "Guardar y salir" signs out;
-//   - an account with nothing yet ("Tu cuenta") can delete itself;
+//   - a new account goes straight to its private profile;
 //   - a Select member without a profile keeps the member menu in Ajustes;
 //   - unknown addresses get the Junto Select 404.
 //   set -a; . ./.env.local; set +a
@@ -136,23 +136,17 @@ async function main() {
     await ctx.close();
   }
 
-  // 3. "Tu cuenta" (nothing created yet): delete the account.
+  // 3. A new account on the invitation page goes straight to its private
+  // profile ("Tu cuenta" is only shown to admin accounts now).
   {
     const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 } });
     const page = await ctx.newPage();
     const email = `salida.cuenta.${RUN}@example.test`;
     await signIn(page, email, `${APP}/introduction`);
-    await page.locator("text=Tu cuenta").first().waitFor({ timeout: 30000 });
+    await page.waitForURL(/\/introduction\/onboarding/, { timeout: 30000 });
     const uid = await uidOf(email);
-    const h1 = (await page.locator("h1").first().innerText()).trim();
-    check("Tu cuenta: greeting does not show the email as a name", h1 === "Hola.", h1);
-    check("Tu cuenta: shows which account is signed in", (await page.locator(`text=Has accedido como ${email}`).count()) === 1);
-    await page.screenshot({ path: `${SHOTS}/3-tu-cuenta.png`, fullPage: true });
-    await page.click("text=Eliminar mi cuenta");
-    await deleteViaModal(page);
-    await sleep(1000);
-    check("Tu cuenta: login deleted", !(await authExists(uid)));
-    check("Tu cuenta: no profile was created", !(await db.doc(`profiles/${uid}`).get()).exists);
+    const p = (await db.doc(`profiles/${uid}`).get()).data();
+    check("new account: passive profile started, no Tu cuenta step", p?.meta?.requestedService === "passive", page.url().replace(APP, ""));
     await ctx.close();
   }
 

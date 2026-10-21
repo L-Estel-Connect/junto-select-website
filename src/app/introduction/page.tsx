@@ -88,8 +88,19 @@ export default function IntroductionLandingPage() {
         }
         const status = await memberFetchJson<{ route: string | null; admin: boolean }>("/api/account/status");
         if (cancelled) return;
-        if (status.route) router.replace(status.route);
-        else setAccount({ admin: status.admin });
+        if (status.route) return router.replace(status.route);
+        // A new account signing in from the invitation page has just been
+        // told it is creating a private profile, so it goes straight to the
+        // questionnaire. Admin accounts keep "Tu cuenta" (no candidate profile).
+        if (!status.admin) {
+          const { route } = await memberFetchJson<{ route: string }>("/api/account/choose", {
+            method: "POST",
+            body: JSON.stringify({ service: "passive" }),
+          });
+          if (!cancelled) router.replace(route);
+          return;
+        }
+        setAccount({ admin: status.admin });
       } catch {
         if (!cancelled) setRouteError("No hemos podido abrir tu cuenta. Inténtalo de nuevo en unos minutos.");
       }
@@ -136,7 +147,84 @@ export default function IntroductionLandingPage() {
     );
   }
 
-  const copy = SIGN_IN_COPY[intent ?? "none"];
+  const signIn = needsEmailForLink ? (
+    <ConfirmEmailForLink error={linkError} onConfirm={confirmEmailForLink} />
+  ) : (
+    <>
+      {linkError && (
+        <p role="alert" className="mb-4 text-sm text-[#8a3b3b]">
+          {linkError}
+        </p>
+      )}
+      {/* If we came here from Reconnect (see nextPath above), the
+          magic-link email returns straight to the Reconnect page,
+          whose own guard mounts the identical useAuth hook. */}
+      <AuthButtons magicLinkReturnPath={nextPath ?? "/introduction"} />
+    </>
+  );
+
+  const legal = (
+    <p className="max-w-[44ch] text-xs leading-relaxed text-ink-soft">
+      Al continuar, aceptas nuestros{" "}
+      <Link href="/terminos" target="_blank" className={linkClasses}>
+        Términos y Condiciones
+      </Link>{" "}
+      y nuestra{" "}
+      <Link href="/privacidad" target="_blank" className={linkClasses}>
+        Política de Privacidad
+      </Link>
+      .
+    </p>
+  );
+
+  const expired = sessionExpired && (
+    <p className="max-w-[38ch] text-[13px] text-ink-soft">Tu sesión ha caducado. Vuelve a iniciar sesión.</p>
+  );
+
+  // The invitation page: what is shared with people invited into the
+  // private network, and also where existing accounts sign in.
+  if (intent !== "select") {
+    return (
+      <Section as="main" size="sm" className="flex min-h-[100svh] flex-col justify-center py-6 sm:py-16">
+        <Wordmark className="text-lg text-ink sm:text-2xl" />
+
+        <p className={`${eyebrowClasses} mt-6 sm:mt-10`}>Red privada de matchmaking</p>
+        <h1 className="mt-3 max-w-[20ch] text-balance font-serif text-[29px] font-normal leading-[1.12] text-ink sm:text-[40px]">
+          Forma parte de nuestra red privada
+        </h1>
+        <div className="mt-4 max-w-[46ch] space-y-3 text-[15px] leading-relaxed text-ink-soft">
+          <p>
+            En Junto Select conectamos a personas que buscan una relación auténtica a través de un servicio de
+            matchmaking personalizado.
+          </p>
+          <p>
+            Crea tu perfil gratuitamente y podremos tenerte en cuenta cuando encontremos a alguien compatible
+            contigo. Tu perfil es privado y solo te contactaremos si surge una oportunidad de presentación.
+          </p>
+        </div>
+
+        <p className="mt-5 text-[11px] font-medium uppercase tracking-[0.24em] text-ink">
+          Gratuito · Privado · Sin compromiso
+        </p>
+
+        {expired && <div className="mt-5">{expired}</div>}
+
+        <div className="mt-5 w-full max-w-[400px]">{signIn}</div>
+
+        <p className="mt-4 max-w-[46ch] text-[13px] leading-relaxed text-ink-soft">
+          Sin suscripciones. Tu perfil no es público y registrarte no garantiza una presentación.
+        </p>
+        <p className="mt-3 max-w-[46ch] text-[13px] leading-relaxed text-ink-soft">
+          Puedes acceder a tu perfil, actualizarlo o modificar tus preferencias cuando quieras desde nuestra página
+          web, juntoselect.com.
+        </p>
+
+        <div className="mt-6">{legal}</div>
+      </Section>
+    );
+  }
+
+  const copy = SIGN_IN_COPY.select;
 
   return (
     <Section as="main" size="sm" className="flex min-h-[80svh] flex-col justify-center py-14 sm:py-20">
@@ -148,73 +236,23 @@ export default function IntroductionLandingPage() {
       </h1>
       <p className="mt-4 max-w-[44ch] text-[15px] leading-relaxed text-ink-soft">{copy.text}</p>
 
-      {sessionExpired && (
-        <p className="mt-6 max-w-[38ch] text-[13px] text-ink-soft">Tu sesión ha caducado. Vuelve a iniciar sesión.</p>
-      )}
+      {expired && <div className="mt-6">{expired}</div>}
 
-      <div className="mt-8 w-full max-w-[400px]">
-        {needsEmailForLink ? (
-          <ConfirmEmailForLink error={linkError} onConfirm={confirmEmailForLink} />
-        ) : (
-          <>
-            {linkError && (
-              <p role="alert" className="mb-4 text-sm text-[#8a3b3b]">
-                {linkError}
-              </p>
-            )}
-            {/* If we came here from Reconnect (see nextPath above), the
-                magic-link email returns straight to the Reconnect page,
-                whose own guard mounts the identical useAuth hook. */}
-            <AuthButtons magicLinkReturnPath={nextPath ?? "/introduction"} />
-          </>
-        )}
+      <div className="mt-8 w-full max-w-[400px]">{signIn}</div>
+
+      <div className="mt-10 max-w-[400px]">
+        <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">Después, cinco pasos</p>
+        <div className="mt-3">
+          <OnboardingStagesPreview selectJourney />
+        </div>
       </div>
 
-      {intent && (
-        <div className="mt-10 max-w-[400px]">
-          <p className="text-[12px] font-medium uppercase tracking-[0.2em] text-ink-soft">Después, cinco pasos</p>
-          <div className="mt-3">
-            <OnboardingStagesPreview selectJourney={intent === "select"} />
-          </div>
-        </div>
-      )}
-
-      {!intent && (
-        <p className="mt-8 max-w-[40ch] text-[13px] leading-relaxed text-ink-soft">
-          ¿Solo quieres venir a los encuentros? No necesitas cuenta:{" "}
-          <Link href="/unete" className={linkClasses}>
-            recibe nuestras invitaciones
-          </Link>
-          .
-        </p>
-      )}
-
-      <p className="mt-6 max-w-[44ch] text-xs leading-relaxed text-ink-soft">
-        Al continuar, aceptas nuestros{" "}
-        <Link href="/terminos" target="_blank" className={linkClasses}>
-          Términos y Condiciones
-        </Link>{" "}
-        y nuestra{" "}
-        <Link href="/privacidad" target="_blank" className={linkClasses}>
-          Política de Privacidad
-        </Link>
-        .
-      </p>
+      <div className="mt-6">{legal}</div>
     </Section>
   );
 }
 
-const SIGN_IN_COPY: Record<RequestedService | "none", { eyebrow: string; title: string; text: string }> = {
-  none: {
-    eyebrow: "Junto Select",
-    title: "Accede a tu cuenta",
-    text: "Tu perfil privado y tus propuestas, en un solo lugar.",
-  },
-  passive: {
-    eyebrow: "Perfil privado",
-    title: "Crea tu perfil privado",
-    text: "Identifícate con Google o con tu email. Tu perfil es privado y nunca se publica.",
-  },
+const SIGN_IN_COPY: Record<"select", { eyebrow: string; title: string; text: string }> = {
   select: {
     eyebrow: "Búsqueda activa · Membresía Select",
     title: "Empieza tu búsqueda activa",

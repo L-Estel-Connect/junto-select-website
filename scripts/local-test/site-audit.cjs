@@ -315,7 +315,7 @@ async function statusOf(path) {
   check("sign-in ignores a foreign next", new URL(p3.url()).host === "localhost:3000");
   await ctx2.close();
 
-  // ---- 4b. Acceder never creates a profile on its own ----
+  // ---- 4b. A new account on the invitation page goes straight to its private profile ----
   {
     const c = await browser.newContext({ viewport: VIEWPORTS.desktop, locale: "es-ES" });
     const pg = await c.newPage();
@@ -328,23 +328,12 @@ async function statusOf(path) {
 
     const email = `acceder.${Date.now()}@example.test`;
     await signInOnIntroduction(pg, email, `${APP}/introduction`);
-    await pg.waitForSelector("text=Tu cuenta aún no tiene un perfil", { timeout: 20000 });
-    await pg.screenshot({ path: `${SHOTS}/acceder-1-tu-cuenta.png`, fullPage: true });
-    const uid = await getAuth().getUserByEmail(email).then((x) => x.uid);
-    check("Acceder (new account): Tu cuenta shown, no profile created", !(await db.doc(`profiles/${uid}`).get()).exists);
-    await pg.goto(`${APP}/introduction/onboarding`);
-    await pg.waitForURL((url) => url.pathname === "/introduction", { timeout: 20000 });
-    await pg.waitForTimeout(1500);
-    check("opening the questionnaire directly creates no profile", !(await db.doc(`profiles/${uid}`).get()).exists);
-    await pg.goto(`${APP}/member/plan`);
-    await pg.waitForURL((url) => url.pathname === "/introduction", { timeout: 20000 });
-    await pg.waitForTimeout(1500);
-    check("opening the member area directly creates no profile", !(await db.doc(`profiles/${uid}`).get()).exists);
-    await pg.click("text=Crear mi perfil privado");
     await pg.waitForURL("**/introduction/onboarding**", { timeout: 20000 });
     await pg.waitForTimeout(1500);
+    await pg.screenshot({ path: `${SHOTS}/acceder-1-cuestionario.png`, fullPage: true });
+    const uid = await getAuth().getUserByEmail(email).then((x) => x.uid);
     const made = (await db.doc(`profiles/${uid}`).get()).data();
-    check("Tu cuenta: Crear mi perfil privado creates a passive profile", made?.meta.requestedService === "passive" && !made.meta.onboardingFinalized);
+    check("invitation page (new account): straight to the questionnaire with a passive profile", made?.meta.requestedService === "passive" && !made.meta.onboardingFinalized);
     await c.close();
 
     // An admin signed in on /admin who clicks Acceder: no profile, admin link offered.
